@@ -1,0 +1,28 @@
+# Node.js
+frontend/node_modules/
+frontend/dist/
+
+# Python
+backend/__pycache__/
+backend/app/__pycache__/
+backend/app/**/__pycache__/
+backend/data/
+backend/.env
+
+# Git
+.git/
+.gitignore
+
+# IDE & OS
+.qoder/
+.vscode/
+.idea/
+.DS_Store
+*.md
+*.pdf
+*.docx
+
+# Docker
+docker-compose*.yml
+Dockerfile
+.dockerignore

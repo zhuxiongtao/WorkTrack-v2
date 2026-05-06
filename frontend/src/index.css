@@ -1,0 +1,163 @@
+@import "tailwindcss";
+
+/* ===== Tailwind 暗色模式：彻底覆盖默认 prefers-color-scheme，只跟随 data-theme 属性 ===== */
+@variant dark (&:where([data-theme="dark"] &));
+
+/* ===== 主题颜色系统 ===== */
+@theme {
+  --color-bg-primary: var(--bg-primary);
+  --color-bg-card: var(--bg-card);
+  --color-bg-input: var(--bg-input);
+  --color-bg-sidebar: var(--bg-sidebar);
+  --color-bg-hover: var(--bg-hover);
+  --color-bg-hover-secondary: var(--bg-hover-secondary);
+  --color-border: var(--border);
+  --color-accent-blue: var(--accent-blue);
+  --color-accent-purple: #8B5CF6;
+  --color-accent-green: #10B981;
+  --color-accent-orange: #F59E0B;
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+/* ===== 暗色模式 —— 深蓝灰基底，避免纯黑 ===== */
+:root {
+  --bg-primary: #101720;
+  --bg-card: #1a1f2e;
+  --bg-input: #141a24;
+  --bg-sidebar: #0f141e;
+  --bg-hover: #242c3a;
+  --bg-hover-secondary: #1e2533;
+  --border: #2a3348;
+  --accent-blue: #3B82F6;
+}
+
+/* ===== 亮色模式 —— 暖灰基底，避免刺眼纯白 ===== */
+[data-theme="light"] {
+  --bg-primary: #f1f3f6;
+  --bg-card: #fdfdfe;
+  --bg-input: #f5f6f9;
+  --bg-sidebar: #f3f5f8;
+  --bg-hover: #eef0f4;
+  --bg-hover-secondary: #e4e7ec;
+  --border: #e0e3e8;
+  --accent-blue: #93C5FD;
+}
+
+/* ===== 亮色模式 - 强制反色 Tailwind dark: 变体（兜底保障） ===== */
+/* 如果 @variant dark 因任何原因未覆盖系统 prefers-color-scheme，此规则确保亮色下文字可见 */
+[data-theme="light"] .dark\:text-white { color: #111827 !important; }
+[data-theme="light"] .dark\:text-gray-100 { color: #1F2937 !important; }
+[data-theme="light"] .dark\:text-gray-200 { color: #1F2937 !important; }
+[data-theme="light"] .dark\:text-gray-300 { color: #374151 !important; }
+[data-theme="light"] .dark\:text-gray-400 { color: #4B5563 !important; }
+[data-theme="light"] .dark\:text-gray-500 { color: #6B7280 !important; }
+[data-theme="light"] .dark\:text-gray-600 { color: #374151 !important; }
+[data-theme="light"] .dark\:hover\:text-white:hover { color: #111827 !important; }
+[data-theme="light"] .dark\:hover\:text-gray-200:hover { color: #1F2937 !important; }
+[data-theme="light"] .dark\:hover\:text-gray-300:hover { color: #374151 !important; }
+
+/* ===== 亮色模式 - 裸浅色文字反色（未使用 dark: 前缀的元素） ===== */
+[data-theme="light"] .text-white { color: #111827 !important; }
+[data-theme="light"] .text-gray-200 { color: #1F2937 !important; }
+[data-theme="light"] .text-gray-300 { color: #374151 !important; }
+[data-theme="light"] .text-gray-400 { color: #4B5563 !important; }
+[data-theme="light"] .text-gray-500 { color: #6B7280 !important; }
+[data-theme="light"] .text-gray-600 { color: #374151 !important; }
+[data-theme="light"] .placeholder-gray-500::placeholder { color: #9CA3AF !important; }
+[data-theme="light"] .placeholder-gray-600::placeholder { color: #9CA3AF !important; }
+
+/* ===== 亮色模式 - hover 反色 ===== */
+[data-theme="light"] .hover\:text-white:hover { color: #111827 !important; }
+[data-theme="light"] .hover\:text-gray-300:hover { color: #374151 !important; }
+
+[data-theme="light"] .border-theme { border-color: var(--border) !important; }
+
+/* ===== 全局微渐变 —— 增加视觉层次 ===== */
+:root::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 60% 50% at 50% 0%, rgba(59, 130, 246, 0.03) 0%, transparent 100%),
+    radial-gradient(ellipse 40% 40% at 100% 100%, rgba(139, 92, 246, 0.02) 0%, transparent 100%);
+}
+
+[data-theme="light"]::before {
+  background:
+    radial-gradient(ellipse 60% 50% at 50% 0%, rgba(59, 130, 246, 0.06) 0%, transparent 100%),
+    radial-gradient(ellipse 40% 40% at 100% 100%, rgba(139, 92, 246, 0.04) 0%, transparent 100%);
+}
+
+/* 卡片微光边框效果 */
+:root .shadow-2xl {
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.08), 0 25px 50px -12px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="light"] .shadow-2xl {
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+}
+
+/* ===== 滚动条美化 ===== */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #3B82F6; }
+
+/* 日期选择器图标修复 */
+input[type="date"] { color-scheme: dark; }
+[data-theme="light"] input[type="date"] { color-scheme: light; }
+input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.6); cursor: pointer; }
+[data-theme="light"] input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0); }
+
+body {
+  margin: 0;
+  background-color: var(--bg-primary);
+  color: #E5E7EB;
+  overflow-x: hidden;
+}
+
+[data-theme="light"] body {
+  color: #111827;
+}
+
+/* ===== 移动端响应式断点 ===== */
+@media (max-width: 768px) {
+  .hide-on-mobile { display: none !important; }
+  .show-on-mobile { display: flex !important; }
+}
+
+/* ===== PWA 安全区域适配 ===== */
+.safe-area-top {
+  /* iOS Safari 浏览器模式下 safe-area-inset-top 为 0，兜底 20px 避开状态栏 */
+  padding-top: max(env(safe-area-inset-top, 0px), 20px);
+}
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ===== 会议卡片 Markdown 预览紧凑样式 ===== */
+.markdown-preview-card h1, .markdown-preview-card h2, .markdown-preview-card h3,
+.markdown-preview-card h4, .markdown-preview-card h5, .markdown-preview-card h6 {
+  font-size: inherit !important;
+  font-weight: 600 !important;
+  margin: 0 !important;
+  line-height: 1.3 !important;
+}
+.markdown-preview-card p { margin: 0 !important; line-height: 1.4 !important; }
+.markdown-preview-card ul, .markdown-preview-card ol {
+  margin: 0 !important; padding-left: 14px !important;
+}
+.markdown-preview-card li { margin: 0 !important; line-height: 1.4 !important; }
+.markdown-preview-card code {
+  font-size: 0.85em !important; padding: 1px 3px !important; border-radius: 3px !important;
+}
+.markdown-preview-card pre { margin: 0 !important; padding: 4px !important; }
+.markdown-preview-card table { font-size: inherit !important; margin: 0 !important; }
+.markdown-preview-card td, .markdown-preview-card th { padding: 2px 4px !important; font-size: 0.85em !important; }
+.markdown-preview-card blockquote {
+  margin: 0 !important; padding-left: 8px !important; border-left-width: 2px !important;
+}
+.markdown-preview-card hr { margin: 4px 0 !important; }
