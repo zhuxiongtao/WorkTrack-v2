@@ -1,0 +1,37 @@
+# 依赖
+node_modules/
+
+# 构建产物
+frontend/dist/
+*.pyc
+__pycache__/
+*.egg-info/
+
+# 环境 & 密钥
+.env
+*.env.local
+
+# 数据文件（本地）
+backend/data/
+*.db
+*.db-journal
+*.db-wal
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 截图 & 临时文件
+screenshot_*.png
+*.log
+
+# Docker
+.docker/
+
+# Alembic
+backend/alembic/__pycache__/
+backend/alembic/versions/__pycache__/
