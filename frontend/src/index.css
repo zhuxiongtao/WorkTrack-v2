@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/* ===== 覆盖 Tailwind 默认的 antialiased：Windows 高 DPI 下 auto（ClearType子像素渲染）远比 grayscale antialiased 清晰 ===== */
+html {
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 /* ===== Tailwind 暗色模式：彻底覆盖默认 prefers-color-scheme，只跟随 data-theme 属性 ===== */
 @variant dark (&:where([data-theme="dark"] &));
 
@@ -117,9 +123,14 @@ body {
   background-color: var(--bg-primary);
   color: #E5E7EB;
   overflow-x: hidden;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
 [data-theme="light"] body {
+  -webkit-font-smoothing: auto;
   color: #111827;
 }
 
@@ -137,6 +148,27 @@ body {
 .safe-area-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
+
+/* ===== AI 聊天 Markdown 消息样式 ===== */
+.markdown-body > *:first-child { margin-top: 0 !important; }
+.markdown-body > *:last-child { margin-bottom: 0 !important; }
+.markdown-body p { margin: 0.35em 0; line-height: 1.65; }
+.markdown-body ul, .markdown-body ol { margin: 0.35em 0; padding-left: 1.2em; }
+.markdown-body li { margin: 0.15em 0; }
+.markdown-body li > p { margin: 0; }
+.markdown-body h1, .markdown-body h2, .markdown-body h3,
+.markdown-body h4, .markdown-body h5, .markdown-body h6 { margin: 0.6em 0 0.3em; }
+.markdown-body hr { margin: 0.5em 0; opacity: 0.3; }
+.markdown-body code {
+  font-size: 0.85em; padding: 1px 3px; border-radius: 3px;
+  background: rgba(59, 130, 246, 0.12); color: #F59E0B;
+}
+.markdown-body pre { margin: 0.4em 0; }
+.markdown-body pre code { background: transparent; color: inherit; padding: 0; }
+.markdown-body blockquote { margin: 0.4em 0; }
+.markdown-body table { margin: 0.4em 0; border-collapse: collapse; font-size: 0.9em; }
+.markdown-body th, .markdown-body td { padding: 3px 8px; border: 1px solid var(--border); }
+.markdown-body img { max-width: 100%; border-radius: 8px; margin: 0.4em 0; }
 
 /* ===== 会议卡片 Markdown 预览紧凑样式 ===== */
 .markdown-preview-card h1, .markdown-preview-card h2, .markdown-preview-card h3,
