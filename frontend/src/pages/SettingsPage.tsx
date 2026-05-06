@@ -564,38 +564,40 @@ export default function SettingsPage() {
                 : unconfiguredModels
 
               return (
-                <div key={p.id} className="rounded-xl bg-bg-card border border-border overflow-hidden">
-                  <div className="p-4 flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 mb-2 flex-wrap">
-                        <span className="text-sm font-medium text-gray-900 dark:text-white">{p.name}</span>
-                        <button
-                          onClick={() => canManageModels && (isAdmin || p.user_id === user?.id) && handleToggleActive(p)}
-                          className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${
-                            p.is_active ? 'bg-green-500/10 text-green-400' : 'bg-gray-500/10 text-gray-500'
-                          } ${canManageModels && (isAdmin || p.user_id === user?.id) ? 'cursor-pointer' : 'cursor-default'}`}
-                        >
-                          {p.is_active ? '已启用' : '已停用'}
-                        </button>
-                        {p.user_id == null && !isAdmin && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-500/10 text-gray-500">共享</span>
+                <div key={p.id} className="rounded-xl bg-bg-card border border-border">
+                  <div className="p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-3 mb-1.5 flex-wrap">
+                          <span className="text-sm font-semibold text-gray-900 dark:text-white truncate max-w-[300px]">{p.name}</span>
+                          <button
+                            onClick={() => canManageModels && (isAdmin || p.user_id === user?.id) && handleToggleActive(p)}
+                            className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${
+                              p.is_active ? 'bg-green-500/10 text-green-400' : 'bg-gray-500/10 text-gray-500'
+                            } ${canManageModels && (isAdmin || p.user_id === user?.id) ? 'cursor-pointer' : 'cursor-default'}`}
+                          >
+                            {p.is_active ? '已启用' : '已停用'}
+                          </button>
+                          {p.user_id == null && !isAdmin && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-500/10 text-gray-500 shrink-0">共享</span>
+                          )}
+                          {p.user_id != null && !isAdmin && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 shrink-0">我的</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-4 text-xs text-gray-500 flex-wrap">
+                          <span className="flex items-center gap-1 min-w-0"><Globe size={12} className="shrink-0" /><span className="truncate max-w-[400px]">{p.base_url}</span></span>
+                          {p.api_key && <span className="flex items-center gap-1 shrink-0"><Key size={12} />{p.api_key.slice(0, 6)}...{p.api_key.slice(-4)}</span>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {canManageModels && (isAdmin || p.user_id === user?.id) && (
+                          <button onClick={() => openEdit(p)} className="px-2.5 py-1.5 rounded-lg bg-bg-hover text-xs text-gray-400 hover:text-white border border-border">编辑</button>
                         )}
-                        {p.user_id != null && !isAdmin && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400">我的</span>
+                        {canManageModels && (isAdmin || p.user_id === user?.id) && (
+                          <button onClick={() => handleDelete(p.id)} className="px-2 py-1.5 rounded-lg bg-bg-hover text-xs text-red-400 hover:text-red-300 border border-border"><Trash2 size={12} /></button>
                         )}
                       </div>
-                      <div className="flex items-center gap-4 text-xs text-gray-500 flex-wrap">
-                        <span className="flex items-center gap-1"><Globe size={12} />{p.base_url}</span>
-                        {p.api_key && <span className="flex items-center gap-1"><Key size={12} />{p.api_key.slice(0, 6)}...{p.api_key.slice(-4)}</span>}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 ml-4 shrink-0">
-                      {canManageModels && (isAdmin || p.user_id === user?.id) && (
-                        <button onClick={() => openEdit(p)} className="px-2.5 py-1.5 rounded-lg bg-bg-hover text-xs text-gray-400 hover:text-white border border-border">编辑</button>
-                      )}
-                      {canManageModels && (isAdmin || p.user_id === user?.id) && (
-                        <button onClick={() => handleDelete(p.id)} className="px-2 py-1.5 rounded-lg bg-bg-hover text-xs text-red-400 hover:text-red-300 border border-border"><Trash2 size={12} /></button>
-                      )}
                     </div>
                   </div>
 
@@ -659,9 +661,9 @@ export default function SettingsPage() {
                         <Plus size={12} /> 添加模型 <ChevronDown size={12} className={expandedDropdown === p.id ? 'rotate-180' : ''} />
                       </button>
                       {expandedDropdown === p.id && (
-                        <div ref={addModelDropdownRef} className="absolute z-30 mt-1 w-full max-h-64 rounded-lg bg-bg-card border border-border shadow-xl overflow-hidden">
-                          <div className="p-2 border-b border-border">
-                            <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-bg-input border border-border">
+                        <div ref={addModelDropdownRef} className="absolute z-30 left-0 mt-1 min-w-[340px] max-w-[480px] w-auto max-h-[420px] rounded-lg bg-bg-card border border-border shadow-xl overflow-hidden">
+                          <div className="p-2.5 border-b border-border">
+                            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-bg-input border border-border">
                               {fetchingModels === p.id ? (
                                 <Loader2 size={12} className="animate-spin text-gray-500 shrink-0" />
                               ) : (
@@ -678,7 +680,7 @@ export default function SettingsPage() {
                                 }} />
                             </div>
                           </div>
-                          <div className="overflow-y-auto max-h-40">
+                          <div className="overflow-y-auto max-h-52">
                             {fetchingModels === p.id ? (
                               <p className="p-3 text-xs text-gray-500 text-center">正在拉取模型列表...</p>
                             ) : availableModels.length === 0 ? (
@@ -690,9 +692,9 @@ export default function SettingsPage() {
                             ) : (
                               filteredUnconfigured.slice(0, 50).map((m) => (
                                 <button key={m.id} onClick={() => { addModel(p.id, m.id); setModelSearch(''); setExpandedDropdown(null) }}
-                                  className="w-full text-left px-3 py-2 text-xs text-gray-700 dark:text-gray-300 hover:bg-bg-hover flex items-center gap-2">
-                                  <span className="text-[10px] text-[#3B82F6]">+</span>
-                                  <span className="font-mono truncate">{m.id}</span>
+                                  className="w-full text-left px-4 py-2.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-bg-hover flex items-center gap-2.5 border-b border-border/30 last:border-b-0">
+                                  <span className="text-[11px] text-[#3B82F6] font-medium shrink-0">+</span>
+                                  <span className="font-mono text-[11px] truncate">{m.id}</span>
                                 </button>
                               ))
                             )}

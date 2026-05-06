@@ -144,7 +144,7 @@ function AppContent() {
   const [modelWarningDismissed, setModelWarningDismissed] = useState(false)
 
   useEffect(() => {
-    if (!user || user.is_admin || !user.can_manage_models || user.use_shared_models) {
+    if (!user) {
       setShowModelWarning(false)
       setModelWarningDismissed(false)
       return
@@ -154,7 +154,16 @@ function AppContent() {
       .then((providers: any[]) => {
         const hasOwn = providers.some((p: any) => p.user_id === user.id)
         const hasShared = providers.some((p: any) => p.user_id === null)
-        setShowModelWarning(!hasOwn && !hasShared)
+        const hasAny = providers.length > 0
+        if (user.is_admin) {
+          setShowModelWarning(!hasAny)
+        } else if (user.can_manage_models && !user.use_shared_models) {
+          setShowModelWarning(!hasOwn && !hasShared)
+        } else if (user.use_shared_models) {
+          setShowModelWarning(!hasShared)
+        } else {
+          setShowModelWarning(false)
+        }
       })
       .catch(() => setShowModelWarning(false))
   }, [user])
@@ -232,7 +241,7 @@ function AppContent() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden xl:max-w-[1440px] 2xl:max-w-[2000px] mx-auto">
+    <div className="flex h-screen overflow-hidden w-full">
       {/* 初始化向导加载中 */}
       {setupChecking && (
         <div className="flex-1 flex items-center justify-center">
@@ -575,7 +584,7 @@ function AppContent() {
             {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
           </button>
         </div>
-        <div className="max-w-[1200px] xl:max-w-[1400px] 2xl:max-w-[1900px] mx-auto p-4 md:px-6 md:py-8">
+        <div className="p-4 md:px-6 md:py-8">
           {/* 模型未配置警告 */}
           {showModelWarning && (
             modelWarningDismissed ? (

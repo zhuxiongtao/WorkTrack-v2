@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Shield, ShieldOff, Trash2, Loader2, X, Save, Key, Edit3, UserPlus, Cpu, Globe } from 'lucide-react'
+import { Shield, ShieldOff, Trash2, Loader2, X, Save, Key, Edit3, UserPlus, Cpu, Globe, Crown, Lock } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 
@@ -154,7 +154,7 @@ export default function UserManagementPage() {
               <tr className="border-b border-border text-gray-400 text-xs">
                 <th className="text-left px-4 py-3">用户</th>
                 <th className="text-left px-4 py-3 hidden sm:table-cell">邮箱</th>
-                <th className="text-center px-4 py-3">角色</th>
+                <th className="text-left px-4 py-3">权限</th>
                 <th className="text-center px-4 py-3">状态</th>
                 <th className="text-right px-4 py-3 hidden md:table-cell">最后登录</th>
                 <th className="text-right px-4 py-3">操作</th>
@@ -175,41 +175,56 @@ export default function UserManagementPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3 hidden sm:table-cell text-gray-400">{u.email || '-'}</td>
-                  <td className="px-4 py-3 text-center">
-                    <div className="flex flex-col items-center gap-0.5">
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1.5">
                       {u.is_admin ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400">
-                          <Shield size={10} />管理员
+                        <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20">
+                          <Crown size={10} />管理员
                         </span>
                       ) : (
-                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-500/10 text-gray-500">用户</span>
+                        <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-gray-500/10 text-gray-500 border border-gray-500/15">
+                          用户
+                        </span>
                       )}
-                      {(u.use_shared_models || u.can_manage_models) && (
-                        <span className="flex items-center gap-1">
-                          {u.use_shared_models && <span className="text-[9px] text-blue-400/70" title="可使用共享模型">🌐</span>}
-                          {u.can_manage_models && <span className="text-[9px] text-purple-400/70" title="可管理自有模型">⚙️</span>}
+                      {u.use_shared_models && !u.is_admin && (
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/20">
+                          <Globe size={10} />共享模型
+                        </span>
+                      )}
+                      {u.can_manage_models && !u.is_admin && (
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-400 border border-purple-500/20">
+                          <Cpu size={10} />自管模型
+                        </span>
+                      )}
+                      {u.is_admin && (
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400/70 border border-blue-500/15">
+                          全部权限
                         </span>
                       )}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <button
-                      onClick={() => handleToggleActive(u)}
-                      className={`text-[11px] px-2 py-0.5 rounded-full cursor-pointer transition-colors ${
-                        u.is_active
-                          ? 'bg-green-500/10 text-green-400 hover:bg-green-500/20'
-                          : 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
-                      }`}
-                    >
-                      {u.is_active ? '正常' : '已禁用'}
-                    </button>
+                    <div className="inline-flex flex-col items-center gap-0.5">
+                      <button
+                        onClick={() => handleToggleActive(u)}
+                        className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full cursor-pointer transition-colors border ${
+                          u.is_active
+                            ? 'bg-green-500/10 text-green-400 border-green-500/20 hover:bg-green-500/20'
+                            : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
+                        }`}
+                      >
+                        {u.is_active ? '正常' : '已禁用'}
+                      </button>
+                      {u.locked_until && (
+                        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-400/80"
+                          title={`锁定至 ${formatTime(u.locked_until)}`}>
+                          <Lock size={9} />锁定
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-right text-xs text-gray-500 hidden md:table-cell">
-                    {u.locked_until ? (
-                      <span className="text-red-400" title={`锁定至 ${formatTime(u.locked_until)}`}>已锁定</span>
-                    ) : (
-                      formatTime(u.last_login_at)
-                    )}
+                    {formatTime(u.last_login_at)}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1">

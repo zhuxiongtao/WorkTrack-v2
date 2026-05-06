@@ -3,6 +3,10 @@ import { Send, Sparkles, Zap, Plus, Trash2, MessageSquare, PanelLeftClose, Panel
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import { useToast } from '../contexts/ToastContext'
 
+function hasMarkdown(str: string): boolean {
+  return /^#{1,6}\s|^\s*[-*+]\s|^\s*\d+\.\s|\*\*|__|`{1,3}|^\s*>\s|\[.*\]\(.*\)/m.test(str)
+}
+
 interface Message {
   role: 'user' | 'assistant'
   content: string
@@ -280,8 +284,10 @@ export default function AIPage() {
               >
                 {msg.role === 'user' ? (
                   <span className="whitespace-pre-wrap">{msg.content}</span>
-                ) : (
+                ) : hasMarkdown(msg.content) ? (
                   <MarkdownRenderer content={msg.content} />
+                ) : (
+                  <span className="whitespace-pre-wrap leading-relaxed">{msg.content}</span>
                 )}
               </div>
             </div>
