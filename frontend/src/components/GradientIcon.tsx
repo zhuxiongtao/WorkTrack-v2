@@ -92,13 +92,11 @@ export function GradientIcon({
  */
 export function SidebarIcon({
   icon: Icon,
-  gradient,
   gradientFrom,
   gradientTo,
   isActive = false,
 }: {
   icon: LucideIcon
-  gradient?: string
   gradientFrom?: string
   gradientTo?: string
   isActive?: boolean
@@ -156,13 +154,11 @@ export function MiniIcon({
   icon: Icon,
   size = 14,
   color,
-  hoverColor,
   className = '',
 }: {
   icon: LucideIcon
   size?: number
   color?: string
-  hoverColor?: string
   className?: string
 }) {
   return (

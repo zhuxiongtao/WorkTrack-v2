@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { Briefcase, Calendar, Sparkles, Settings, Search, X, Sun, Moon, Clock, Menu, BookOpen, FileText, Users, LogOut, Loader2, Shield, LayoutDashboard, Target, CheckCircle2, Activity, Zap, TrendingUp, TrendingDown, Brain, ChevronUp, ArrowRight, RefreshCw } from 'lucide-react'
+import { Briefcase, Calendar, Sparkles, Clock, BookOpen, FileText, Users, Loader2, LayoutDashboard, Target, CheckCircle2, Activity, Zap, TrendingUp, TrendingDown, Brain, ChevronUp, ArrowRight, RefreshCw } from 'lucide-react'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
 

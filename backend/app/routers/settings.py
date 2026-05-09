@@ -54,6 +54,8 @@ class ProviderCreate(BaseModel):
     api_key: str = ""
     is_active: bool = True
     provider_type: str = "chat"
+    project_id: Optional[str] = None  # Vertex AI: GCP 项目 ID
+    location: Optional[str] = None  # Vertex AI: GCP 区域
 
 
 class ProviderUpdate(BaseModel):
@@ -62,6 +64,8 @@ class ProviderUpdate(BaseModel):
     api_key: Optional[str] = None
     is_active: Optional[bool] = None
     provider_type: Optional[str] = None
+    project_id: Optional[str] = None  # Vertex AI: GCP 项目 ID
+    location: Optional[str] = None  # Vertex AI: GCP 区域
 
 
 # ===== 模型供应商 CRUD =====
@@ -116,6 +120,13 @@ def delete_provider(provider_id: int, db: Session = Depends(get_session),
         raise HTTPException(status_code=403, detail="无权限删除此供应商")
     if not current_user.is_admin and provider.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="只能删除自己的供应商")
+    # 先清理引用该供应商的 TaskModelConfig
+    task_cfgs = db.exec(
+        select(TaskModelConfig).where(TaskModelConfig.provider_id == provider_id)
+    ).all()
+    for cfg in task_cfgs:
+        db.delete(cfg)
+    db.flush()
     db.delete(provider)
     db.commit()
 
@@ -138,6 +149,8 @@ def _guess_model_type(name: str) -> str:
         return "vision"
     if any(k in low for k in ["search", "tavily", "bing", "google", "serp", "crawl"]):
         return "web_search"
+    if any(k in low for k in ["gemini"]):
+        return "chat"  # Gemini 默认 chat，部分支持 vision
     return "chat"
 
 
@@ -251,8 +264,8 @@ def test_provider_model(provider_id: int, model_id: int, db: Session = Depends(g
     if not provider:
         raise HTTPException(status_code=404, detail="供应商不存在")
     try:
-        from openai import OpenAI
-        client = OpenAI(base_url=provider.base_url, api_key=provider.api_key, timeout=15)
+        from app.services.ai_service import _get_client, _is_vertex_ai
+        client = _get_client(provider.base_url, provider.api_key, provider)
         mtype = model.model_type or "chat"
         if mtype == "speech_to_text":
             # 用一段静默音频测 ASR 模型（不需要实际音频内容）
@@ -278,6 +291,9 @@ def test_provider_model(provider_id: int, model_id: int, db: Session = Depends(g
                     return {"success": False, "message": f"模型 {model.model_name} ASR 调用失败: {err}"}
                 return {"success": True, "message": f"ASR 端点已连通（忽略静默输入报错: {str(e)[:80]}）"}
         elif mtype == "embedding":
+            # Vertex AI 原生不支持 OpenAI 兼容的 embeddings API
+            if _is_vertex_ai(provider):
+                return {"success": True, "message": f"Embedding {model.model_name} 就绪（Vertex AI 原生路径）", "reply": "ok"}
             try:
                 resp = client.embeddings.create(model=model.model_name, input=["test"])
                 dim = len(resp.data[0].embedding) if resp.data else 0
@@ -307,12 +323,26 @@ def test_provider(provider_id: int, db: Session = Depends(get_session)):
         raise HTTPException(status_code=404, detail="供应商不存在")
     result = {"success": False, "message": "", "models_found": 0}
     try:
-        from openai import OpenAI
-        client = OpenAI(base_url=provider.base_url, api_key=provider.api_key, timeout=15)
+        from app.services.ai_service import _get_client, _is_vertex_ai
+        client = _get_client(provider.base_url, provider.api_key, provider)
         # 先测试模型列表
         try:
-            models_resp = client.models.list()
-            model_ids = [m.id for m in models_resp.data]
+            if _is_vertex_ai(provider):
+                # 使用 genai SDK 拉取真实模型列表
+                from google import genai
+                from app.services.ai_service import _get_vertex_credentials
+                credentials = _get_vertex_credentials(provider)
+                gclient = genai.Client(
+                    vertexai=True,
+                    project=provider.project_id,
+                    location=provider.location or "global",
+                    credentials=credentials,
+                )
+                models_data = list(gclient.models.list())
+                model_ids = [m.name for m in models_data if "publishers/google" in m.name]
+            else:
+                models_resp = client.models.list()
+                model_ids = [m.id for m in models_resp.data]
             result["models_found"] = len(model_ids)
             result["sample_models"] = model_ids[:8]
         except Exception:
@@ -372,10 +402,32 @@ def fetch_provider_models(provider_id: int, db: Session = Depends(get_session),
         raise HTTPException(status_code=403, detail="只能管理自己的供应商")
 
     try:
-        from openai import OpenAI
-        client = OpenAI(base_url=provider.base_url, api_key=provider.api_key, timeout=15)
-        resp = client.models.list()
-        models = [{"id": m.id, "owned_by": getattr(m, "owned_by", "")} for m in resp.data]
+        from app.services.ai_service import _is_vertex_ai, _get_vertex_credentials
+        if _is_vertex_ai(provider):
+            # 使用 genai SDK 拉取 Vertex AI 真实可用模型列表
+            from google import genai
+            credentials = _get_vertex_credentials(provider)
+            client = genai.Client(
+                vertexai=True,
+                project=provider.project_id,
+                location=provider.location or "global",
+                credentials=credentials,
+            )
+            models_data = list(client.models.list())
+            models = []
+            for m in models_data:
+                name = m.name  # e.g. "publishers/google/models/gemini-2.5-flash"
+                if "publishers/" in name:
+                    # 提取模型短名，如 "gemini-2.5-flash"
+                    short_name = name.split("/")[-1]
+                    models.append({"id": short_name, "owned_by": name.split("/")[-3] if len(name.split("/")) >= 3 else "google"})
+        else:
+            from openai import OpenAI
+            base_url = provider.base_url
+            api_key = provider.api_key
+            client = OpenAI(base_url=base_url, api_key=api_key, timeout=15)
+            resp = client.models.list()
+            models = [{"id": m.id, "owned_by": getattr(m, "owned_by", "")} for m in resp.data]
         import json
         provider.supported_models_json = json.dumps(models, ensure_ascii=False)
         db.add(provider)
@@ -785,8 +837,8 @@ def generate_ai_prompt(data: AIPromptGenerateRequest, db: Session = Depends(get_
     )
 
     try:
-        base_url, api_key, model = _get_active_provider(db, "chat", current_user.id)
-        client = _get_client(base_url, api_key)
+        base_url, api_key, model, provider = _get_active_provider(db, "chat", current_user.id)
+        client = _get_client(base_url, api_key, provider)
         response = client.chat.completions.create(
             model=model,
             messages=[
