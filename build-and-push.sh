@@ -9,6 +9,7 @@ set -e
 
 DOCKER_USER="zxt815"
 IMAGE_NAME="${DOCKER_USER}/worktrack"
+BUILDER="${BUILDER:-colima}"
 VERSION="${1:-latest}"
 LOAD_ONLY=false
 
@@ -21,19 +22,20 @@ echo "=========================================="
 echo "  WorkTrack Docker 构建"
 echo "  平台: linux/amd64"
 echo "  镜像: ${IMAGE_NAME}:${VERSION}"
+echo "  Builder: ${BUILDER}"
 echo "=========================================="
 
 if $LOAD_ONLY; then
     echo "[1/1] 构建镜像到本地..."
-    docker buildx build --platform linux/amd64 --load \
+    docker buildx build --builder "${BUILDER}" --platform linux/amd64 --load \
         -t "${IMAGE_NAME}:latest" \
         .
     echo ""
     echo "✅ 完成！本地镜像:"
-    docker images "${IMAGE_NAME}" --format "table {{.Repository}}\t{{.Tag}}\t{{.Architecture}}\t{{.Size}}"
+    docker images "${IMAGE_NAME}"
 else
     echo "[1/2] 构建镜像..."
-    docker buildx build --platform linux/amd64 --load \
+    docker buildx build --builder "${BUILDER}" --platform linux/amd64 --load \
         -t "${IMAGE_NAME}:latest" \
         .
 

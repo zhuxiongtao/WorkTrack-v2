@@ -1,4 +1,5 @@
 import json
+import re as _re_module
 from urllib.parse import urlparse
 from openai import OpenAI
 from sqlmodel import Session, select
@@ -10,6 +11,285 @@ from app.models.model_provider import ModelProvider, TaskModelConfig, ProviderMo
 from app.models.ai_prompt import AIPrompt
 from app.models.user import User
 from app.services.web_search import search_and_summarize, _get_tavily_api_key
+
+
+# ---- Vertex AI 认证支持 ----
+
+def _is_vertex_ai(provider: ModelProvider) -> bool:
+    """判断是否为 Vertex AI 供应商（通过 project_id 字段识别）"""
+    return bool(provider.project_id and provider.project_id.strip())
+
+
+def _get_vertex_credentials(provider: ModelProvider):
+    """从服务账号 JSON（api_key 字段）加载 Google Cloud 凭据"""
+    from google.oauth2 import service_account
+    try:
+        creds_info = json.loads(provider.api_key)
+        return service_account.Credentials.from_service_account_info(
+            creds_info,
+            scopes=["https://www.googleapis.com/auth/cloud-platform"],
+        )
+    except (ValueError, json.JSONDecodeError):
+        import google.auth
+        credentials, _ = google.auth.default(
+            scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
+        return credentials
+
+
+# ---- Vertex AI 原生 SDK 包装器 ----
+
+# 伪响应类型：模拟 OpenAI chat completion response
+class _FakeMessage:
+    def __init__(self, content=None, role="assistant", tool_calls=None):
+        self.content = content
+        self.role = role
+        self.tool_calls = tool_calls or []
+
+
+class _FakeChoice:
+    def __init__(self, message: _FakeMessage, finish_reason="stop"):
+        self.message = message
+        self.finish_reason = finish_reason
+
+
+class _FakeStreamChunk:
+    """模拟 OpenAI 流式 chunk"""
+    def __init__(self, content: str):
+        self.choices = [_FakeChoice(_FakeMessage(content=content))]
+
+
+class _VertexGenAIClient:
+    """包装 google-genai SDK，对外暴露与 OpenAI 客户端兼容的 .chat.completions.create() 接口"""
+
+    def __init__(self, provider: ModelProvider):
+        from google import genai
+        credentials = _get_vertex_credentials(provider)
+        self._genai = genai.Client(
+            vertexai=True,
+            project=provider.project_id,
+            location=provider.location or "global",
+            credentials=credentials,
+        )
+        self._provider = provider
+        self.chat = _VertexChat(self)
+
+
+class _VertexChat:
+    def __init__(self, client: "_VertexGenAIClient"):
+        self.completions = _VertexCompletions(client)
+
+
+class _VertexCompletions:
+    """模拟 openai.chat.completions.create()，内部调用 google-genai SDK"""
+
+    def __init__(self, client: "_VertexGenAIClient"):
+        self._client = client
+
+    @staticmethod
+    def _genai_to_openai_messages(messages: list[dict]) -> tuple:
+        """
+        将 OpenAI 消息格式转换为 genai contents 格式
+        返回: (contents, system_instruction)
+        """
+        from google.genai import types
+        contents = []
+        system_instruction = None
+
+        for msg in messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+
+            if role == "system":
+                if isinstance(content, list):
+                    text_parts = [p.get("text", "") for p in content if isinstance(p, dict)]
+                    system_instruction = "\n".join(text_parts) if text_parts else content
+                else:
+                    system_instruction = content
+            elif role == "user":
+                if isinstance(content, str):
+                    contents.append(types.Content(role="user", parts=[types.Part(text=content)]))
+                elif isinstance(content, list):
+                    parts = []
+                    for p in content:
+                        if isinstance(p, dict) and "text" in p:
+                            parts.append(types.Part(text=p["text"]))
+                    if parts:
+                        contents.append(types.Content(role="user", parts=parts))
+            elif role == "assistant":
+                if isinstance(content, str) and content:
+                    contents.append(types.Content(role="model", parts=[types.Part(text=content)]))
+            elif role == "tool":
+                # 工具调用结果：作为 user 消息追加
+                if isinstance(content, str) and content:
+                    contents.append(types.Content(role="user", parts=[
+                        types.Part(text=f"[工具返回] {content}")
+                    ]))
+
+        return contents, system_instruction
+
+    @staticmethod
+    def _build_genai_config(temperature=0.7, max_tokens=None, response_format=None, extra_body=None):
+        from google.genai import types
+
+        config_kwargs = {}
+        if temperature is not None:
+            config_kwargs["temperature"] = temperature
+        if max_tokens is not None:
+            config_kwargs["max_output_tokens"] = max_tokens
+        if response_format and response_format.get("type") == "json_object":
+            config_kwargs["response_mime_type"] = "application/json"
+
+        # Vertex AI gemini-2.5 系列默认关闭 thinking，避免消耗 token 预算
+        config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
+
+        # 联网搜索
+        if extra_body and extra_body.get("enable_search"):
+            tools_list = [types.Tool(google_search=types.GoogleSearch())]
+            config_kwargs["tools"] = tools_list
+
+        if not config_kwargs:
+            return None
+        return types.GenerateContentConfig(**config_kwargs)
+
+    @staticmethod
+    def _openai_tools_to_genai(openai_tools: list) -> list:
+        from google.genai import types
+        func_decls = []
+        for tool in openai_tools:
+            if tool.get("type") == "function":
+                func = tool["function"]
+                params_schema = func.get("parameters", {})
+                schema = types.Schema(
+                    type=params_schema.get("type", "OBJECT"),
+                    properties=params_schema.get("properties", {}),
+                    required=params_schema.get("required", []),
+                )
+                func_decls.append(types.FunctionDeclaration(
+                    name=func["name"],
+                    description=func.get("description", ""),
+                    parameters=schema,
+                ))
+        return [types.Tool(function_declarations=func_decls)] if func_decls else []
+
+    @staticmethod
+    def _genai_func_call_to_openai(func_calls: list) -> list:
+        tool_calls = []
+        for i, fc in enumerate(func_calls):
+            tool_calls.append(_FakeToolCall(
+                id=f"call_{i}",
+                type="function",
+                function=_FakeFunctionCall(
+                    name=fc.name,
+                    arguments=json.dumps(fc.args, ensure_ascii=False) if fc.args else "{}",
+                ),
+            ))
+        return tool_calls
+
+    def create(self, **kwargs):
+        """
+        与 OpenAI client.chat.completions.create() 兼容的接口
+        内部调用 google-genai SDK
+        """
+        from google.genai import types
+
+        model = kwargs.get("model", "gemini-2.5-flash")
+        # 移除 google/ 前缀（genai SDK 不需要）
+        if model.startswith("google/"):
+            model = model[len("google/"):]
+
+        messages = kwargs.get("messages", [])
+        temperature = kwargs.get("temperature", 0.7)
+        max_tokens = kwargs.get("max_tokens", kwargs.get("max_completion_tokens"))
+        response_format = kwargs.get("response_format")
+        extra_body = kwargs.get("extra_body")
+        stream = kwargs.get("stream", False)
+        tools = kwargs.get("tools")
+
+        # 转换消息格式
+        contents, system_instruction = self._genai_to_openai_messages(messages)
+
+        # 构建配置
+        config = self._build_genai_config(
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format=response_format,
+            extra_body=extra_body,
+        ) or types.GenerateContentConfig()
+
+        if system_instruction:
+            config.system_instruction = system_instruction
+
+        if tools:
+            genai_tools = self._openai_tools_to_genai(tools)
+            config.tools = genai_tools
+
+        # 流式
+        if stream:
+            return _VertexStreamResponse(
+                self._client._genai, model, contents, config
+            )
+
+        # 非流式
+        response = self._client._genai.models.generate_content(
+            model=model,
+            contents=contents,
+            config=config,
+        )
+
+        # 提取文本或函数调用
+        if response.function_calls:
+            tool_calls = self._genai_func_call_to_openai(response.function_calls)
+            return _FakeResponse(
+                choices=[_FakeChoice(
+                    message=_FakeMessage(content=None, tool_calls=tool_calls),
+                )],
+            )
+
+        text = response.text or ""
+        return _FakeResponse(
+            choices=[_FakeChoice(message=_FakeMessage(content=text))],
+        )
+
+
+class _VertexStreamResponse:
+    """模拟 OpenAI 流式响应迭代器"""
+
+    def __init__(self, genai_client, model, contents, config):
+        self._genai = genai_client
+        self._model = model
+        self._contents = contents
+        self._config = config
+
+    def __iter__(self):
+        response = self._genai.models.generate_content_stream(
+            model=self._model,
+            contents=self._contents,
+            config=self._config,
+        )
+        for chunk in response:
+            if chunk.text:
+                yield _FakeStreamChunk(content=chunk.text)
+
+
+class _FakeToolCall:
+    def __init__(self, id, type, function):
+        self.id = id
+        self.type = type
+        self.function = function
+
+
+class _FakeFunctionCall:
+    def __init__(self, name, arguments):
+        self.name = name
+        self.arguments = arguments
+
+
+class _FakeResponse:
+    def __init__(self, choices):
+        self.choices = choices
+
+
 
 
 # 默认提示词（与 settings.py 中的 DEFAULT_PROMPTS 保持一致）
@@ -71,12 +351,24 @@ def _fill_template(template: str, **kwargs) -> str:
 
 
 def _get_active_provider(db: Session, task_type: str = "chat", user_id: int = 0) -> tuple:
-    """获取活跃的模型供应商和模型名：优先用户私有 > 管理员共享（需权限） > env 回退"""
-    use_shared = True  # user_id=0 时无用户上下文，允许回退到共享
+    """获取活跃的模型供应商和模型名：优先用户私有 > 管理员共享（需权限）
+    返回 (base_url, api_key, model_name, provider)
+    - 对于 Vertex AI：base_url/api_key 不使用，model_name 为原始名称（无 google/ 前缀）
+    - 对于 OpenAI 兼容：base_url/api_key 正常返回，model_name 保持原样"""
+    use_shared = True
     user = None
     if user_id:
         user = db.get(User, user_id)
         use_shared = bool(user and (user.is_admin or user.use_shared_models))
+
+    def _resolve(provider: ModelProvider, model_name: str):
+        if _is_vertex_ai(provider):
+            # Vertex AI 原生：不需要 base_url/api_key，移除可能存在的 google/ 前缀
+            if model_name.startswith("google/"):
+                model_name = model_name[len("google/"):]
+            return None, None, model_name
+        else:
+            return provider.base_url, provider.api_key, model_name
 
     # 1. 用户自己的任务配置
     if user:
@@ -89,7 +381,8 @@ def _get_active_provider(db: Session, task_type: str = "chat", user_id: int = 0)
         if task_cfg and task_cfg.provider_id and task_cfg.model_name:
             provider = db.get(ModelProvider, task_cfg.provider_id)
             if provider and provider.is_active and provider.api_key:
-                return provider.base_url, provider.api_key, task_cfg.model_name
+                base_url, api_key, model_name = _resolve(provider, task_cfg.model_name)
+                return base_url, api_key, model_name, provider
 
     # 2. 管理员共享的任务配置（需 use_shared_models 权限）
     if use_shared:
@@ -102,14 +395,22 @@ def _get_active_provider(db: Session, task_type: str = "chat", user_id: int = 0)
         if task_cfg and task_cfg.provider_id and task_cfg.model_name:
             provider = db.get(ModelProvider, task_cfg.provider_id)
             if provider and provider.is_active and provider.api_key:
-                return provider.base_url, provider.api_key, task_cfg.model_name
+                base_url, api_key, model_name = _resolve(provider, task_cfg.model_name)
+                return base_url, api_key, model_name, provider
 
     # 3. 如果没有任何 TaskModelConfig，报错而不是随机选一个 provider
     raise RuntimeError("未配置模型供应商，请先在设置中配置")
 
 
-def _get_client(base_url: str, api_key: str) -> OpenAI:
-    return OpenAI(base_url=base_url, api_key=api_key, timeout=30)
+def _get_client(base_url: str, api_key: str, provider: ModelProvider = None):
+    """
+    获取 LLM 客户端：
+    - Vertex AI 供应商：返回 _VertexGenAIClient（genai SDK 原生调用）
+    - 其他供应商：返回 OpenAI 客户端
+    """
+    if provider and _is_vertex_ai(provider):
+        return _VertexGenAIClient(provider)
+    return OpenAI(base_url=base_url, api_key=api_key, timeout=90 if _is_vertex_ai(provider) else 30)
 
 
 def _extract_message_text(message) -> str:
@@ -120,16 +421,15 @@ def _extract_message_text(message) -> str:
     reasoning = getattr(message, "reasoning_content", None)
     # 某些模型可能把思考内容混在 content 中（<think>...</think> 标签）
     if content:
-        import re
-        content = re.sub(r"<think>[\s\S]*?</think>", "", content).strip()
-        content = re.sub(r"<思考>[\s\S]*?</思考>", "", content).strip()
+        content = _re_module.sub(r"<think>[\s\S]*?</think>", "", content).strip()
+        content = _re_module.sub(r"<思考>[\s\S]*?</思考>", "", content).strip()
     return content
 
 
 def summarize_daily_report(content: str, db: Session, user_id: int = 0) -> str:
     """AI 总结日报内容"""
-    base_url, api_key, model = _get_active_provider(db, "chat", user_id)
-    client = _get_client(base_url, api_key)
+    base_url, api_key, model, provider = _get_active_provider(db, "chat", user_id)
+    client = _get_client(base_url, api_key, provider)
     system_prompt, template = _get_prompt("daily_summary", db, user_id)
     user_prompt = _fill_template(template, content=content)
     response = client.chat.completions.create(
@@ -144,14 +444,13 @@ def summarize_daily_report(content: str, db: Session, user_id: int = 0) -> str:
 
 
 def _strip_html(text: str) -> str:
-    import re
-    return re.sub(r'<[^>]+>', '', text)
+    return _re_module.sub(r'<[^>]+>', '', text)
 
 
 def extract_meeting_minutes(content: str, db: Session, user_id: int = 0) -> dict:
     """AI 从会议纪要中提取结构化信息"""
-    base_url, api_key, model = _get_active_provider(db, "chat", user_id)
-    client = _get_client(base_url, api_key)
+    base_url, api_key, model, provider = _get_active_provider(db, "chat", user_id)
+    client = _get_client(base_url, api_key, provider)
     system_prompt, template = _get_prompt("meeting_extract", db, user_id)
     # 去除 HTML 标签，发送纯文本给 AI
     clean_content = _strip_html(content)
@@ -182,8 +481,8 @@ def generate_project_analysis(project_id: int, db: Session, user_id: int = 0) ->
     project = db.get(Project, project_id)
     if not project:
         return "项目不存在"
-    base_url, api_key, model = _get_active_provider(db, "chat", user_id)
-    client = _get_client(base_url, api_key)
+    base_url, api_key, model, provider = _get_active_provider(db, "chat", user_id)
+    client = _get_client(base_url, api_key, provider)
     meetings = db.exec(
         select(MeetingNote).where(MeetingNote.project_id == project_id).limit(10)
     ).all()
@@ -211,8 +510,8 @@ def generate_project_analysis(project_id: int, db: Session, user_id: int = 0) ->
 
 def ai_chat(messages: list[dict], db: Session, user_id: int = 0) -> str:
     """通用 AI 对话"""
-    base_url, api_key, model = _get_active_provider(db, "chat", user_id)
-    client = _get_client(base_url, api_key)
+    base_url, api_key, model, provider = _get_active_provider(db, "chat", user_id)
+    client = _get_client(base_url, api_key, provider)
     response = client.chat.completions.create(
         model=model,
         messages=messages,
@@ -223,8 +522,8 @@ def ai_chat(messages: list[dict], db: Session, user_id: int = 0) -> str:
 
 def transcribe_audio(audio_path: str, db: Session, user_id: int = 0) -> str:
     """将音频文件转写为文字（使用 ASR 模型）"""
-    base_url, api_key, model = _get_active_provider(db, "speech_to_text", user_id)
-    client = _get_client(base_url, api_key)
+    base_url, api_key, model, provider = _get_active_provider(db, "speech_to_text", user_id)
+    client = _get_client(base_url, api_key, provider)
     with open(audio_path, "rb") as f:
         resp = client.audio.transcriptions.create(
             model=model,
@@ -235,8 +534,8 @@ def transcribe_audio(audio_path: str, db: Session, user_id: int = 0) -> str:
 
 def organize_transcript(raw_text: str, db: Session, user_id: int = 0) -> str:
     """AI 整理转写文字，生成结构化会议纪要"""
-    base_url, api_key, model = _get_active_provider(db, "chat", user_id)
-    client = _get_client(base_url, api_key)
+    base_url, api_key, model, provider = _get_active_provider(db, "chat", user_id)
+    client = _get_client(base_url, api_key, provider)
     system_prompt, template = _get_prompt("meeting_organize", db, user_id)
     user_prompt = _fill_template(template, content=raw_text)
     response = client.chat.completions.create(
@@ -252,8 +551,8 @@ def organize_transcript(raw_text: str, db: Session, user_id: int = 0) -> str:
 
 def search_company_names(keyword: str, db: Session, user_id: int = 0) -> list[dict]:
     """使用 Tavily 联网搜索 + LLM 根据关键词搜索匹配的公司全称"""
-    base_url, api_key, model = _get_active_provider(db, "chat", user_id)
-    client = _get_client(base_url, api_key)
+    base_url, api_key, model, provider = _get_active_provider(db, "chat", user_id)
+    client = _get_client(base_url, api_key, provider)
 
     # 先尝试用 Tavily 搜索
     search_context = ""
@@ -302,8 +601,8 @@ def search_company_names(keyword: str, db: Session, user_id: int = 0) -> list[di
     except json.JSONDecodeError:
         pass
     # 尝试从文本中提取 JSON 数组
-    import re
-    match = re.search(r'\[[\s\S]*\]', text)
+    import re as _re_search
+    match = _re_search.search(r'\[[\s\S]*\]', text)
     if match:
         try:
             return json.loads(match.group())[:8]
@@ -315,8 +614,8 @@ def search_company_names(keyword: str, db: Session, user_id: int = 0) -> list[di
 def fetch_company_info(company_name: str, db: Session, user_id: int = 0) -> dict:
     """使用 Tavily 联网搜索 + LLM 获取公司详细信息，动态新闻单独搜索确保时效性"""
     from datetime import datetime
-    base_url, api_key, model = _get_active_provider(db, "chat", user_id)
-    client = _get_client(base_url, api_key)
+    base_url, api_key, model, provider = _get_active_provider(db, "chat", user_id)
+    client = _get_client(base_url, api_key, provider)
 
     # 搜索1：公司基本信息
     search_context = ""
@@ -455,8 +754,7 @@ def fetch_company_info(company_name: str, db: Session, user_id: int = 0) -> dict
     except json.JSONDecodeError:
         pass
     # 尝试从文本中提取 JSON 对象
-    import re
-    match = re.search(r'\{[\s\S]*\}', text)
+    match = _re_module.search(r'\{[\s\S]*\}', text)
     if match:
         try:
             result = json.loads(match.group())
@@ -622,8 +920,8 @@ def _fetch_company_logo(domain: str) -> str:
 def refresh_company_news(company_name: str, db: Session, user_id: int = 0) -> str:
     """单独刷新公司最新动态，专注于半年内的新闻"""
     from datetime import datetime
-    base_url, api_key, model = _get_active_provider(db, "chat", user_id)
-    client = _get_client(base_url, api_key)
+    base_url, api_key, model, provider = _get_active_provider(db, "chat", user_id)
+    client = _get_client(base_url, api_key, provider)
 
     # Tavily 搜索最新新闻
     news_context = ""

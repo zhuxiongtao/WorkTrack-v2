@@ -462,12 +462,6 @@ export default function MeetingsPage() {
     !searchText || m.title.includes(searchText) || m.content_md.includes(searchText)
   )
 
-  const getSnippet = (m: Meeting) => {
-    if (!m.content_md) return ''
-    const clean = m.content_md.replace(/<think>[\s\S]*?<\/think>/g, '').replace(/^#{1,6}\s+/gm, '').replace(/\*\*|__/g, '').replace(/\n+/g, ' ').trim()
-    return clean.length > 100 ? clean.slice(0, 100) + '...' : clean
-  }
-
   const statusColors: Record<string, string> = {
     '进行中': 'text-blue-400 bg-blue-500/10 border-blue-500/20',
     '已完成': 'text-green-400 bg-green-500/10 border-green-500/20',

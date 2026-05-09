@@ -15,6 +15,9 @@ class ModelProvider(SQLModel, table=True):
     default_model: str = ""  # 已弃用，保留用于兼容旧表结构
     supported_models_json: str = ""  # API自动拉取的模型JSON缓存
     user_id: Optional[int] = Field(default=None, foreign_key="user.id", index=True)  # NULL=平台共享
+    # Vertex AI / GCP 专用字段
+    project_id: Optional[str] = Field(default=None)  # GCP 项目 ID
+    location: Optional[str] = Field(default=None)  # GCP 区域，如 us-central1
     created_at: datetime = Field(default_factory=datetime.now)
     # 关联的模型列表
     models_rel: list["ProviderModel"] = Relationship(back_populates="provider", sa_relationship_kwargs={"cascade": "all, delete-orphan"})

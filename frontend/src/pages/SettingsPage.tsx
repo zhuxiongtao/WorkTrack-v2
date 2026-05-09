@@ -12,6 +12,8 @@ interface Provider {
   provider_type: string
   supported_models_json: string
   user_id: number | null
+  project_id: string | null
+  location: string | null
 }
 
 interface ProviderModelItem {
@@ -93,9 +95,9 @@ export default function SettingsPage() {
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null)
-  const [form, setForm] = useState({ name: '', base_url: '', api_key: '' })
+  const [form, setForm] = useState({ name: '', base_url: '', api_key: '', project_id: '', location: '' })
   const [testingModelId, setTestingModelId] = useState<number | null>(null)
-  const [testResults, setTestResults] = useState<Record<number, { success: boolean; message: string; reply?: string }>>({})
+  const [testResults, setTestResults] = useState<Record<number, { success: boolean; message: string; reply?: string; elapsed?: number }>>({})
   const [editingTypeModelId, setEditingTypeModelId] = useState<number | null>(null)
   const [fetchingModels, setFetchingModels] = useState<number | null>(null)
 
@@ -176,18 +178,19 @@ export default function SettingsPage() {
 
   const openCreate = () => {
     setEditingProvider(null)
-    setForm({ name: '', base_url: '', api_key: '' })
+    setForm({ name: '', base_url: '', api_key: '', project_id: '', location: '' })
     setShowForm(true)
   }
 
   const openEdit = (p: Provider) => {
     setEditingProvider(p)
-    setForm({ name: p.name, base_url: p.base_url, api_key: p.api_key })
+    setForm({ name: p.name, base_url: p.base_url, api_key: p.api_key, project_id: p.project_id || '', location: p.location || '' })
     setShowForm(true)
   }
 
   const handleSave = async () => {
-    if (!form.name.trim() || !form.base_url.trim()) return
+    if (!form.name.trim()) return
+    if (!form.base_url.trim() && !form.project_id.trim()) return
     setSaving(true)
     try {
       if (editingProvider) {
@@ -207,7 +210,7 @@ export default function SettingsPage() {
 
   const handleDelete = async (id: number) => {
     if (!await showConfirm('确定删除此供应商及其所有模型配置？')) return
-    await fetch(`/api/v1/settings/providers/${id}`, { method: 'DELETE' })
+    await fetchWithAuth(`/api/v1/settings/providers/${id}`, { method: 'DELETE' })
     setProviderModels((prev) => { const n = { ...prev }; delete n[id]; return n })
     loadProviders()
     showToast('供应商已删除', 'success')
@@ -216,7 +219,7 @@ export default function SettingsPage() {
   const handleToggleActive = async (p: Provider) => {
     await fetch(`/api/v1/settings/providers/${p.id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: p.name, base_url: p.base_url, api_key: p.api_key, is_active: !p.is_active }),
+      body: JSON.stringify({ name: p.name, base_url: p.base_url, api_key: p.api_key, is_active: !p.is_active, project_id: p.project_id, location: p.location }),
     })
     loadProviders()
   }
@@ -254,12 +257,15 @@ export default function SettingsPage() {
 
   const testModel = async (providerId: number, modelId: number) => {
     setTestingModelId(modelId)
+    const start = Date.now()
     try {
-      const res = await fetch(`/api/v1/settings/providers/${providerId}/models/${modelId}/test`, { method: 'POST' })
+      const res = await fetchWithAuth(`/api/v1/settings/providers/${providerId}/models/${modelId}/test`, { method: 'POST' })
       const data = await res.json()
-      setTestResults((prev) => ({ ...prev, [modelId]: data }))
+      const elapsed = Date.now() - start
+      setTestResults((prev) => ({ ...prev, [modelId]: { ...data, elapsed } }))
     } catch {
-      setTestResults((prev) => ({ ...prev, [modelId]: { success: false, message: '网络请求失败' } }))
+      const elapsed = Date.now() - start
+      setTestResults((prev) => ({ ...prev, [modelId]: { success: false, message: '网络请求失败', elapsed } }))
     } finally { setTestingModelId(null) }
   }
 
@@ -482,6 +488,7 @@ export default function SettingsPage() {
     { name: 'OpenAI', base_url: 'https://api.openai.com/v1' },
     { name: 'DeepSeek', base_url: 'https://api.deepseek.com/v1' },
     { name: 'Gemini', base_url: 'https://generativelanguage.googleapis.com/v1beta/openai' },
+    { name: 'Vertex AI', base_url: '', project_id: '', location: 'global' },
     { name: 'Anthropic', base_url: 'https://api.anthropic.com/v1' },
     { name: 'MiniMax', base_url: 'https://api.minimaxi.com/v1' },
     { name: '硅基流动', base_url: 'https://api.siliconflow.cn/v1' },
@@ -548,7 +555,7 @@ export default function SettingsPage() {
             <p className="text-gray-600 text-xs mb-4">添加 AI 模型供应商以启用智能整理功能</p>
             <div className="flex flex-wrap justify-center gap-2">
               {presets.map((p) => (
-                <button key={p.name} onClick={() => { setForm({ ...form, name: p.name, base_url: p.base_url }); setShowForm(true) }}
+                <button key={p.name} onClick={() => { setForm({ ...form, name: p.name, base_url: p.base_url, project_id: (p as any).project_id || '', location: (p as any).location || '' }); setShowForm(true) }}
                   className="px-3 py-2 rounded-lg bg-bg-hover border border-border text-xs text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:border-[#3B82F6]/50 transition-all">+ {p.name}</button>
               ))}
             </div>
@@ -586,7 +593,11 @@ export default function SettingsPage() {
                           )}
                         </div>
                         <div className="flex items-center gap-4 text-xs text-gray-500 flex-wrap">
-                          <span className="flex items-center gap-1 min-w-0"><Globe size={12} className="shrink-0" /><span className="truncate max-w-[400px]">{p.base_url}</span></span>
+                          {p.project_id ? (
+                            <span className="flex items-center gap-1 min-w-0"><Cloud size={12} className="shrink-0 text-[#4285F4]" /><span className="truncate max-w-[400px]">GCP: {p.project_id} ({p.location || 'global'})</span></span>
+                          ) : (
+                            <span className="flex items-center gap-1 min-w-0"><Globe size={12} className="shrink-0" /><span className="truncate max-w-[400px]">{p.base_url}</span></span>
+                          )}
                           {p.api_key && <span className="flex items-center gap-1 shrink-0"><Key size={12} />{p.api_key.slice(0, 6)}...{p.api_key.slice(-4)}</span>}
                         </div>
                       </div>
@@ -631,8 +642,17 @@ export default function SettingsPage() {
                                 )}
                               </div>
                               {/* 测试按钮 + 删除 */}
-                              <div className="flex items-center gap-1 shrink-0 w-[68px] justify-end">
-                                {tr && <span className={`text-[10px] truncate max-w-[50px] ${tr.success ? 'text-green-400' : 'text-red-400'}`} title={tr.message}>{tr.success ? (tr.reply ? `"${tr.reply}"` : '✓') : '✗'}</span>}
+                              <div className="flex items-center gap-1 shrink-0 w-[108px] justify-end">
+                                {tr && (
+                                  <span className={`text-[10px] truncate max-w-[90px] flex items-center gap-0.5 ${tr.success ? 'text-green-400' : 'text-red-400'}`} title={`${tr.message || ''} | 延时: ${tr.elapsed}ms`}>
+                                    {tr.success ? (
+                                      <><span className="text-xs">✅</span>{tr.reply ? <span className="truncate">"{tr.reply}"</span> : <span>{tr.elapsed}ms</span>}</>
+                                    ) : (
+                                      <><span className="text-xs">❌</span><span className="truncate">失败</span></>
+                                    )}
+                                    {tr.success && <span className="text-[9px] text-gray-500 opacity-60">{tr.elapsed}ms</span>}
+                                  </span>
+                                )}
                                 <button onClick={() => testModel(p.id, m.id)} disabled={testingModelId === m.id}
                                   className="opacity-0 group-hover:opacity-100 px-2 py-0.5 rounded text-[10px] text-gray-500 hover:text-[#10B981] border border-border disabled:opacity-50 shrink-0">
                                   {testingModelId === m.id ? <Loader2 size={10} className="animate-spin" /> : '测试'}
@@ -1688,7 +1708,7 @@ export default function SettingsPage() {
                   <p className="text-xs text-gray-500 mb-3">选择预置供应商自动填充，或手动填写下方信息</p>
                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mb-5">
                     {presets.map((p) => (
-                      <button key={p.name} onClick={() => setForm({ ...form, name: p.name, base_url: p.base_url })}
+                      <button key={p.name} onClick={() => setForm({ ...form, name: p.name, base_url: p.base_url, project_id: (p as any).project_id || '', location: (p as any).location || '' })}
                         className="px-2 py-2 rounded-lg bg-bg-input border border-border text-xs text-gray-400 hover:text-white hover:border-[#3B82F6]/50 hover:bg-bg-hover transition-all truncate">
                         {p.name}
                       </button>
@@ -1707,18 +1727,36 @@ export default function SettingsPage() {
                   <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
                     className="w-full px-3 py-2.5 rounded-lg bg-bg-input border border-border text-sm text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6] transition-colors" placeholder="如 DeepSeek" />
                 </div>
+                {(form.name === 'Vertex AI' || form.project_id) && (
+                  <>
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1.5">GCP 项目 ID <span className="text-red-400">*</span></label>
+                      <input value={form.project_id} onChange={(e) => setForm({ ...form, project_id: e.target.value })}
+                        className="w-full px-3 py-2.5 rounded-lg bg-bg-input border border-border text-sm text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6] transition-colors font-mono" placeholder="如 my-project-123456" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1.5">GCP 区域</label>
+                      <input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })}
+                        className="w-full px-3 py-2.5 rounded-lg bg-bg-input border border-border text-sm text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6] transition-colors font-mono" placeholder="us-central1" />
+                      <p className="text-[10px] text-gray-500 mt-1">默认 us-central1，可选如 asia-east1、europe-west4 等</p>
+                    </div>
+                  </>
+                )}
                 <div>
                   <label className="block text-xs text-gray-400 mb-1.5">API 端点 <span className="text-red-400">*</span></label>
                   <input value={form.base_url} onChange={(e) => setForm({ ...form, base_url: e.target.value })}
                     className="w-full px-3 py-2.5 rounded-lg bg-bg-input border border-border text-sm text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6] transition-colors font-mono" placeholder="https://api.deepseek.com/v1" />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1.5">API Key</label>
+                  <label className="block text-xs text-gray-400 mb-1.5">{form.name === 'Vertex AI' ? '服务账号 JSON' : 'API Key'}</label>
                   <input value={form.api_key} onChange={(e) => setForm({ ...form, api_key: e.target.value })} type="password"
-                    className="w-full px-3 py-2.5 rounded-lg bg-bg-input border border-border text-sm text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6] transition-colors font-mono" placeholder="sk-..." />
+                    className="w-full px-3 py-2.5 rounded-lg bg-bg-input border border-border text-sm text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6] transition-colors font-mono" placeholder={form.name === 'Vertex AI' ? '粘贴服务账号 JSON...' : 'sk-...'} />
+                  {form.name === 'Vertex AI' && (
+                    <p className="text-[10px] text-gray-500 mt-1">请粘贴 GCP 服务账号的完整 JSON 密钥内容</p>
+                  )}
                 </div>
               </div>
-              <button onClick={handleSave} disabled={saving || !form.name.trim() || !form.base_url.trim()}
+              <button onClick={handleSave} disabled={saving || !form.name.trim() || (!form.base_url.trim() && !form.project_id.trim())}
                 className="w-full mt-6 py-2.5 rounded-xl bg-[#3B82F6] text-white text-sm font-semibold hover:bg-blue-600 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors">
                 {saving && <Loader2 size={16} className="animate-spin" />}<Save size={16} />{saving ? '保存中...' : '保存'}
               </button>

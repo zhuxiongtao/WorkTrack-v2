@@ -651,8 +651,8 @@ def run_agent_chat(user_message: str, history: list[dict], db: Session, user_id:
 
     # 最多 5 轮工具调用
     try:
-        base_url, api_key, model = _get_active_provider(db, "chat", user_id)
-        client = _get_client(base_url, api_key)
+        base_url, api_key, model, provider = _get_active_provider(db, "chat", user_id)
+        client = _get_client(base_url, api_key, provider)
     except Exception as e:
         write_log("error", "ai", f"AI模型配置失败: {str(e)[:150]}", details=str(e), db=db)
         return f"AI 模型配置失败: {str(e)[:200]}"
