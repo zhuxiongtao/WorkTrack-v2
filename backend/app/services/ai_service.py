@@ -7,6 +7,7 @@ from app.config import settings
 from app.models.daily_report import DailyReport
 from app.models.project import Project
 from app.models.meeting_note import MeetingNote
+from app.models.customer import Customer
 from app.models.model_provider import ModelProvider, TaskModelConfig, ProviderModel
 from app.models.ai_prompt import AIPrompt
 from app.models.user import User
@@ -311,8 +312,8 @@ _DEFAULT_PROMPTS = {
         "user_prompt_template": "请以 json 格式分析以下会议纪要，返回 decisions、todos、conclusions 三个字段：\n{content}",
     },
     "project_analysis": {
-        "system_prompt": "你是一个专业的项目管理助手，请分析项目状态并给出建议。",
-        "user_prompt_template": "请分析以下项目：\n项目名称: {name}\n状态: {status}\n截止日期: {deadline}\n关联会议: {meetings}\n请给出项目分析，包括：当前状态评估、风险提示、后续建议。",
+        "system_prompt": "你是一个专业的项目管理助手，请基于项目跟进记录、客户情况、会议纪要等多维度信息，综合分析项目状态并给出专业建议。",
+        "user_prompt_template": "请分析以下项目：\n\n【基本信息】\n项目名称: {name}\n当前状态: {status}\n涉及产品: {product}\n项目场景: {scenario}\n销售负责人: {sales_person}\n商机金额: {amount}\n截止日期: {deadline}\n\n【客户信息】\n客户名称: {customer_name}\n客户行业: {customer_industry}\n客户规模: {customer_scale}\n核心产品: {customer_products}\n客户简介: {customer_profile}\n\n【跟进记录】\n{progress}\n\n【关联会议】\n{meetings}\n\n请基于以上信息给出全面的项目分析，包括：\n1. 当前状态评估（结合跟进记录和客户情况）\n2. 风险提示（考虑客户行业、规模、项目进展等）\n3. 后续建议（具体的下一步行动建议）",
     },
 }
 
@@ -481,20 +482,48 @@ def generate_project_analysis(project_id: int, db: Session, user_id: int = 0) ->
     project = db.get(Project, project_id)
     if not project:
         return "项目不存在"
+
+    customer = db.get(Customer, project.customer_id) if project.customer_id else None
+
     base_url, api_key, model, provider = _get_active_provider(db, "chat", user_id)
     client = _get_client(base_url, api_key, provider)
+
     meetings = db.exec(
         select(MeetingNote).where(MeetingNote.project_id == project_id).limit(10)
     ).all()
     meetings_text = "\n".join(
         [f"- [{m.meeting_date}] {m.title}: {m.content_md[:200]}" for m in meetings]
     ) if meetings else "暂无会议记录"
+
+    progress_text = project.progress or "暂无跟进记录"
+    if len(progress_text) > 3000:
+        progress_text = progress_text[-3000:] + "\n\n...(以上为最近跟进记录)"
+
+    amount_text = "未设置"
+    if project.opportunity_amount or project.deal_amount:
+        parts = []
+        if project.opportunity_amount:
+            parts.append(f"商机金额: {project.opportunity_amount} {project.currency or 'CNY'}")
+        if project.deal_amount:
+            parts.append(f"成交金额: {project.deal_amount} {project.currency or 'CNY'}")
+        amount_text = " / ".join(parts)
+
     system_prompt, template = _get_prompt("project_analysis", db, user_id)
     user_prompt = _fill_template(
         template,
         name=project.name,
         status=project.status,
         deadline=str(project.deadline) if project.deadline else "未设置",
+        product=project.product or "未指定",
+        scenario=project.project_scenario or "未指定",
+        sales_person=project.sales_person or "未指定",
+        amount=amount_text,
+        customer_name=customer.name if customer else "未关联客户",
+        customer_industry=customer.industry if customer else "未知",
+        customer_scale=customer.scale if customer else "未知",
+        customer_products=customer.core_products if customer else "未知",
+        customer_profile=customer.profile if customer else "暂无",
+        progress=progress_text,
         meetings=meetings_text,
     )
     response = client.chat.completions.create(

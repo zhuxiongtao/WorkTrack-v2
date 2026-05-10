@@ -4,6 +4,8 @@ from datetime import date, datetime
 from app.services.ai_service import _get_active_provider, _get_client, _extract_message_text
 from app.services.vector_store import search_similar
 from app.models import Customer, Project, DailyReport, MeetingNote
+from app.models.contract import Contract
+from app.models.customer_contact import CustomerContact
 from app.routers.logs import write_log
 
 
@@ -190,6 +192,35 @@ TOOLS = [
                     "logo_url": {"type": "string", "description": "公司官网域名，如 tuya.com"},
                 },
                 "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_contracts",
+            "description": "搜索合同：关键词搜索合同标题、内容、摘要，返回匹配的合同列表及各合同的关键信息（金额、日期、甲乙双方、关键条款摘要等）",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "keyword": {"type": "string", "description": "搜索关键词，如'云服务'、'保密协议'"},
+                    "customer_name": {"type": "string", "description": "按客户名称筛选（可选）"},
+                },
+                "required": ["keyword"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_contract_detail",
+            "description": "获取单个合同的完整详细信息，包括AI解析的关键条款、付款方式、合同摘要等",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "contract_id": {"type": "integer", "description": "合同ID，从 search_contracts 结果中获取"},
+                },
+                "required": ["contract_id"],
             },
         },
     },
@@ -542,6 +573,64 @@ def execute_tool(tool_name: str, arguments: dict, db: Session, user_id: int = 1)
             ensure_ascii=False,
         )
 
+    elif tool_name == "search_contracts":
+        keyword = arguments.get("keyword", "")
+        customer_name = arguments.get("customer_name", "")
+        query = select(Contract).where(
+            (Contract.title.contains(keyword)) |
+            (Contract.contract_no.contains(keyword)) |
+            (Contract.summary.contains(keyword)) |
+            (Contract.raw_text.contains(keyword))
+        ).order_by(Contract.created_at.desc()).limit(10)
+        if customer_name:
+            c_query = select(Customer).where(Customer.name.contains(customer_name))
+            customers = db.exec(c_query).all()
+            if customers:
+                c_ids = [c.id for c in customers]
+                query = query.where(Contract.customer_id.in_(c_ids))
+        contracts = db.exec(query).all()
+        results = []
+        for ct in contracts:
+            cust = db.get(Customer, ct.customer_id)
+            results.append({
+                "id": ct.id,
+                "title": ct.title,
+                "contract_no": ct.contract_no,
+                "customer_name": cust.name if cust else "",
+                "sign_date": str(ct.sign_date) if ct.sign_date else "",
+                "end_date": str(ct.end_date) if ct.end_date else "",
+                "amount": f"{ct.contract_amount} {ct.currency}" if ct.contract_amount else "",
+                "status": ct.status,
+                "summary": ct.summary or "",
+                "key_clauses_snippet": (ct.key_clauses or "")[:300],
+            })
+        return json.dumps({"count": len(results), "contracts": results}, ensure_ascii=False)
+
+    elif tool_name == "get_contract_detail":
+        ct_id = arguments.get("contract_id", 0)
+        ct = db.get(Contract, ct_id)
+        if not ct:
+            return json.dumps({"error": "合同不存在"}, ensure_ascii=False)
+        cust = db.get(Customer, ct.customer_id)
+        return json.dumps({
+            "id": ct.id,
+            "title": ct.title,
+            "contract_no": ct.contract_no,
+            "customer_name": cust.name if cust else "",
+            "sign_date": str(ct.sign_date) if ct.sign_date else "",
+            "start_date": str(ct.start_date) if ct.start_date else "",
+            "end_date": str(ct.end_date) if ct.end_date else "",
+            "party_a": ct.party_a,
+            "party_b": ct.party_b,
+            "contract_amount": ct.contract_amount,
+            "currency": ct.currency,
+            "payment_terms": ct.payment_terms or "",
+            "key_clauses": ct.key_clauses or "",
+            "summary": ct.summary or "",
+            "status": ct.status,
+            "remarks": ct.remarks or "",
+        }, ensure_ascii=False)
+
     return json.dumps({"error": f"未知工具: {tool_name}"})
 
 
@@ -582,6 +671,13 @@ def run_agent_chat(user_message: str, history: list[dict], db: Session, user_id:
 - 查询项目详情和状态（含客户名称、产品、云平台等）
 - AI 分析项目：评估进展、识别风险、给出建议
 - 查看项目关联的会议记录
+
+📄 **合同管理**
+- 关键词搜索合同（标题、内容、摘要）
+- 按客户名称筛选合同
+- 查看合同完整信息：金额、甲乙双方、签订日期、付款方式
+- AI 解析合同关键条款（交付、违约、知识产权、保密等）
+- 结合客户、项目、合同信息综合分析回答用户问题
 
 ⏰ **定时任务**
 - 创建定时自动任务：日报 AI 总结、项目定期分析

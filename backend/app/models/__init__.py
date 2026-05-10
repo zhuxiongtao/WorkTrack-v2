@@ -1,6 +1,8 @@
 from app.models.user import User
 from app.models.daily_report import DailyReport
 from app.models.customer import Customer
+from app.models.customer_contact import CustomerContact
+from app.models.contract import Contract
 from app.models.project import Project
 from app.models.meeting_note import MeetingNote
 from app.models.scheduled_task import ScheduledTask
@@ -16,6 +18,8 @@ __all__ = [
     "User",
     "DailyReport",
     "Customer",
+    "CustomerContact",
+    "Contract",
     "Project",
     "MeetingNote",
     "ScheduledTask",

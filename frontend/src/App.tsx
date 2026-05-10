@@ -12,6 +12,7 @@ import SettingsPage from './pages/SettingsPage'
 import ScheduledTasksPage from './pages/ScheduledTasksPage'
 import LogViewerPage from './pages/LogViewerPage'
 import CustomersPage from './pages/CustomersPage'
+import ContractsPage from './pages/ContractsPage'
 import LoginPage from './pages/LoginPage'
 import UserManagementPage from './pages/UserManagementPage'
 import DashboardPage from './pages/DashboardPage'
@@ -302,7 +303,7 @@ function AppContent() {
           ) : (
             <Sparkles size={20} className="text-accent-blue shrink-0" />
           )}
-          <span className="text-[15px] font-bold text-gray-900 dark:text-white truncate">{brandTitle}</span>
+          <span className="text-[17px] font-bold text-gray-900 dark:text-white truncate">{brandTitle}</span>
         </NavLink>
 
         {/* 搜索栏 */}
@@ -454,6 +455,22 @@ function AppContent() {
               <span>会议纪要</span>
             </NavLink>
 
+            {/* ===== 合同管理 ===== */}
+            <NavLink
+              to="/contracts"
+              onClick={() => setSidebarOpen(false)}
+              className={({ isActive }) =>
+                `group flex items-center gap-3 px-3 py-1.5 rounded-xl text-sm transition-all ${
+                  isActive
+                    ? 'text-gray-900 dark:text-white bg-gradient-to-r from-cyan-500/15 to-teal-500/10 font-medium ring-1 ring-cyan-500/30 shadow-lg shadow-cyan-500/10'
+                    : 'text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-bg-hover-secondary'
+                }`
+              }
+            >
+              <SidebarIcon icon={FileText} gradientFrom="#06B6D4" gradientTo="#14B8A6" isActive={false} />
+              <span>合同管理</span>
+            </NavLink>
+
             {/* ===== 定时任务 ===== */}
             <NavLink
               to="/tasks"
@@ -575,7 +592,7 @@ function AppContent() {
             <Menu size={18} />
           )}
           </button>
-          <span className="text-sm font-semibold text-gray-900 dark:text-white tracking-wide">{brandTitle}</span>
+          <span className="text-base font-semibold text-gray-900 dark:text-white tracking-wide">{brandTitle}</span>
           <button
             onClick={toggle}
             className="p-1.5 -mr-1 rounded-lg hover:bg-white/10 active:bg-white/15 text-gray-400 transition-colors"
@@ -625,6 +642,7 @@ function AppContent() {
             <Route path="/meetings" element={<MeetingsPage />} />
             <Route path="/ai" element={<AIPage />} />
             <Route path="/customers" element={<CustomersPage />} />
+            <Route path="/contracts" element={<ContractsPage />} />
             <Route path="/tasks" element={<ScheduledTasksPage />} />
             <Route path="/logs" element={<LogViewerPage />} />
             <Route path="/settings" element={<SettingsPage />} />
