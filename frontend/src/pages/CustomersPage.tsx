@@ -27,6 +27,16 @@ interface CompanyInfo {
   website?: string
 }
 
+interface CustomerContact {
+  id: number
+  customer_id: number
+  name: string
+  phone: string
+  email: string
+  position: string
+  is_primary: boolean
+}
+
 // CompanyLogo 组件：多源加载logo + localStorage 缓存，失败则显示公司首字
 const LOGO_CACHE_PREFIX = 'wt_logo_'
 
@@ -190,6 +200,44 @@ export default function CustomersPage() {
   const [expandedCustomerId, setExpandedCustomerId] = useState<number | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
 
+  const [contacts, setContacts] = useState<CustomerContact[]>([])
+  const [contactForm, setContactForm] = useState({ name: '', phone: '', email: '', position: '', is_primary: false })
+  const [editingContactId, setEditingContactId] = useState<number | null>(null)
+
+  const loadContacts = (customerId: number) => {
+    fetch(`/api/v1/customers/${customerId}/contacts`, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
+    }).then(r => r.json()).then(data => setContacts(data || [])).catch(() => setContacts([]))
+  }
+
+  const saveContact = async (customerId: number) => {
+    if (!contactForm.name.trim()) return
+    const method = editingContactId ? 'PUT' : 'POST'
+    const url = editingContactId
+      ? `/api/v1/customers/${customerId}/contacts/${editingContactId}`
+      : `/api/v1/customers/${customerId}/contacts`
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` },
+      body: JSON.stringify(contactForm),
+    })
+    if (res.ok) {
+      setContactForm({ name: '', phone: '', email: '', position: '', is_primary: false })
+      setEditingContactId(null)
+      loadContacts(customerId)
+    }
+  }
+
+  const deleteContact = async (customerId: number, contactId: number) => {
+    const ok = await showConfirm('确定删除此联系人？')
+    if (!ok) return
+    const res = await fetch(`/api/v1/customers/${customerId}/contacts/${contactId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
+    })
+    if (res.ok) loadContacts(customerId)
+  }
+
   // 从 URL 参数自动打开客户详情
   useEffect(() => {
     const customerId = searchParams.get('customer')
@@ -201,6 +249,14 @@ export default function CustomersPage() {
       }
     }
   }, [customers, searchParams])
+
+  useEffect(() => {
+    if (expandedCustomerId) {
+      loadContacts(expandedCustomerId)
+    } else {
+      setContacts([])
+    }
+  }, [expandedCustomerId])
 
   const resetForm = () => {
     setForm({ name: '', industry: '', contact: '', status: '潜在', core_products: '', business_scope: '', scale: '', profile: '', recent_news: '', logo_url: '', website: '' })
@@ -557,6 +613,76 @@ export default function CustomersPage() {
                   <span className={`text-[11px] px-2.5 py-1 rounded-full border ${statusColors[c.status] || statusColors['潜在']}`}>{c.status}</span>
                   {c.contact && (
                     <span className="text-[11px] text-gray-400 bg-bg-input px-2 py-1 rounded-md border border-border">{c.contact}</span>
+                  )}
+                </div>
+
+                <div className="p-4 rounded-xl bg-bg-input/30 border border-border">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs text-gray-400 flex items-center gap-1.5"><Users size={12} />联系人</p>
+                    <button onClick={() => { setContactForm({ name: '', phone: '', email: '', position: '', is_primary: false }); setEditingContactId(null) }}
+                      className="text-[10px] text-[#3B82F6] hover:text-blue-400 flex items-center gap-0.5"><Plus size={10} />添加</button>
+                  </div>
+                  {contacts.length === 0 ? (
+                    <p className="text-xs text-gray-600">暂无联系人</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {contacts.map(ct => (
+                        <div key={ct.id} className="flex items-center justify-between py-1.5 px-2 rounded-lg bg-bg-card/50 border border-border/50 group/ct">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs text-gray-200">{ct.name}</span>
+                              {ct.is_primary && <span className="text-[9px] px-1 rounded bg-[#3B82F6]/20 text-[#3B82F6]">主要</span>}
+                              {ct.position && <span className="text-[10px] text-gray-500">{ct.position}</span>}
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              {ct.phone && <span className="text-[10px] text-gray-400">{ct.phone}</span>}
+                              {ct.email && <span className="text-[10px] text-gray-400">{ct.email}</span>}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 opacity-0 group-hover/ct:opacity-100 transition-opacity">
+                            <button onClick={() => { setContactForm({ name: ct.name, phone: ct.phone, email: ct.email, position: ct.position, is_primary: ct.is_primary }); setEditingContactId(ct.id) }}
+                              className="p-1 rounded text-gray-500 hover:text-white"><Pencil size={10} /></button>
+                            <button onClick={() => deleteContact(c.id, ct.id)}
+                              className="p-1 rounded text-gray-500 hover:text-red-400"><Trash2 size={10} /></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {(contacts.length === 0 || editingContactId || (!editingContactId && contacts.length > 0)) && (
+                    <div className={`${contacts.length === 0 && !editingContactId ? 'hidden' : ''} mt-2 pt-2 border-t border-border/50`}>
+                      {(editingContactId || contacts.length > 0) && !editingContactId && (
+                        <div className="h-0 overflow-hidden">
+                          {/* placeholder to keep the ternary working */}
+                        </div>
+                      )}
+                      {editingContactId || contacts.length === 0 ? (
+                        <div className="space-y-1.5">
+                          <input value={contactForm.name} onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })}
+                            placeholder="联系人姓名 *" className="w-full px-2 py-1.5 rounded bg-bg-card border border-border text-xs text-gray-200 outline-none focus:border-[#3B82F6]" />
+                          <div className="grid grid-cols-2 gap-1.5">
+                            <input value={contactForm.phone} onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })}
+                              placeholder="手机" className="w-full px-2 py-1.5 rounded bg-bg-card border border-border text-xs text-gray-200 outline-none focus:border-[#3B82F6]" />
+                            <input value={contactForm.email} onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
+                              placeholder="邮箱" className="w-full px-2 py-1.5 rounded bg-bg-card border border-border text-xs text-gray-200 outline-none focus:border-[#3B82F6]" />
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <input value={contactForm.position} onChange={(e) => setContactForm({ ...contactForm, position: e.target.value })}
+                              placeholder="职位" className="flex-1 px-2 py-1.5 rounded bg-bg-card border border-border text-xs text-gray-200 outline-none focus:border-[#3B82F6]" />
+                            <label className="flex items-center gap-1 text-[10px] text-gray-400 cursor-pointer">
+                              <input type="checkbox" checked={contactForm.is_primary} onChange={(e) => setContactForm({ ...contactForm, is_primary: e.target.checked })}
+                                className="w-3 h-3 rounded" />主要联系人
+                            </label>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => saveContact(c.id)}
+                              className="px-3 py-1 rounded bg-[#3B82F6] text-white text-[10px] hover:bg-blue-600">保存</button>
+                            <button onClick={() => { setEditingContactId(null); setContactForm({ name: '', phone: '', email: '', position: '', is_primary: false }) }}
+                              className="px-3 py-1 rounded bg-bg-hover text-gray-400 text-[10px] hover:text-white">取消</button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
                   )}
                 </div>
                 {hasDetail ? (

@@ -354,9 +354,9 @@ def list_customers(industry: Optional[str] = None, status: Optional[str] = None)
                 "name": c.name,
                 "industry": c.industry,
                 "status": c.status,
-                "contact_person": c.contact_person,
-                "contact_email": c.contact_email,
-                "notes": (c.notes or "")[:200],
+                "contact_person": "",
+                "contact_email": "",
+                "notes": "",
             }
             for c in customers
         ]
@@ -382,8 +382,8 @@ def get_customer(customer_id: int) -> dict:
         return {
             "customer": {
                 "id": c.id, "name": c.name, "industry": c.industry,
-                "status": c.status, "contact_person": c.contact_person,
-                "contact_email": c.contact_email, "notes": c.notes,
+                "status": c.status, "contact_person": "",
+                "contact_email": "", "notes": "",
             },
             "projects": [{"id": p.id, "name": p.name, "status": p.status} for p in projects],
             "recent_meetings": [
@@ -396,14 +396,12 @@ def get_customer(customer_id: int) -> dict:
 
 
 @mcp.tool()
-def create_customer(name: str, industry: str = "", status: str = "active",
-                    contact_person: str = "", contact_email: str = "", notes: str = "") -> dict:
+def create_customer(name: str, industry: str = "", status: str = "潜在") -> dict:
     """创建新客户"""
     db = next(get_session())
     try:
         c = Customer(
             name=name, industry=industry, status=status,
-            contact_person=contact_person, contact_email=contact_email, notes=notes,
         )
         db.add(c)
         db.commit()
@@ -437,9 +435,9 @@ def list_meetings(days: int = 30, customer_id: Optional[int] = None) -> list:
                 "date": str(m.meeting_date),
                 "customer_id": m.customer_id,
                 "duration_minutes": m.duration_minutes,
-                "notes_preview": (m.notes or "")[:300],
-                "decisions": m.decisions,
-                "todos": m.todos,
+                "notes_preview": (m.content_md or "")[:300],
+                "decisions": "",
+                "todos": "",
             }
             for m in meetings
         ]
@@ -461,11 +459,11 @@ def get_meeting(meeting_id: int) -> dict:
             "date": str(m.meeting_date),
             "customer_id": m.customer_id,
             "project_id": m.project_id,
-            "duration_minutes": m.duration_minutes,
+            "duration_minutes": 0,
             "attendees": m.attendees,
-            "notes": m.notes,
-            "decisions": m.decisions,
-            "todos": m.todos,
+            "notes": m.content_md or "",
+            "decisions": "",
+            "todos": "",
         }
     finally:
         db.close()
@@ -515,8 +513,7 @@ def global_search(query: str, top_k: int = 10) -> list:
 
         # 搜索客户
         cust_q = select(Customer).where(
-            or_(Customer.name.contains(query), Customer.industry.contains(query),
-                Customer.contact_person.contains(query))
+            or_(Customer.name.contains(query), Customer.industry.contains(query))
         ).limit(top_k)
         customers = db.exec(cust_q).all()
         for c in customers:
@@ -533,7 +530,7 @@ def global_search(query: str, top_k: int = 10) -> list:
 
         # 搜索会议
         meet_q = select(MeetingNote).where(
-            or_(MeetingNote.title.contains(query), MeetingNote.notes.contains(query))
+            or_(MeetingNote.title.contains(query), MeetingNote.content_md.contains(query))
         ).order_by(MeetingNote.meeting_date.desc()).limit(top_k)
         meetings = db.exec(meet_q).all()
         for m in meetings:

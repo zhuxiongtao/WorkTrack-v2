@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.config import settings as app_settings
 from app.database import init_db
-from app.routers import daily_reports, customers, projects, meetings, scheduled_tasks, ai_agent, search, settings, logs, auth, users, dashboard, setup, files
+from app.routers import daily_reports, customers, projects, meetings, scheduled_tasks, ai_agent, search, settings, logs, auth, users, dashboard, setup, files, contracts
 
 
 def create_app() -> FastAPI:
@@ -70,6 +70,7 @@ def create_app() -> FastAPI:
     app.include_router(dashboard.router)
     app.include_router(setup.router)
     app.include_router(files.router)
+    app.include_router(contracts.router)
 
     # 启动时初始化数据库和调度器
     @app.on_event("startup")
