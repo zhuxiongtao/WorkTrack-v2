@@ -68,7 +68,7 @@ export default function SettingsPage() {
   const { user, fetchWithAuth } = useAuth()
   const { toast: showToast, confirm: showConfirm } = useToast()
   const isAdmin = user?.is_admin ?? false
-  const canAccessModels = isAdmin || (user?.can_manage_models) || (user?.use_shared_models)
+  const canAccessModels = isAdmin || (user?.can_manage_models)
   const canManageModels = isAdmin || (user?.can_manage_models)
   const [activeTab, setActiveTab] = useState(canAccessModels ? 'models' : 'prompts')
 
@@ -420,7 +420,7 @@ export default function SettingsPage() {
       showToast('提示词已恢复默认', 'success')
     } catch { /* noop */ }
   }
-  const categoryLabels: Record<string, string> = { product: '涉及产品', project_scenario: '项目场景', sales_person: '销售', project_status: '项目状态', cloud: '云标签' }
+  const categoryLabels: Record<string, string> = { product: '涉及产品', project_scenario: '项目场景', sales_person: '销售', project_status: '项目状态', cloud: '供应商' }
   const categoryIcons: Record<string, any> = { product: Package, project_scenario: MapPin, sales_person: User, project_status: Activity, cloud: Cloud }
   const categoryColors: Record<string, string> = { product: '#3B82F6', project_scenario: '#8B5CF6', sales_person: '#F59E0B', project_status: '#10B981', cloud: '#EC4899' }
   const loadFieldOptions = () => { fetch('/api/v1/settings/field-options').then((r) => r.json()).then((d) => setFieldOptions(d as FieldOption[])) }

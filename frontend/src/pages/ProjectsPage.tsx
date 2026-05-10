@@ -1081,14 +1081,14 @@ export default function ProjectsPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={labelClass}>云标签</label>
+                  <label className={labelClass}>供应商</label>
                   <SearchableSelect
                     multiple
                     options={(options.cloud || []).map(v => ({ id: v, label: v }))}
                     value={selectedClouds}
                     onChange={(val) => setSelectedClouds(val as string[])}
-                    placeholder="选择所属云..."
-                    searchPlaceholder="搜索云平台..."
+                    placeholder="选择供应商..."
+                    searchPlaceholder="搜索供应商..."
                     emptyText="无匹配选项"
                   />
                 </div>

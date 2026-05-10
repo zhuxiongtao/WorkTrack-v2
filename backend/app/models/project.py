@@ -20,7 +20,7 @@ class Project(SQLModel, table=True):
     status: str = ""  # 状态（选项管理）
     progress: Optional[str] = None  # 进展记录
     analysis: Optional[str] = None  # AI 项目分析结果
-    cloud_provider: Optional[str] = None  # 云标签（逗号分隔多选）
+    cloud_provider: Optional[str] = None  # 供应商（逗号分隔多选）
     files_json: Optional[str] = Field(default=None, description="附件列表 JSON: [{name, path, size, type}]")
     deadline: Optional[date] = None
     created_at: datetime = Field(default_factory=datetime.now)
