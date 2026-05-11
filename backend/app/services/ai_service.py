@@ -47,6 +47,19 @@ class _FakeMessage:
         self.role = role
         self.tool_calls = tool_calls or []
 
+    def get(self, key, default=None):
+        """支持 dict-like 访问，兼容消息列表转换"""
+        if key == "content":
+            return self.content
+        if key == "role":
+            return self.role
+        if key == "tool_calls":
+            return self.tool_calls
+        return default
+
+    def __contains__(self, key):
+        return key in ("content", "role", "tool_calls")
+
 
 class _FakeChoice:
     def __init__(self, message: _FakeMessage, finish_reason="stop"):
@@ -118,7 +131,23 @@ class _VertexCompletions:
                     if parts:
                         contents.append(types.Content(role="user", parts=parts))
             elif role == "assistant":
-                if isinstance(content, str) and content:
+                # 检查是否有 tool_calls
+                tool_calls = msg.get("tool_calls", []) or []
+                if tool_calls:
+                    # 有函数调用：转换为 genai function_call
+                    parts = []
+                    for tc in tool_calls:
+                        func = tc.function if hasattr(tc, 'function') else tc.get("function", {})
+                        name = func.name if hasattr(func, 'name') else func.get("name", "")
+                        args = func.arguments if hasattr(func, 'arguments') else func.get("arguments", "{}")
+                        try:
+                            args_dict = json.loads(args) if isinstance(args, str) else args
+                        except (json.JSONDecodeError, TypeError):
+                            args_dict = {}
+                        parts.append(types.Part(function_call=types.FunctionCall(name=name, args=args_dict)))
+                    if parts:
+                        contents.append(types.Content(role="model", parts=parts))
+                elif isinstance(content, str) and content:
                     contents.append(types.Content(role="model", parts=[types.Part(text=content)]))
             elif role == "tool":
                 # 工具调用结果：作为 user 消息追加

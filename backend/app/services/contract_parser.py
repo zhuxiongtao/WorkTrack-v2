@@ -31,35 +31,29 @@ def _resolve_vision_provider(db: Session, user_id: int):
     return provider, vision_cfg.model_name
 
 
-def _ocr_single_page(img_b64: str, model_name: str, base_url: str, api_key: str, provider) -> str:
-    from openai import OpenAI
-    client = OpenAI(base_url=base_url, api_key=api_key, timeout=120)
-    response = client.chat.completions.create(
-        model=model_name,
-        messages=[{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "请逐字识别并提取图片中所有文字，直接输出文字内容。"},
-                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_b64}"}}
-            ]
-        }],
-        temperature=0.1,
-    )
-    return response.choices[0].message.content or ""
-
-
 def _extract_text_via_vision(file_path: str, db: Session, user_id: int = 0) -> str:
     import fitz
     provider, model_name = _resolve_vision_provider(db, user_id)
     base_url, api_key, _, _ = _get_active_provider(db, "vision", user_id)
+    client = _get_client(base_url, api_key, provider)
 
     doc = fitz.open(file_path)
     all_text = ""
     for page_num in range(len(doc)):
         pix = doc[page_num].get_pixmap(dpi=150)
         img_b64 = base64.b64encode(pix.tobytes("png")).decode("utf-8")
-        text = _ocr_single_page(img_b64, model_name, base_url, api_key, provider)
-        all_text += text + "\n"
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "请逐字识别并提取图片中所有文字，直接输出文字内容。"},
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_b64}"}}
+                ]
+            }],
+            temperature=0.1,
+        )
+        all_text += (response.choices[0].message.content or "") + "\n"
     doc.close()
     return all_text.strip()
 
@@ -85,49 +79,57 @@ def extract_text_from_docx(file_path: str) -> str:
 
 
 def extract_text_from_legacy_doc(file_path: str) -> str:
-    import tempfile, os as _os
-    tmp_pdf = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False).name
+    import tempfile, subprocess, platform, os as _os
+    tmp_txt = tempfile.NamedTemporaryFile(suffix=".txt", delete=False).name
     try:
-        try:
-            import win32com.client
-            word = win32com.client.Dispatch("Word.Application")
-            word.Visible = False
-            word.DisplayAlerts = 0
-            doc = None
+        # macOS: 使用 textutil 直接转 txt
+        if platform.system() == "Darwin":
+            result = subprocess.run(
+                ["textutil", "-convert", "txt", file_path, "-output", tmp_txt],
+                capture_output=True, text=True, timeout=30
+            )
+            if result.returncode == 0 and _os.path.exists(tmp_txt) and _os.path.getsize(tmp_txt) > 0:
+                with open(tmp_txt, "r", encoding="utf-8", errors="ignore") as f:
+                    return f.read().strip()
+
+        # Windows: 使用 win32com 转 PDF 再提取文字
+        if platform.system() == "Windows":
             try:
-                doc = word.Documents.Open(file_path)
-                doc.SaveAs(tmp_pdf, FileFormat=17)
-            finally:
-                if doc:
-                    try:
-                        doc.Close()
-                    except Exception:
-                        pass
+                import win32com.client
+                word = win32com.client.Dispatch("Word.Application")
+                word.Visible = False
+                word.DisplayAlerts = 0
+                doc = None
                 try:
-                    word.Quit()
-                except Exception:
-                    pass
-        except Exception:
-            pass
+                    doc = word.Documents.Open(file_path)
+                    tmp_pdf = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False).name
+                    doc.SaveAs(tmp_pdf, FileFormat=17)
+                finally:
+                    if doc:
+                        try: doc.Close()
+                        except Exception: pass
+                    try: word.Quit()
+                    except Exception: pass
 
-        if not _os.path.exists(tmp_pdf) or _os.path.getsize(tmp_pdf) < 100:
-            return ""
+                if _os.path.exists(tmp_pdf) and _os.path.getsize(tmp_pdf) > 100:
+                    import fitz
+                    pdf = fitz.open(tmp_pdf)
+                    text = ""
+                    for page in pdf:
+                        text += page.get_text() + "\n"
+                    pdf.close()
+                    try: _os.remove(tmp_pdf)
+                    except Exception: pass
+                    return text.strip()
+            except Exception:
+                pass
 
-        if _os.path.getsize(tmp_pdf) < 100:
-            return ""
-
-        import fitz
-        pdf = fitz.open(tmp_pdf)
-        text = ""
-        for page in pdf:
-            text += page.get_text() + "\n"
-        pdf.close()
-        return text.strip() if text.strip() else ""
+        return ""
     except Exception:
         return ""
     finally:
         try:
-            _os.remove(tmp_pdf)
+            _os.remove(tmp_txt)
         except Exception:
             pass
 
@@ -148,7 +150,7 @@ def extract_text(file_path: str, file_type: str) -> str:
 
 def extract_text_with_vision_fallback(file_path: str, file_type: str, db: Session, user_id: int = 0) -> str:
     text = extract_text(file_path, file_type)
-    if not text and file_type in (".pdf", "pdf", ".docx", "docx"):
+    if not text and file_type in (".pdf", "pdf", ".docx", "docx", ".doc", "doc"):
         import traceback
         try:
             text = _extract_text_via_vision(file_path, db, user_id)

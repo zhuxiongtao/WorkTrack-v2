@@ -488,7 +488,7 @@ export default function SettingsPage() {
     { name: 'OpenAI', base_url: 'https://api.openai.com/v1' },
     { name: 'DeepSeek', base_url: 'https://api.deepseek.com/v1' },
     { name: 'Gemini', base_url: 'https://generativelanguage.googleapis.com/v1beta/openai' },
-    { name: 'Vertex AI', base_url: '', project_id: '', location: 'global' },
+    { name: 'Vertex AI', base_url: 'https://aiplatform.googleapis.com/v1', project_id: '', location: 'global' },
     { name: 'Anthropic', base_url: 'https://api.anthropic.com/v1' },
     { name: 'MiniMax', base_url: 'https://api.minimaxi.com/v1' },
     { name: '硅基流动', base_url: 'https://api.siliconflow.cn/v1' },

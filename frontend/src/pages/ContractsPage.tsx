@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, Plus, X, Loader2, Trash2, FileText, Download, Sparkles, DollarSign, ChevronDown, ChevronRight } from 'lucide-react'
+import { Search, Plus, X, Loader2, Trash2, FileText, Download, Sparkles, DollarSign, ChevronDown, ChevronRight, Pencil } from 'lucide-react'
 import { useToast } from '../contexts/ToastContext'
 
 interface ContractRecord {
@@ -102,35 +102,75 @@ export default function ContractsPage() {
   const handleSubmit = async () => {
     if (!form.title || !form.customer_id) { showToast('请填写合同名称和选择客户', 'error'); return }
     setSaving(true)
-    const fd = new FormData()
-    fd.append('title', form.title)
-    fd.append('contract_no', form.contract_no)
-    fd.append('customer_id', String(form.customer_id))
-    if (form.project_id) fd.append('project_id', String(form.project_id))
-    if (form.sign_date) fd.append('sign_date', form.sign_date)
-    if (form.start_date) fd.append('start_date', form.start_date)
-    if (form.end_date) fd.append('end_date', form.end_date)
-    fd.append('party_a', form.party_a)
-    fd.append('party_b', form.party_b)
-    if (form.contract_amount) fd.append('contract_amount', form.contract_amount)
-    fd.append('currency', form.currency)
-    if (form.payment_terms) fd.append('payment_terms', form.payment_terms)
-    if (form.remarks) fd.append('remarks', form.remarks)
-    if (file) fd.append('file', file)
+    const method = editingId ? 'PUT' : 'POST'
+    const url = editingId ? `/api/v1/contracts/${editingId}` : '/api/v1/contracts'
 
-    const res = await fetch('/api/v1/contracts', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` },
-      body: fd,
-    })
-    if (res.ok) {
-      showToast('合同添加成功', 'success')
-      setShowForm(false); resetForm(); loadContracts()
+    if (editingId) {
+      // 编辑模式：发送 JSON
+      const body: Record<string, any> = {
+        title: form.title, contract_no: form.contract_no,
+        project_id: form.project_id || null,
+        sign_date: form.sign_date || null, start_date: form.start_date || null, end_date: form.end_date || null,
+        party_a: form.party_a, party_b: form.party_b,
+        contract_amount: form.contract_amount ? parseFloat(form.contract_amount) : null,
+        currency: form.currency, payment_terms: form.payment_terms || null, remarks: form.remarks || null,
+      }
+      const res = await fetch(url, {
+        method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` },
+        body: JSON.stringify(body),
+      })
+      if (res.ok) {
+        showToast('合同已更新', 'success')
+        setShowForm(false); resetForm(); loadContracts()
+      } else {
+        const err = await res.json()
+        showToast(err.detail || '保存失败', 'error')
+      }
     } else {
-      const err = await res.json()
-      showToast(err.detail || '添加失败', 'error')
+      // 新建模式：发送 FormData（支持文件上传）
+      const fd = new FormData()
+      fd.append('title', form.title)
+      fd.append('contract_no', form.contract_no)
+      fd.append('customer_id', String(form.customer_id))
+      if (form.project_id) fd.append('project_id', String(form.project_id))
+      if (form.sign_date) fd.append('sign_date', form.sign_date)
+      if (form.start_date) fd.append('start_date', form.start_date)
+      if (form.end_date) fd.append('end_date', form.end_date)
+      fd.append('party_a', form.party_a)
+      fd.append('party_b', form.party_b)
+      if (form.contract_amount) fd.append('contract_amount', form.contract_amount)
+      fd.append('currency', form.currency)
+      if (form.payment_terms) fd.append('payment_terms', form.payment_terms)
+      if (form.remarks) fd.append('remarks', form.remarks)
+      if (file) fd.append('file', file)
+
+      const res = await fetch(url, {
+        method, headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` },
+        body: fd,
+      })
+      if (res.ok) {
+        showToast('合同添加成功', 'success')
+        setShowForm(false); resetForm(); loadContracts()
+      } else {
+        const err = await res.json()
+        showToast(err.detail || '添加失败', 'error')
+      }
     }
     setSaving(false)
+  }
+
+  const startEdit = (c: ContractRecord) => {
+    setForm({
+      title: c.title, contract_no: c.contract_no,
+      customer_id: c.customer_id, project_id: c.project_id || 0,
+      sign_date: c.sign_date || '', start_date: c.start_date || '', end_date: c.end_date || '',
+      party_a: c.party_a, party_b: c.party_b,
+      contract_amount: c.contract_amount != null ? String(c.contract_amount) : '',
+      currency: c.currency, payment_terms: c.payment_terms || '', remarks: c.remarks || '',
+    })
+    setFile(null)
+    setEditingId(c.id)
+    setShowForm(true)
   }
 
   const handleDelete = async (id: number) => {
@@ -277,6 +317,10 @@ export default function ContractsPage() {
                         <Download size={10} />下载文件
                       </button>
                     )}
+                    <button onClick={() => startEdit(c)}
+                      className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-bg-hover border border-border">
+                      <Pencil size={10} />编辑
+                    </button>
                     <button onClick={() => handleDelete(c.id)}
                       className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-border ml-auto">
                       <Trash2 size={10} />删除
@@ -293,7 +337,7 @@ export default function ContractsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => { setShowForm(false); resetForm() }}>
           <div className="w-full max-w-lg mx-4 p-6 rounded-2xl bg-bg-card border border-border shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-medium text-white">新建合同</h3>
+              <h3 className="text-lg font-medium text-white">{editingId ? '编辑合同' : '新建合同'}</h3>
               <button onClick={() => { setShowForm(false); resetForm() }} className="text-gray-500 hover:text-white"><X size={20} /></button>
             </div>
             <div className="space-y-3">
@@ -379,6 +423,7 @@ export default function ContractsPage() {
                 <textarea value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} rows={2}
                   className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-200 outline-none focus:border-[#3B82F6] resize-none" />
               </div>
+              {!editingId && (
               <div>
                 <label className="block text-xs text-gray-400 mb-2">上传合同文件</label>
                 <div className="flex items-center gap-3 flex-wrap">
@@ -391,10 +436,11 @@ export default function ContractsPage() {
                 </div>
                 <p className="text-[10px] text-gray-600 mt-1">上传后保存合同，系统将在后台自动进行AI解析</p>
               </div>
+              )}
               <div className="flex items-center gap-3 pt-2">
                 <button onClick={handleSubmit} disabled={saving}
                   className="flex-1 py-2.5 rounded-lg bg-[#3B82F6] text-white text-sm font-medium hover:bg-blue-600 disabled:opacity-50">
-                  {saving ? '保存中...' : '保存合同'}
+                  {saving ? '保存中...' : (editingId ? '更新合同' : '保存合同')}
                 </button>
                 <button onClick={() => { setShowForm(false); resetForm() }}
                   className="px-5 py-2.5 rounded-lg bg-bg-hover text-gray-400 text-sm hover:text-white">取消</button>
