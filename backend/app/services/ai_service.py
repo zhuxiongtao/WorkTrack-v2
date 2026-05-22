@@ -675,29 +675,29 @@ def fetch_company_info(company_name: str, db: Session, user_id: int = 0) -> dict
     base_url, api_key, model, provider = _get_active_provider(db, "chat", user_id)
     client = _get_client(base_url, api_key, provider)
 
-    # 搜索1：公司基本信息
+    # 搜索1：公司基本信息 + 官网（合并为一次搜索，减少Tavily调用）
     search_context = ""
     search_sources = []
-    website_sources = []  # 专门用于提取官网的搜索结果
+    website_sources = []
     news_context = ""
     try:
         has_tavily = bool(_get_tavily_api_key(db, user_id))
         if has_tavily:
             from app.services.web_search import search_web
-            # 搜索公司基本信息
-            raw = search_web(f"{company_name} 公司简介 主营业务 行业 规模", db, search_depth="advanced", max_results=4, user_id=user_id)
+            # 合并公司信息 + 官网搜索为一次调用
+            raw = search_web(f"{company_name} 公司简介 主营业务 行业 规模 官网", db, search_depth="advanced", max_results=5, user_id=user_id)
             for r in raw:
                 if r["type"] == "result" and r.get("url"):
-                    search_sources.append({"title": r.get("title", ""), "url": r["url"]})
-            search_context = search_and_summarize(f"{company_name} 公司简介 主营业务 行业 规模", db, search_depth="advanced", user_id=user_id)
+                    url = r.get("url", "")
+                    # 判断是否是官网类型的链接
+                    title = r.get("title", "").lower()
+                    if any(kw in title for kw in ["官网", "官方网站", "首页", "home", "official"]):
+                        website_sources.append({"title": r.get("title", ""), "url": url})
+                    else:
+                        search_sources.append({"title": r.get("title", ""), "url": url})
+            search_context = search_and_summarize(f"{company_name} 公司简介 主营业务 行业 规模 官网", db, search_depth="advanced", user_id=user_id)
 
-            # 搜索2：官网（单独搜索，提高命中率）
-            raw_website = search_web(f"{company_name} 官网 首页", db, search_depth="basic", max_results=3, user_id=user_id)
-            for r in raw_website:
-                if r["type"] == "result" and r.get("url"):
-                    website_sources.append({"title": r.get("title", ""), "url": r["url"]})
-
-            # 搜索3：最新动态（半年内），使用当前年份关键词
+            # 搜索2：最新动态（半年内），使用当前年份关键词
             current_year = datetime.now().year
             last_year = current_year - 1
             news_query = f"{company_name} {current_year} {last_year} 最新新闻 动态 融资 合作 产品发布 财报"

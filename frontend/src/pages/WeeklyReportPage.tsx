@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Loader2, Calendar, ChevronDown, ChevronRight, FileText, Sparkles, X, Edit3, Save } from 'lucide-react'
 import MarkdownRenderer from '../components/MarkdownRenderer'
+import RichTextEditor from '../components/RichTextEditor'
 
 interface ReportItem {
   id: number; date: string; title: string; snippet: string; ai_summary: string; has_summary: boolean
@@ -273,10 +274,11 @@ export default function WeeklyReportPage() {
                           {expandedSummaries.has(week.week_start) && (
                             editingSummary === week.week_start ? (
                               <div className="px-4 py-3 border-t border-[#8B5CF6]/10">
-                                <textarea
+                                <RichTextEditor
                                   value={editText}
-                                  onChange={(e) => setEditText(e.target.value)}
-                                  className="w-full h-40 p-3 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#8B5CF6] resize-none font-mono leading-relaxed"
+                                  onChange={setEditText}
+                                  placeholder="编写周报总结…"
+                                  className="min-h-[200px]"
                                 />
                                 <div className="flex items-center gap-2 mt-2">
                                   <button

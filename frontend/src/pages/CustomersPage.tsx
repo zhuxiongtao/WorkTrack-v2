@@ -1,7 +1,9 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Search, Plus, X, Loader2, Trash2, Sparkles, Globe, Building2, Users, FileText, TrendingUp, Pencil, Image, RefreshCw, Filter } from 'lucide-react'
 import { useToast } from '../contexts/ToastContext'
+import { useAuth } from '../contexts/AuthContext'
+import RichTextEditor from '../components/RichTextEditor'
 
 interface Customer {
   id: number; name: string; industry: string | null; status: string; contact: string | null
@@ -48,14 +50,14 @@ function getLogoCacheKey(logoUrl: string | null): string {
   return LOGO_CACHE_PREFIX + (domain || logoUrl)
 }
 
-function readLogoCache(key: string): LogoCache | null {
+function readLogoCache(key: string): Record<string, any> | null {
   try {
     const raw = localStorage.getItem(key)
     return raw ? JSON.parse(raw) : null
   } catch { return null }
 }
 
-function writeLogoCache(key: string, value: LogoCache) {
+function writeLogoCache(key: string, value: Record<string, any>) {
   try { localStorage.setItem(key, JSON.stringify(value)) } catch {}
 }
 
@@ -69,32 +71,39 @@ function buildLogoSources(logoUrl: string | null): string[] {
   return [
     `https://${domain}/favicon.ico`,
     `https://www.${domain}/favicon.ico`,
-    `https://icons.duckduckgo.com/ip3/${domain}.ico`,
-    `https://logo.clearbit.com/${domain}`,
   ]
 }
 
 function CompanyLogo({ name, logoUrl, size = 40 }: { name: string; logoUrl: string | null; size?: number }) {
   const imgRef = useRef<HTMLImageElement>(null)
   const cacheKey = useMemo(() => getLogoCacheKey(logoUrl), [logoUrl])
-  const cached = useMemo<LogoCache | null>(() => cacheKey ? readLogoCache(cacheKey) : null, [cacheKey])
+  const cachedFallback = useMemo(() => {
+    if (!cacheKey) return false
+    const c = readLogoCache(cacheKey)
+    return c ? ('fallback' in c) : false
+  }, [cacheKey])
 
-  const [showFallback, setShowFallback] = useState(() => cached ? ('fallback' in cached) : false)
-  const cachedUrl = useMemo(() => cached && 'url' in cached ? cached.url : null, [cached])
-  const [loadAttempts, setLoadAttempts] = useState(0)
+  // 已确认失败过 → 直接回退，不发起任何网络请求
+  const [showFallback, setShowFallback] = useState(() => cachedFallback)
+  const [loadAttempts, setLoadAttempts] = useState(() => cachedFallback ? 999 : 0)
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   const cleanName = (name || '').trim()
 
   const sources = useMemo(() => buildLogoSources(logoUrl), [logoUrl])
-  const currentSrc = cachedUrl || (sources.length > loadAttempts ? sources[loadAttempts] : null)
+  const cachedUrl = useMemo(() => {
+    if (!cacheKey) return null
+    const c = readLogoCache(cacheKey)
+    return c && 'url' in c ? c.url : null
+  }, [cacheKey])
+  const currentSrc = cachedFallback ? null : cachedUrl || (sources.length > loadAttempts ? sources[loadAttempts] : null)
 
+  // 重置：仅当 logoUrl 变化且无缓存失败记录时才重置
   useEffect(() => {
-    if (!cachedUrl) {
-      setShowFallback(false)
-      setLoadAttempts(0)
-    }
-  }, [logoUrl, cachedUrl])
+    if (cachedFallback) return
+    setShowFallback(false)
+    setLoadAttempts(0)
+  }, [logoUrl, cachedFallback])
 
   useEffect(() => {
     if (!currentSrc || cachedUrl) return
@@ -172,12 +181,18 @@ const statusColors: Record<string, string> = {
 }
 
 export default function CustomersPage() {
+  const { hasPermission } = useAuth()
   const { confirm: showConfirm, toast: showToast } = useToast()
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
-  const [form, setForm] = useState({ name: '', industry: '', contact: '', status: '潜在', core_products: '', business_scope: '', scale: '', profile: '', recent_news: '', logo_url: '', website: '' })
+  
+  // 成员数据联动切换
+  const [memberList, setMemberList] = useState<any[]>([])
+  const [selectedUserId, setSelectedUserId] = useState<number | string>('')
+  
+  const [form, setForm] = useState({ name: '', industry: '', status: '潜在', core_products: '', business_scope: '', scale: '', profile: '', recent_news: '', logo_url: '', website: '' })
   const [saving, setSaving] = useState(false)
   const [search, setSearch] = useState('')
   const [selectedIndustry, setSelectedIndustry] = useState<string>('')
@@ -203,11 +218,11 @@ export default function CustomersPage() {
   const [contacts, setContacts] = useState<CustomerContact[]>([])
   const [contactForm, setContactForm] = useState({ name: '', phone: '', email: '', position: '', is_primary: false })
   const [editingContactId, setEditingContactId] = useState<number | null>(null)
+  const [showAddContact, setShowAddContact] = useState(false)
 
   const loadContacts = (customerId: number) => {
-    fetch(`/api/v1/customers/${customerId}/contacts`, {
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
-    }).then(r => r.json()).then(data => setContacts(data || [])).catch(() => setContacts([]))
+    fetch(`/api/v1/customers/${customerId}/contacts`)
+      .then(r => r.json()).then(data => setContacts(data || [])).catch(() => setContacts([]))
   }
 
   const saveContact = async (customerId: number) => {
@@ -218,12 +233,13 @@ export default function CustomersPage() {
       : `/api/v1/customers/${customerId}/contacts`
     const res = await fetch(url, {
       method,
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(contactForm),
     })
     if (res.ok) {
       setContactForm({ name: '', phone: '', email: '', position: '', is_primary: false })
       setEditingContactId(null)
+      setShowAddContact(false)
       loadContacts(customerId)
     }
   }
@@ -233,7 +249,6 @@ export default function CustomersPage() {
     if (!ok) return
     const res = await fetch(`/api/v1/customers/${customerId}/contacts/${contactId}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
     })
     if (res.ok) loadContacts(customerId)
   }
@@ -259,7 +274,7 @@ export default function CustomersPage() {
   }, [expandedCustomerId])
 
   const resetForm = () => {
-    setForm({ name: '', industry: '', contact: '', status: '潜在', core_products: '', business_scope: '', scale: '', profile: '', recent_news: '', logo_url: '', website: '' })
+    setForm({ name: '', industry: '', status: '潜在', core_products: '', business_scope: '', scale: '', profile: '', recent_news: '', logo_url: '', website: '' })
     setEditingId(null)
     setCompanyKeyword('')
     setCompanyResults([])
@@ -268,7 +283,7 @@ export default function CustomersPage() {
 
   const openEdit = (c: Customer) => {
     setForm({
-      name: c.name, industry: c.industry || '', contact: c.contact || '', status: c.status,
+      name: c.name, industry: c.industry || '', status: c.status,
       core_products: c.core_products || '', business_scope: c.business_scope || '',
       scale: c.scale || '', profile: c.profile || '', recent_news: c.recent_news || '',
       logo_url: c.logo_url || '', website: c.website || '',
@@ -280,14 +295,23 @@ export default function CustomersPage() {
     setShowForm(true)
   }
 
-  const loadCustomers = () => {
-    fetch('/api/v1/customers')
+  const loadCustomers = useCallback(() => {
+    setLoading(true)
+    const url = '/api/v1/customers' + (selectedUserId ? `?user_id=${selectedUserId}` : '')
+    fetch(url)
       .then((res) => res.json())
       .then((data) => { setCustomers(Array.isArray(data) ? data : []); setLoading(false) })
       .catch(() => setLoading(false))
-  }
+  }, [selectedUserId])
 
-  useEffect(() => { loadCustomers() }, [])
+  useEffect(() => { loadCustomers() }, [loadCustomers])
+
+  useEffect(() => {
+    fetch('/api/v1/users/simple')
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setMemberList(d) })
+      .catch(() => {})
+  }, [])
 
   const handleSave = async () => {
     if (!form.name.trim()) return
@@ -308,7 +332,30 @@ export default function CustomersPage() {
   }
 
   const handleDelete = async (id: number) => {
-    if (!await showConfirm('确定删除此客户？')) return
+    try {
+      const res = await fetch(`/api/v1/customers/${id}/delete-preview`)
+      const preview = await res.json()
+
+      const parts: string[] = []
+      if (preview.contracts?.length > 0) {
+        const names = preview.contracts.map((c: any) => c.contract_no ? `《${c.title}》(#${c.contract_no})` : `《${c.title}》`)
+        parts.push(`${preview.contracts.length} 份合同：${names.join('、')}`)
+      }
+      if (preview.contacts?.length > 0) {
+        const names = preview.contacts.map((c: any) => `${c.name}${c.position ? `（${c.position}）` : ''}`)
+        parts.push(`${preview.contacts.length} 位联系人：${names.join('、')}`)
+      }
+      if (preview.meetings_count > 0) parts.push(`${preview.meetings_count} 场会议（将解除关联）`)
+      if (preview.projects_count > 0) parts.push(`${preview.projects_count} 个项目（将解除关联）`)
+
+      const warning = parts.length > 0
+        ? `删除「${preview.customer_name}」将同时删除：\n• ${parts.join('\n• ')}\n\n确定继续？`
+        : `确定删除「${preview.customer_name}」？此操作不可撤销。`
+
+      if (!await showConfirm(warning)) return
+    } catch {
+      if (!await showConfirm('确定删除此客户？此操作不可撤销。')) return
+    }
     await fetch(`/api/v1/customers/${id}`, { method: 'DELETE' })
     loadCustomers()
     showToast('客户已删除', 'success')
@@ -423,9 +470,25 @@ export default function CustomersPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-8">
-        <div>
-          <h2 className="text-2xl font-bold text-white">客户管理</h2>
-          <p className="text-sm text-gray-500 mt-1">{customers.length} 个客户</p>
+        <div className="flex items-center gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-white">客户管理</h2>
+            <p className="text-sm text-gray-500 mt-1">{customers.length} 个客户</p>
+          </div>
+          {/* 管理者与老板专属：成员数据切换下拉框 */}
+          {(hasPermission('customer:read') && memberList.length > 0) && (
+            <select
+              value={selectedUserId}
+              onChange={e => setSelectedUserId(e.target.value)}
+              style={{ colorScheme: 'dark' }}
+              className="px-3 py-1.5 rounded-xl bg-bg-card border border-border text-xs text-gray-300 outline-none focus:border-[#3B82F6] cursor-pointer font-bold"
+            >
+              <option value="">全部下属成员</option>
+              {memberList.map(m => (
+                <option key={m.id} value={m.id}>{m.name || m.username}</option>
+              ))}
+            </select>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-hover border border-border">
@@ -434,9 +497,11 @@ export default function CustomersPage() {
               className="bg-transparent text-sm text-gray-300 outline-none w-32" />
           </div>
 
-          <button onClick={() => setShowForm(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#3B82F6] text-white text-sm hover:bg-blue-600">
-            <Plus size={16} /><span>新建客户</span>
-          </button>
+          {hasPermission('customer:create') && (
+            <button onClick={() => setShowForm(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#3B82F6] text-white text-sm hover:bg-blue-600 shrink-0">
+              <Plus size={16} /><span>新建客户</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -573,10 +638,14 @@ export default function CustomersPage() {
                     className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md bg-bg-hover text-amber-400 hover:text-amber-300 transition-colors disabled:opacity-50">
                     {refreshingNewsId === c.id ? <Loader2 size={10} className="animate-spin" /> : <TrendingUp size={10} />}动态
                   </button>
-                  <button onClick={(e) => { e.stopPropagation(); openEdit(c) }}
-                    className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md bg-bg-hover text-gray-400 hover:text-white transition-colors"><Pencil size={10} />编辑</button>
-                  <button onClick={(e) => { e.stopPropagation(); handleDelete(c.id) }}
-                    className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md bg-bg-hover text-red-400 hover:text-red-300 transition-colors"><Trash2 size={10} />删除</button>
+                   {hasPermission('customer:edit') && (
+                    <button onClick={(e) => { e.stopPropagation(); openEdit(c) }}
+                      className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md bg-bg-hover text-gray-400 hover:text-white transition-colors"><Pencil size={10} />编辑</button>
+                  )}
+                  {hasPermission('customer:delete') && (
+                    <button onClick={(e) => { e.stopPropagation(); handleDelete(c.id) }}
+                      className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md bg-bg-hover text-red-400 hover:text-red-300 transition-colors"><Trash2 size={10} />删除</button>
+                  )}
                 </div>
               </div>
             ))}
@@ -601,9 +670,11 @@ export default function CustomersPage() {
                     <p className="text-[11px] text-gray-500">{c.industry || '未设置行业'}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => { setExpandedCustomerId(null); openEdit(c) }}
-                    className="text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-gray-300 hover:text-white border border-border"><Pencil size={11} className="inline mr-1" />编辑</button>
+                 <div className="flex items-center gap-2">
+                  {hasPermission('customer:edit') && (
+                    <button onClick={() => { setExpandedCustomerId(null); openEdit(c) }}
+                      className="text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-gray-300 hover:text-white border border-border"><Pencil size={11} className="inline mr-1" />编辑</button>
+                  )}
                   <button onClick={() => setExpandedCustomerId(null)} className="p-2 rounded-lg hover:bg-bg-hover text-gray-500 hover:text-white"><X size={18} /></button>
                 </div>
               </div>
@@ -619,7 +690,7 @@ export default function CustomersPage() {
                 <div className="p-4 rounded-xl bg-bg-input/30 border border-border">
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-xs text-gray-400 flex items-center gap-1.5"><Users size={12} />联系人</p>
-                    <button onClick={() => { setContactForm({ name: '', phone: '', email: '', position: '', is_primary: false }); setEditingContactId(null) }}
+                    <button onClick={() => { setContactForm({ name: '', phone: '', email: '', position: '', is_primary: false }); setEditingContactId(null); setShowAddContact(true) }}
                       className="text-[10px] text-[#3B82F6] hover:text-blue-400 flex items-center gap-0.5"><Plus size={10} />添加</button>
                   </div>
                   {contacts.length === 0 ? (
@@ -640,7 +711,7 @@ export default function CustomersPage() {
                             </div>
                           </div>
                           <div className="flex items-center gap-1 opacity-0 group-hover/ct:opacity-100 transition-opacity">
-                            <button onClick={() => { setContactForm({ name: ct.name, phone: ct.phone, email: ct.email, position: ct.position, is_primary: ct.is_primary }); setEditingContactId(ct.id) }}
+                            <button onClick={() => { setContactForm({ name: ct.name, phone: ct.phone, email: ct.email, position: ct.position, is_primary: ct.is_primary }); setEditingContactId(ct.id); setShowAddContact(true) }}
                               className="p-1 rounded text-gray-500 hover:text-white"><Pencil size={10} /></button>
                             <button onClick={() => deleteContact(c.id, ct.id)}
                               className="p-1 rounded text-gray-500 hover:text-red-400"><Trash2 size={10} /></button>
@@ -649,39 +720,33 @@ export default function CustomersPage() {
                       ))}
                     </div>
                   )}
-                  {(contacts.length === 0 || editingContactId || (!editingContactId && contacts.length > 0)) && (
-                    <div className={`${contacts.length === 0 && !editingContactId ? 'hidden' : ''} mt-2 pt-2 border-t border-border/50`}>
-                      {(editingContactId || contacts.length > 0) && !editingContactId && (
-                        <div className="h-0 overflow-hidden">
-                          {/* placeholder to keep the ternary working */}
+                  {/* 添加/编辑联系人表单 */}
+                  {showAddContact && (
+                    <div className="mt-2 pt-2 border-t border-border/50">
+                      <div className="space-y-1.5">
+                        <input value={contactForm.name} onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })}
+                          placeholder="联系人姓名 *" className="w-full px-2 py-1.5 rounded bg-bg-card border border-border text-xs text-gray-200 outline-none focus:border-[#3B82F6]" />
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <input value={contactForm.phone} onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })}
+                            placeholder="手机" className="w-full px-2 py-1.5 rounded bg-bg-card border border-border text-xs text-gray-200 outline-none focus:border-[#3B82F6]" />
+                          <input value={contactForm.email} onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
+                            placeholder="邮箱" className="w-full px-2 py-1.5 rounded bg-bg-card border border-border text-xs text-gray-200 outline-none focus:border-[#3B82F6]" />
                         </div>
-                      )}
-                      {editingContactId || contacts.length === 0 ? (
-                        <div className="space-y-1.5">
-                          <input value={contactForm.name} onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })}
-                            placeholder="联系人姓名 *" className="w-full px-2 py-1.5 rounded bg-bg-card border border-border text-xs text-gray-200 outline-none focus:border-[#3B82F6]" />
-                          <div className="grid grid-cols-2 gap-1.5">
-                            <input value={contactForm.phone} onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })}
-                              placeholder="手机" className="w-full px-2 py-1.5 rounded bg-bg-card border border-border text-xs text-gray-200 outline-none focus:border-[#3B82F6]" />
-                            <input value={contactForm.email} onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
-                              placeholder="邮箱" className="w-full px-2 py-1.5 rounded bg-bg-card border border-border text-xs text-gray-200 outline-none focus:border-[#3B82F6]" />
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <input value={contactForm.position} onChange={(e) => setContactForm({ ...contactForm, position: e.target.value })}
-                              placeholder="职位" className="flex-1 px-2 py-1.5 rounded bg-bg-card border border-border text-xs text-gray-200 outline-none focus:border-[#3B82F6]" />
-                            <label className="flex items-center gap-1 text-[10px] text-gray-400 cursor-pointer">
-                              <input type="checkbox" checked={contactForm.is_primary} onChange={(e) => setContactForm({ ...contactForm, is_primary: e.target.checked })}
-                                className="w-3 h-3 rounded" />主要联系人
-                            </label>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button onClick={() => saveContact(c.id)}
-                              className="px-3 py-1 rounded bg-[#3B82F6] text-white text-[10px] hover:bg-blue-600">保存</button>
-                            <button onClick={() => { setEditingContactId(null); setContactForm({ name: '', phone: '', email: '', position: '', is_primary: false }) }}
-                              className="px-3 py-1 rounded bg-bg-hover text-gray-400 text-[10px] hover:text-white">取消</button>
-                          </div>
+                        <div className="flex items-center gap-3">
+                          <input value={contactForm.position} onChange={(e) => setContactForm({ ...contactForm, position: e.target.value })}
+                            placeholder="职位" className="flex-1 px-2 py-1.5 rounded bg-bg-card border border-border text-xs text-gray-200 outline-none focus:border-[#3B82F6]" />
+                          <label className="flex items-center gap-1 text-[10px] text-gray-400 cursor-pointer">
+                            <input type="checkbox" checked={contactForm.is_primary} onChange={(e) => setContactForm({ ...contactForm, is_primary: e.target.checked })}
+                              className="w-3 h-3 rounded" />主要联系人
+                          </label>
                         </div>
-                      ) : null}
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => saveContact(c.id)}
+                            className="px-3 py-1 rounded bg-[#3B82F6] text-white text-[10px] hover:bg-blue-600">保存</button>
+                          <button onClick={() => { setEditingContactId(null); setShowAddContact(false); setContactForm({ name: '', phone: '', email: '', position: '', is_primary: false }) }}
+                            className="px-3 py-1 rounded bg-bg-hover text-gray-400 text-[10px] hover:text-white">取消</button>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -914,12 +979,7 @@ export default function CustomersPage() {
                 <input value={form.industry} onChange={(e) => setForm({ ...form, industry: e.target.value })}
                   className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6]" placeholder="如 IT、金融" />
               </div>
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">联系方式</label>
-                <input value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6]" placeholder="电话或邮箱" />
-              </div>
-              <div>
+              <div className="pt-2 border-t border-border">
                 <label className="block text-xs text-gray-400 mb-1">状态</label>
                 <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}
                   className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6]">
@@ -960,8 +1020,12 @@ export default function CustomersPage() {
                   </div>
                   <div>
                     <label className="block text-[11px] text-gray-500 mb-1">公司简介</label>
-                    <textarea value={form.profile} onChange={(e) => setForm({ ...form, profile: e.target.value })} rows={3}
-                      className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6] resize-none" placeholder="简要介绍公司背景..." />
+                    <RichTextEditor
+                      value={form.profile || ''}
+                      onChange={(v) => setForm({ ...form, profile: v })}
+                      placeholder="简要介绍公司背景..."
+                      className="min-h-[120px]"
+                    />
                   </div>
                   <div>
                     <label className="block text-[11px] text-gray-500 mb-1">近期动向</label>

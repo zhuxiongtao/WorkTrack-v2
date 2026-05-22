@@ -9,7 +9,7 @@ from app.database import get_session
 from app.models.daily_report import DailyReport
 from app.models.weekly_summary import WeeklySummary
 from app.models.user import User
-from app.auth import get_current_user
+from app.auth import get_current_user, require_permission
 from app.schemas import DailyReportCreate, DailyReportUpdate, DailyReportOut
 from app.services.vector_store import index_document, delete_document
 from app.services.ai_service import summarize_daily_report, _get_prompt, _fill_template, _get_active_provider, _get_client, _extract_message_text
@@ -39,7 +39,7 @@ def _background_ai_summarize(report_id: int, content: str):
 
 @router.get("/weekly")
 def list_weekly_reports(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("report:read")),
     db: Session = Depends(get_session),
 ):
     """按周聚合日报，返回每周汇总及日报列表（含已保存的 AI 周报总结）"""
@@ -93,15 +93,25 @@ def list_weekly_reports(
 
 @router.get("/grouped")
 def list_reports_grouped(
-    current_user: User = Depends(get_current_user),
+    user_id: Optional[int] = Query(None),
+    current_user: User = Depends(require_permission("report:read")),
     db: Session = Depends(get_session),
 ):
-    """按年份→月份→工作周归类的日报列表，仅返回摘要"""
-    reports = db.exec(
-        select(DailyReport)
-        .where(DailyReport.user_id == current_user.id)
-        .order_by(DailyReport.report_date.desc())
-    ).all()
+    """按年份→月份→工作周归类的日报列表，仅返回摘要（支持分级负责人权限与草稿隐藏过滤）"""
+    target_uid = user_id if user_id is not None else current_user.id
+    
+    # 统一数据行级权限校验（下属、老板、自己）
+    from app.auth import check_data_access
+    if not check_data_access(target_uid, current_user, db):
+        raise HTTPException(status_code=403, detail="无权查看该用户的日报列表")
+
+    query = select(DailyReport).where(DailyReport.user_id == target_uid)
+    
+    # 提交机制过滤：如果是查看他人的日报，过滤掉未提交的草稿
+    if target_uid != current_user.id:
+        query = query.where(DailyReport.status == "submitted")
+
+    reports = db.exec(query.order_by(DailyReport.report_date.desc())).all()
     
     def week_range(d: date):
         """返回该日期所在周的周一日期"""
@@ -118,6 +128,7 @@ def list_reports_grouped(
             "snippet": (r.ai_summary or r.content_md)[:120].replace("\n", " "),
             "ai_summary": r.ai_summary or "",
             "has_summary": bool(r.ai_summary),
+            "status": r.status,
         })
     
     # 转为有序列表
@@ -136,12 +147,25 @@ def list_reports_grouped(
 
 @router.get("", response_model=list[DailyReportOut])
 def list_reports(
+    user_id: Optional[int] = Query(None),
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("report:read")),
     db: Session = Depends(get_session),
 ):
-    query = select(DailyReport).where(DailyReport.user_id == current_user.id)
+    target_uid = user_id if user_id is not None else current_user.id
+    
+    # 统一级数据行级访问权限核验（员工、主管、老板）
+    from app.auth import check_data_access
+    if not check_data_access(target_uid, current_user, db):
+        raise HTTPException(status_code=403, detail="无权查看该用户的日报列表")
+
+    query = select(DailyReport).where(DailyReport.user_id == target_uid)
+    
+    # 提交机制过滤：如果是查看他人的日报，过滤掉未提交的“草稿（draft）”
+    if target_uid != current_user.id:
+        query = query.where(DailyReport.status == "submitted")
+
     if start_date:
         query = query.where(DailyReport.report_date >= start_date)
     if end_date:
@@ -151,15 +175,25 @@ def list_reports(
 
 
 @router.get("/{report_id}", response_model=DailyReportOut)
-def get_report(report_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def get_report(report_id: int, current_user: User = Depends(require_permission("report:read")), db: Session = Depends(get_session)):
     report = db.get(DailyReport, report_id)
-    if not report or report.user_id != current_user.id:
+    if not report:
         raise HTTPException(status_code=404, detail="日报不存在")
+        
+    # 1. 提交机制：草稿对非作者绝对不可见
+    if report.status == "draft" and report.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="该日报尚未提交，无权查看")
+
+    # 2. 统一角色权限核验（部门负责人、老板、创作者）
+    from app.auth import check_data_access
+    if not check_data_access(report.user_id, current_user, db):
+        raise HTTPException(status_code=403, detail="无权查看该日报")
+
     return report
 
 
 @router.post("", response_model=DailyReportOut, status_code=201)
-def create_report(data: DailyReportCreate, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def create_report(data: DailyReportCreate, background_tasks: BackgroundTasks, current_user: User = Depends(require_permission("report:create")), db: Session = Depends(get_session)):
     create_data = data.model_dump()
     create_data["user_id"] = current_user.id
     report = DailyReport(**create_data)
@@ -180,7 +214,7 @@ def create_report(data: DailyReportCreate, background_tasks: BackgroundTasks, cu
 
 
 @router.put("/{report_id}", response_model=DailyReportOut)
-def update_report(report_id: int, data: DailyReportUpdate, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def update_report(report_id: int, data: DailyReportUpdate, background_tasks: BackgroundTasks, current_user: User = Depends(require_permission("report:edit")), db: Session = Depends(get_session)):
     report = db.get(DailyReport, report_id)
     if not report or report.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="日报不存在")
@@ -205,7 +239,7 @@ def update_report(report_id: int, data: DailyReportUpdate, background_tasks: Bac
 
 
 @router.delete("/{report_id}", status_code=204)
-def delete_report(report_id: int, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def delete_report(report_id: int, background_tasks: BackgroundTasks, current_user: User = Depends(require_permission("report:delete")), db: Session = Depends(get_session)):
     report = db.get(DailyReport, report_id)
     if not report or report.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="日报不存在")
@@ -216,7 +250,7 @@ def delete_report(report_id: int, background_tasks: BackgroundTasks, current_use
 
 
 @router.post("/{report_id}/ai-summarize", response_model=DailyReportOut)
-def ai_summarize_report(report_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def ai_summarize_report(report_id: int, current_user: User = Depends(require_permission("report:edit")), db: Session = Depends(get_session)):
     """手动触发 AI 总结日报"""
     report = db.get(DailyReport, report_id)
     if not report or report.user_id != current_user.id:
@@ -237,18 +271,28 @@ class WeeklySummaryRequest(BaseModel):
 
 
 @router.get("/weekly-summaries")
-def get_weekly_summaries(current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def get_weekly_summaries(user_id: Optional[int] = Query(None), current_user: User = Depends(require_permission("report:read")), db: Session = Depends(get_session)):
     """获取当前用户已保存的周报 AI 总结"""
-    summaries = db.exec(
-        select(WeeklySummary)
-        .where(WeeklySummary.user_id == current_user.id)
-        .order_by(WeeklySummary.week_start.desc())
-    ).all()
+    target_uid = user_id if user_id is not None else current_user.id
+    
+    # 统一数据权限核验（部门负责人、老板、自己）
+    from app.auth import check_data_access
+    if not check_data_access(target_uid, current_user, db):
+        raise HTTPException(status_code=403, detail="无权查看该用户的周报列表")
+
+    query = select(WeeklySummary).where(WeeklySummary.user_id == target_uid).order_by(WeeklySummary.week_start.desc())
+    summaries = db.exec(query).all()
+    
+    # 提交机制过滤：如果是查看他人的周报，过滤掉未提交的草稿（status == "draft"）
+    if target_uid != current_user.id:
+        summaries = [s for s in summaries if s.status == "submitted"]
+
     return {
         str(s.week_start): {
             "week_start": str(s.week_start),
             "week_end": str(s.week_end),
             "summary_text": s.summary_text,
+            "status": s.status,
             "created_at": s.created_at,
         }
         for s in summaries
@@ -256,7 +300,7 @@ def get_weekly_summaries(current_user: User = Depends(get_current_user), db: Ses
 
 
 @router.post("/weekly-summary")
-def generate_weekly_summary(data: WeeklySummaryRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def generate_weekly_summary(data: WeeklySummaryRequest, current_user: User = Depends(require_permission("report:create")), db: Session = Depends(get_session)):
     """生成并保存某周的 AI 总结"""
     week_start = date.fromisoformat(data.week_start)
     week_end = date.fromisoformat(data.week_end)
@@ -325,7 +369,7 @@ def generate_weekly_summary(data: WeeklySummaryRequest, current_user: User = Dep
 # ===== 文件上传提取文本 =====
 
 @router.post("/upload-file")
-async def upload_report_file(file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
+async def upload_report_file(file: UploadFile = File(...), current_user: User = Depends(require_permission("report:create"))):
     """上传文件并提取文本内容（用于日报编写）"""
     # 读取文件内容
     content = await file.read()
@@ -368,8 +412,8 @@ async def upload_report_file(file: UploadFile = File(...), current_user: User = 
 # ===== 语音转写 =====
 
 @router.post("/transcribe-audio")
-async def transcribe_report_audio(file: UploadFile = File(...), current_user: User = Depends(get_current_user),
-                                  db: Session = Depends(get_session)):
+async def transcribe_report_audio(file: UploadFile = File(...), current_user: User = Depends(require_permission("report:create")),
+                                   db: Session = Depends(get_session)):
     """上传音频并转写为文字（用于日报语音录入）"""
     import uuid as _uuid
     audio_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "audio")
@@ -398,14 +442,15 @@ async def transcribe_report_audio(file: UploadFile = File(...), current_user: Us
 # ===== 编辑周报总结 =====
 
 class WeeklySummaryUpdate(BaseModel):
-    summary_text: str
+    summary_text: Optional[str] = None
+    status: Optional[str] = None
 
 
 @router.put("/weekly-summary/{week_start}")
 def update_weekly_summary(week_start: str, data: WeeklySummaryUpdate,
-                          current_user: User = Depends(get_current_user),
-                          db: Session = Depends(get_session)):
-    """编辑/更新某周的 AI 总结"""
+                           current_user: User = Depends(require_permission("report:edit")),
+                           db: Session = Depends(get_session)):
+    """编辑/更新或提交某周的 AI 总结"""
     week_start_date = date.fromisoformat(week_start)
     existing = db.exec(
         select(WeeklySummary).where(
@@ -414,16 +459,21 @@ def update_weekly_summary(week_start: str, data: WeeklySummaryUpdate,
         )
     ).first()
     if existing:
-        existing.summary_text = data.summary_text
+        if data.summary_text is not None:
+            existing.summary_text = data.summary_text
+        if data.status is not None:
+            existing.status = data.status
         db.add(existing)
+        db.commit()
     else:
         # 没有则创建
         db.add(WeeklySummary(
             user_id=current_user.id,
             week_start=week_start_date,
             week_end=week_start_date + timedelta(days=6),
-            summary_text=data.summary_text,
+            summary_text=data.summary_text or "",
+            status=data.status or "draft",
             created_at=datetime.now().isoformat(),
         ))
-    db.commit()
-    return {"week_start": week_start, "saved": True}
+        db.commit()
+    return {"success": True}

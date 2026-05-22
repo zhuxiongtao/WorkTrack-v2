@@ -65,17 +65,18 @@ const TYPE_LABEL: Record<string, string> = { chat: '对话', embedding: '嵌入'
 
 export default function SettingsPage() {
   // ===== 标签页状态 =====
-  const { user, fetchWithAuth } = useAuth()
+  const { user, fetchWithAuth, hasPermission } = useAuth()
   const { toast: showToast, confirm: showConfirm } = useToast()
-  const isAdmin = user?.is_admin ?? false
-  const canAccessModels = isAdmin || (user?.can_manage_models)
-  const canManageModels = isAdmin || (user?.can_manage_models)
-  const [activeTab, setActiveTab] = useState(canAccessModels ? 'models' : 'prompts')
+  const canAccessModels = hasPermission('ai:manage_own') || hasPermission('ai:manage_shared')
+  const canManageModels = hasPermission('ai:manage_own') || hasPermission('ai:manage_shared')
+  const canEditSettings = hasPermission('settings:edit')
+  const canUseAI = hasPermission('ai:use')
+  const [activeTab, setActiveTab] = useState(canAccessModels ? 'models' : canUseAI ? 'prompts' : canEditSettings ? 'system' : 'account')
 
   const TABS = [
     ...(canAccessModels ? [{ key: 'models', label: '模型管理', icon: Cpu, desc: '供应商与任务模型配置' }] : []),
-    { key: 'prompts', label: 'AI 提示词', icon: Edit3, desc: '自定义 AI 输出风格' },
-    ...(isAdmin ? [{ key: 'system', label: '系统配置', icon: Settings2, desc: '字段选项与行业分类' }] : []),
+    ...(canUseAI ? [{ key: 'prompts', label: 'AI 提示词', icon: Edit3, desc: '自定义 AI 输出风格' }] : []),
+    ...(canEditSettings ? [{ key: 'system', label: '系统配置', icon: Settings2, desc: '字段选项与行业分类' }] : []),
     { key: 'account', label: '个人账户', icon: User, desc: '个人信息、首页与密码' },
     { key: 'about', label: '关于', icon: Server, desc: '系统运行状态' },
   ]
@@ -113,9 +114,7 @@ export default function SettingsPage() {
   const [brandMsg, setBrandMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const loadBranding = useCallback(() => {
-    fetch('/api/v1/settings/branding', {
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
-    })
+    fetch('/api/v1/settings/branding')
       .then(res => res.json())
       .then(data => setBranding({ logo_url: data.logo_url || '', site_title: data.site_title || 'WorkTrack' }))
       .catch(() => {})
@@ -309,7 +308,7 @@ export default function SettingsPage() {
     } finally { setTaskSaving(null) }
   }
   const getActiveProviders = () => {
-    if (isAdmin) return providers.filter((p) => p.is_active && p.api_key)
+    if (canEditSettings) return providers.filter((p) => p.is_active && p.api_key)
     return providers.filter((p) => p.is_active && p.api_key && (p.user_id === user?.id || (p.user_id == null && (user?.use_shared_models))))
   }
 
@@ -523,9 +522,9 @@ export default function SettingsPage() {
                       : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 md:hover:bg-bg-card border border-transparent md:hover:border-border max-md:bg-bg-card max-md:border-border'
                     }`}
                 >
-                  <tab.icon size={17} className={`${isActive ? '' : 'text-gray-500 group-hover:text-gray-700 dark:text-gray-300'} max-md:size-[14px]`} />
-                  <span className="text-sm md:text-sm font-medium max-md:text-xs">{tab.label}</span>
-                  <span className={`hidden md:block text-[10px] leading-tight mt-0.5 ${isActive ? 'text-blue-600 dark:text-blue-200' : 'text-gray-600 group-hover:text-gray-500'}`}>{tab.desc}</span>
+                  <tab.icon size={17} className={`${isActive ? 'text-white' : 'text-gray-500 group-hover:text-gray-700 dark:text-gray-300'} max-md:size-[14px]`} />
+                  <span className="text-sm md:text-sm font-semibold max-md:text-xs">{tab.label}</span>
+                  <span className={`hidden md:block text-[10px] leading-tight mt-0.5 ${isActive ? 'text-blue-100/90 dark:text-blue-200' : 'text-gray-500 group-hover:text-gray-500 dark:group-hover:text-gray-300'}`}>{tab.desc}</span>
                 </button>
               )
             })}
@@ -578,17 +577,17 @@ export default function SettingsPage() {
                         <div className="flex items-center gap-3 mb-1.5 flex-wrap">
                           <span className="text-sm font-semibold text-gray-900 dark:text-white truncate max-w-[300px]">{p.name}</span>
                           <button
-                            onClick={() => canManageModels && (isAdmin || p.user_id === user?.id) && handleToggleActive(p)}
+                            onClick={() => canManageModels && (canEditSettings || p.user_id === user?.id) && handleToggleActive(p)}
                             className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${
                               p.is_active ? 'bg-green-500/10 text-green-400' : 'bg-gray-500/10 text-gray-500'
-                            } ${canManageModels && (isAdmin || p.user_id === user?.id) ? 'cursor-pointer' : 'cursor-default'}`}
+                            } ${canManageModels && (canEditSettings || p.user_id === user?.id) ? 'cursor-pointer' : 'cursor-default'}`}
                           >
                             {p.is_active ? '已启用' : '已停用'}
                           </button>
-                          {p.user_id == null && !isAdmin && (
+                          {p.user_id == null && !canEditSettings && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-500/10 text-gray-500 shrink-0">共享</span>
                           )}
-                          {p.user_id != null && !isAdmin && (
+                          {p.user_id != null && !canEditSettings && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 shrink-0">我的</span>
                           )}
                         </div>
@@ -602,10 +601,10 @@ export default function SettingsPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        {canManageModels && (isAdmin || p.user_id === user?.id) && (
+                        {canManageModels && (canEditSettings || p.user_id === user?.id) && (
                           <button onClick={() => openEdit(p)} className="px-2.5 py-1.5 rounded-lg bg-bg-hover text-xs text-gray-400 hover:text-white border border-border">编辑</button>
                         )}
-                        {canManageModels && (isAdmin || p.user_id === user?.id) && (
+                        {canManageModels && (canEditSettings || p.user_id === user?.id) && (
                           <button onClick={() => handleDelete(p.id)} className="px-2 py-1.5 rounded-lg bg-bg-hover text-xs text-red-400 hover:text-red-300 border border-border"><Trash2 size={12} /></button>
                         )}
                       </div>
@@ -933,7 +932,7 @@ export default function SettingsPage() {
         <>
 
       {/* 品牌自定义 */}
-      {isAdmin && (
+      {canEditSettings && (
         <div className="mb-10 p-5 rounded-xl bg-bg-card border border-border">
           <h3 className="text-base font-medium text-gray-900 dark:text-white mb-1 flex items-center gap-2">
             <Palette size={18} className="text-[#F59E0B]" /> 品牌自定义
@@ -1020,7 +1019,6 @@ export default function SettingsPage() {
                     fd.append('file', brandLogoFile)
                     const logoRes = await fetch('/api/v1/settings/branding/upload-logo', {
                       method: 'POST',
-                      headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` },
                       body: fd,
                     })
                     if (logoRes.ok) {
@@ -1034,7 +1032,7 @@ export default function SettingsPage() {
                   // 保存品牌配置
                   const saveRes = await fetch('/api/v1/settings/branding', {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ site_title: branding.site_title, logo_url: logoUrl }),
                   })
                   if (!saveRes.ok) {
@@ -1069,7 +1067,7 @@ export default function SettingsPage() {
       )}
 
       {/* MCP 对外服务 */}
-      {isAdmin && (
+      {canEditSettings && (
         <div className="mb-10 p-5 rounded-xl bg-bg-card border border-border">
           <h3 className="text-base font-medium text-gray-900 dark:text-white mb-1 flex items-center gap-2">
             <Terminal size={18} className="text-[#8B5CF6]" /> MCP 对外服务
@@ -1094,7 +1092,7 @@ export default function SettingsPage() {
                 try {
                   const res = await fetch('/api/v1/settings/mcp-config', {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ enabled: !mcpConfig.enabled, public_url: mcpConfig.public_url }),
                   })
                   if (res.ok) {
@@ -1158,7 +1156,7 @@ export default function SettingsPage() {
                   try {
                     const res = await fetch('/api/v1/settings/mcp-config', {
                       method: 'PUT',
-                      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` },
+                    headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ enabled: mcpConfig.enabled, public_url: mcpConfig.public_url }),
                     })
                     if (res.ok) {
@@ -1222,7 +1220,6 @@ export default function SettingsPage() {
                 try {
                   const res = await fetch('/api/v1/settings/mcp-config/generate-key', {
                     method: 'POST',
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` },
                   })
                   if (res.ok) {
                     const data = await res.json()
@@ -1550,6 +1547,7 @@ export default function SettingsPage() {
           </div>
 
           {/* 首页设置 */}
+          {canUseAI && (
           <div className="mb-10">
             <h3 className="text-base font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
               <Home size={18} className="text-[#F59E0B]" /> 首页设置
@@ -1563,12 +1561,14 @@ export default function SettingsPage() {
                   onChange={(e) => setHomePage(e.target.value)}
                   className="px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6]"
                 >
-                  <option value="/reports">日报周报</option>
-                  <option value="/projects">项目管理</option>
-                  <option value="/meetings">会议纪要</option>
-                  <option value="/dashboard">数据看板</option>
-                  <option value="/ai">AI 中心</option>
-                  <option value="/customers">客户管理</option>
+                  {hasPermission('report:read') && <option value="/reports">日报周报</option>}
+                  {hasPermission('project:read') && <option value="/projects">项目管理</option>}
+                  {hasPermission('meeting:read') && <option value="/meetings">会议纪要</option>}
+                  {hasPermission('dashboard:read') && <option value="/dashboard">数据看板</option>}
+                  {hasPermission('ai:use') && <option value="/ai">AI 中心</option>}
+                  {hasPermission('wiki:read') && <option value="/wiki">AI 笔记</option>}
+                  {hasPermission('customer:read') && <option value="/customers">客户管理</option>}
+                  {hasPermission('monitor:read') && <option value="/monitor">运维监控</option>}
                 </select>
                 <button
                   onClick={handleSaveHomePage}
@@ -1581,6 +1581,7 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
+          )}
 
           {/* 修改密码 */}
           <div>

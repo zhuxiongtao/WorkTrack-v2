@@ -4,7 +4,9 @@ import { Plus, X, Trash2, Loader2, Briefcase, Edit3, Save, Calendar, User, Build
 import SearchableSelect from '../components/SearchableSelect'
 import FileUpload from '../components/FileUpload'
 import MarkdownRenderer from '../components/MarkdownRenderer'
+import RichTextEditor from '../components/RichTextEditor'
 import { useToast } from '../contexts/ToastContext'
+import { useAuth } from '../contexts/AuthContext'
 
 interface Project {
   id: number; name: string; opportunity_amount: number | null; deal_amount: number | null; currency: string; customer_name: string; customer_id: number | null
@@ -25,6 +27,7 @@ interface FieldOption {
 }
 
 export default function ProjectsPage() {
+  const { hasPermission } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const { confirm: showConfirm, toast: showToast } = useToast()
   const [projects, setProjects] = useState<Project[]>([])
@@ -32,6 +35,10 @@ export default function ProjectsPage() {
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
+  
+  // 成员筛选（供主管、老板一键跨用户审查，支持零延迟切换数据）
+  const [memberList, setMemberList] = useState<any[]>([])
+  const [selectedUserId, setSelectedUserId] = useState<number | string>('')
   const [options, setOptions] = useState<Record<string, string[]>>({})
   const [searchText, setSearchText] = useState('')
   const [selectedProduct, setSelectedProduct] = useState<string>('')
@@ -49,7 +56,6 @@ export default function ProjectsPage() {
   const [quickDate, setQuickDate] = useState(new Date().toISOString().slice(0, 10))
   const [quickSaving, setQuickSaving] = useState(false)
   const [analyzingId, setAnalyzingId] = useState<number | null>(null)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const [selectedClouds, setSelectedClouds] = useState<string[]>([])
   const [selectedProducts, setSelectedProducts] = useState<string[]>([])
@@ -62,11 +68,13 @@ export default function ProjectsPage() {
   // 客户列表（用于关联选择）
   const [customers, setCustomers] = useState<{ id: number; name: string }[]>([])
 
-  const loadProjects = () => {
-    fetch('/api/v1/projects')
+  const loadProjects = useCallback(() => {
+    setLoading(true)
+    const url = '/api/v1/projects' + (selectedUserId ? `?user_id=${selectedUserId}` : '')
+    fetch(url)
       .then((res) => res.json()).then((data) => { setProjects(Array.isArray(data) ? data : []); setLoading(false) })
       .catch(() => setLoading(false))
-  }
+  }, [selectedUserId])
 
   const loadOptions = () => {
     fetch('/api/v1/settings/field-options')
@@ -80,33 +88,50 @@ export default function ProjectsPage() {
       })
   }
 
-  const loadMeetings = async () => {
+  const loadMeetings = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/meetings')
+      const url = '/api/v1/meetings' + (selectedUserId ? `?user_id=${selectedUserId}` : '')
+      const res = await fetch(url)
       const data = await res.json()
       setAllMeetings((data || []).map((m: { id: number; title: string; meeting_date: string }) => ({
         id: m.id, title: m.title, meeting_date: m.meeting_date
       })))
     } catch { /* ignore */ }
-  }
+  }, [selectedUserId])
 
-  const loadCustomers = () => {
-    fetch('/api/v1/customers')
+  const loadCustomers = useCallback(() => {
+    const url = '/api/v1/customers' + (selectedUserId ? `?user_id=${selectedUserId}` : '')
+    fetch(url)
       .then((res) => res.json())
       .then((data) => setCustomers(Array.isArray(data) ? data.map((c: any) => ({ id: c.id, name: c.name })) : []))
       .catch(() => {})
-  }
+  }, [selectedUserId])
 
-  const loadLinkedMeetings = async (projectId: number) => {
+  const loadLinkedMeetings = async (pid: number) => {
     try {
-      const res = await fetch(`/api/v1/projects/${projectId}/meetings`)
+      const res = await fetch(`/api/v1/projects/${pid}/meetings`)
       const data = await res.json()
-      setLinkedMeetings(Array.isArray(data) ? data : [])
-      setSelectedMeetingIds(new Set((Array.isArray(data) ? data : []).map((m: MeetingLink) => m.id)))
-    } catch { /* ignore */ }
+      setLinkedMeetings(data || [])
+    } catch {
+      setLinkedMeetings([])
+    }
   }
 
-  useEffect(() => { loadProjects(); loadOptions(); loadMeetings(); loadCustomers() }, [])
+  // 1. 首次加载下拉选择员工集合（供主管和 Boss一键切换审查）
+  useEffect(() => {
+    fetch('/api/v1/users/simple')
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setMemberList(d) })
+      .catch(() => {})
+  }, [])
+
+  // 2. 挂载触发监听
+  useEffect(() => {
+    loadProjects()
+    loadOptions()
+    loadMeetings()
+    loadCustomers()
+  }, [loadProjects, loadMeetings, loadCustomers])
 
   // 从 URL 参数自动打开项目详情
   useEffect(() => {
@@ -195,47 +220,17 @@ export default function ProjectsPage() {
     finally { setAnalyzingId(null) }
   }
 
-  /** 截图粘贴到进展：上传 → 插入 ![](url) Markdown 语法 */
-  const handleInlinePaste = useCallback(async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    const items = e.clipboardData?.items
-    if (!items) return
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i]
-      if (item.type.startsWith('image/')) {
-        e.preventDefault()
-        const blob = item.getAsFile()
-        if (!blob) continue
-        const ext = item.type.split('/')[1] || 'png'
-        const file = new File([blob], `paste_${Date.now()}.${ext}`, { type: item.type })
-        try {
-          const formData = new FormData()
-          formData.append('file', file)
-          const token = localStorage.getItem('auth_token')
-          const res = await fetch('/api/v1/files/upload', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}` },
-            body: formData,
-          })
-          if (!res.ok) continue
-          const uploaded = await res.json() as { url: string }
-          const mdImg = `![${file.name}](${uploaded.url})\n`
-          setForm(prev => {
-            const ta = textareaRef.current
-            if (!ta) return { ...prev, progress: (prev.progress || '') + mdImg }
-            const start = ta.selectionStart
-            const end = ta.selectionEnd
-            const cur = prev.progress || ''
-            const newContent = cur.slice(0, start) + mdImg + cur.slice(end)
-            requestAnimationFrame(() => {
-              ta.selectionStart = ta.selectionEnd = start + mdImg.length
-              ta.focus()
-            })
-            return { ...prev, progress: newContent }
-          })
-        } catch { /* skip */ }
-        break
-      }
-    }
+  /** 图片上传到服务器，供 RichTextEditor 使用 */
+  const progressImageUpload = useCallback(async (file: File): Promise<string> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await fetch('/api/v1/files/upload', {
+      method: 'POST',
+      body: formData,
+    })
+    if (!res.ok) throw new Error('Upload failed')
+    const uploaded = await res.json() as { url: string }
+    return uploaded.url
   }, [])
 
   const handleSave = async () => {
@@ -350,13 +345,30 @@ export default function ProjectsPage() {
     <div>
       {/* 顶部标题行 */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div className="flex items-center gap-2">
-          <h2 className="text-xl font-bold text-white">项目管理</h2>
-          <span className="text-xs text-gray-500 bg-bg-hover px-2 py-0.5 rounded-full">{projects.length}</span>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-bold text-white">项目管理</h2>
+            <span className="text-xs text-gray-500 bg-bg-hover px-2 py-0.5 rounded-full">{projects.length}</span>
+          </div>
+          {/* 管理者与老板专属：成员数据切换下拉框 */}
+          {(hasPermission('project:view_all') && memberList.length > 0) && (
+            <select
+              value={selectedUserId}
+              onChange={e => setSelectedUserId(e.target.value)}
+              className="px-3 py-1.5 rounded-xl bg-bg-card border border-border text-xs text-gray-300 outline-none focus:border-[#3B82F6] cursor-pointer font-bold"
+            >
+              <option value="">全部下属成员</option>
+              {memberList.map(m => (
+                <option key={m.id} value={m.id}>{m.name || m.username}</option>
+              ))}
+            </select>
+          )}
         </div>
-        <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#3B82F6] text-white text-sm font-medium hover:bg-blue-600 transition-all shadow-lg shadow-blue-500/20">
-          <Plus size={16} /><span>新建项目</span>
-        </button>
+        {hasPermission('project:create') && (
+          <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#3B82F6] text-white text-sm font-medium hover:bg-blue-600 transition-all shadow-lg shadow-blue-500/20">
+            <Plus size={16} /><span>新建项目</span>
+          </button>
+        )}
       </div>
 
       {/* 一体化搜索+筛选栏 */}
@@ -695,10 +707,14 @@ export default function ProjectsPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2 ml-3 flex-shrink-0">
-                <button onClick={() => { closeDetail(); openEdit(modalProject) }}
-                  className="text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-gray-300 hover:text-white transition-colors border border-border"><Edit3 size={12} className="inline mr-1" />编辑</button>
-                <button onClick={() => handleDelete(modalProject.id)}
-                  className="text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors border border-border"><Trash2 size={13} /></button>
+                {hasPermission('project:edit') && (
+                  <button onClick={() => { closeDetail(); openEdit(modalProject) }}
+                    className="text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-gray-300 hover:text-white transition-colors border border-border"><Edit3 size={12} className="inline mr-1" />编辑</button>
+                )}
+                {hasPermission('project:delete') && (
+                  <button onClick={() => handleDelete(modalProject.id)}
+                    className="text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors border border-border"><Trash2 size={13} /></button>
+                )}
                 <button onClick={closeDetail} className="p-2 rounded-lg hover:bg-bg-hover text-gray-500 hover:text-white transition-colors"><X size={18} /></button>
               </div>
             </div>
@@ -1109,9 +1125,13 @@ export default function ProjectsPage() {
               {editingId && (
                 <div>
                   <label className={labelClass}>进展记录</label>
-                  <textarea ref={textareaRef} value={form.progress} onChange={(e) => setForm({ ...form, progress: e.target.value })}
-                    onPaste={handleInlinePaste}
-                    className={`${inputClass} h-24 resize-none`} placeholder="记录项目进展、备注等信息..." />
+                  <RichTextEditor
+                    value={form.progress || ''}
+                    onChange={(v) => setForm({ ...form, progress: v })}
+                    placeholder="记录项目进展、备注等信息..."
+                    uploadFn={progressImageUpload}
+                    className="min-h-[150px]"
+                  />
                 </div>
               )}
 

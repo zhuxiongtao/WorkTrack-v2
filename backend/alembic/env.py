@@ -26,6 +26,10 @@ from app.models import (  # noqa: F401
     ModelProvider, TaskModelConfig, ProviderModel, FieldOption,
     ChatConversation, ChatMessage, SystemPreference, LogEntry,
     AIPrompt, WeeklySummary,
+    # Wiki 模型
+    UserGroup, UserGroupMember, WikiSpace, WikiPage, WikiPermission, WikiPageVersion,
+    # RBAC 模型
+    Permission, Role, RolePermission, UserRole, GroupRole,
 )
 
 target_metadata = SQLModel.metadata

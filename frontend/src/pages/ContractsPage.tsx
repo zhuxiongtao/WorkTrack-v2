@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
-import { Search, Plus, X, Loader2, Trash2, FileText, Download, Sparkles, DollarSign, ChevronDown, ChevronRight, Pencil } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Search, Plus, X, Loader2, Trash2, FileText, Download, Sparkles, DollarSign, ChevronDown, ChevronRight, Pencil, Eye } from 'lucide-react'
 import { useToast } from '../contexts/ToastContext'
+import { useAuth } from '../contexts/AuthContext'
 
 interface ContractRecord {
   id: number
@@ -55,11 +56,16 @@ function formatAmount(amount: number | null, currency: string) {
 }
 
 export default function ContractsPage() {
+  const { hasPermission } = useAuth()
   const { confirm: showConfirm, toast: showToast } = useToast()
   const [contracts, setContracts] = useState<ContractRecord[]>([])
   const [customers, setCustomers] = useState<CustomerSimple[]>([])
   const [projects, setProjects] = useState<ProjectSimple[]>([])
   const [loading, setLoading] = useState(true)
+  
+  // 成员数据联动选择
+  const [memberList, setMemberList] = useState<any[]>([])
+  const [selectedUserId, setSelectedUserId] = useState<number | string>('')
   const [keyword, setKeyword] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -75,23 +81,41 @@ export default function ContractsPage() {
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [parsingId, setParsingId] = useState<number | null>(null)
   const [showDetail, setShowDetail] = useState<ContractRecord | null>(null)
+  const [previewId, setPreviewId] = useState<number | null>(null)
+  const [previewUrl, setPreviewUrl] = useState('')
+  const [previewText, setPreviewText] = useState('')
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewName, setPreviewName] = useState('')
+  const [previewType, setPreviewType] = useState('')
 
-  const loadContracts = () => {
+  const loadContracts = useCallback(() => {
+    setLoading(true)
     const params = new URLSearchParams()
     if (statusFilter) params.set('status', statusFilter)
     if (keyword) params.set('keyword', keyword)
-    fetch(`/api/v1/contracts?${params.toString()}`, {
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
-    }).then(r => r.json()).then(data => { setContracts(data || []); setLoading(false) }).catch(() => setLoading(false))
-  }
+    if (selectedUserId) params.set('user_id', String(selectedUserId))
+    fetch(`/api/v1/contracts?${params.toString()}`)
+      .then(r => r.json()).then(data => { setContracts(data || []); setLoading(false) }).catch(() => setLoading(false))
+  }, [statusFilter, keyword, selectedUserId])
 
-  useEffect(() => { loadContracts() }, [statusFilter, keyword])
+  useEffect(() => { loadContracts() }, [loadContracts])
+
   useEffect(() => {
-    fetch('/api/v1/customers', { headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` } })
-      .then(r => r.json()).then(data => setCustomers(data || [])).catch(() => {})
-    fetch('/api/v1/projects', { headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` } })
-      .then(r => r.json()).then(data => setProjects(data || [])).catch(() => {})
+    fetch('/api/v1/users/simple')
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setMemberList(d) })
+      .catch(() => {})
   }, [])
+
+  useEffect(() => {
+    const urlCust = '/api/v1/customers' + (selectedUserId ? `?user_id=${selectedUserId}` : '')
+    fetch(urlCust)
+      .then(r => r.json()).then(data => setCustomers(data || [])).catch(() => {})
+
+    const urlProj = '/api/v1/projects' + (selectedUserId ? `?user_id=${selectedUserId}` : '')
+    fetch(urlProj)
+      .then(r => r.json()).then(data => setProjects(data || [])).catch(() => {})
+  }, [selectedUserId])
 
   const resetForm = () => {
     setForm({ title: '', contract_no: '', customer_id: 0, project_id: 0, sign_date: '', start_date: '', end_date: '', party_a: '', party_b: '', contract_amount: '', currency: 'CNY', payment_terms: '', remarks: '' })
@@ -116,7 +140,7 @@ export default function ContractsPage() {
         currency: form.currency, payment_terms: form.payment_terms || null, remarks: form.remarks || null,
       }
       const res = await fetch(url, {
-        method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` },
+        method, headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
       if (res.ok) {
@@ -145,7 +169,7 @@ export default function ContractsPage() {
       if (file) fd.append('file', file)
 
       const res = await fetch(url, {
-        method, headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` },
+        method,
         body: fd,
       })
       if (res.ok) {
@@ -178,15 +202,12 @@ export default function ContractsPage() {
     if (!ok) return
     const res = await fetch(`/api/v1/contracts/${id}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
     })
     if (res.ok) { showToast('已删除', 'success'); loadContracts() }
   }
 
   const handleDownload = async (id: number, fileName: string) => {
-    const res = await fetch(`/api/v1/contracts/${id}/file`, {
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
-    })
+    const res = await fetch(`/api/v1/contracts/${id}/file`)
     if (res.ok) {
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
@@ -204,7 +225,6 @@ export default function ContractsPage() {
     setParsingId(id)
     const res = await fetch(`/api/v1/contracts/${id}/parse`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
     })
     if (res.ok) {
       const data = await res.json()
@@ -217,6 +237,56 @@ export default function ContractsPage() {
     setParsingId(null)
   }
 
+  const handlePreview = async (id: number, fileName: string, fileType: string) => {
+    setPreviewId(id)
+    setPreviewLoading(true)
+    setPreviewName(fileName)
+    setPreviewType(fileType)
+
+    const isPdf = fileType.toLowerCase() === '.pdf'
+
+    try {
+      if (isPdf) {
+        // PDF：获取文件 blob，用浏览器内置查看器渲染
+        const res = await fetch(`/api/v1/contracts/${id}/file?preview=true`)
+        if (res.ok) {
+          const blob = await res.blob()
+          const url = URL.createObjectURL(blob)
+          if (previewUrl) URL.revokeObjectURL(previewUrl)
+          setPreviewUrl(url)
+          setPreviewText('')
+        } else {
+          showToast('加载文件失败', 'error')
+          closePreview()
+        }
+      } else {
+        // Word 文档：请求后端提取文本内容
+        const res = await fetch(`/api/v1/contracts/${id}/preview-text`)
+        if (res.ok) {
+          const data = await res.json()
+          setPreviewText(data.text || '')
+          setPreviewUrl('')
+        } else {
+          const err = await res.json().catch(() => ({}))
+          showToast(err.detail || '无法提取文档内容', 'error')
+          closePreview()
+        }
+      }
+    } catch {
+      showToast('加载文件失败', 'error')
+      closePreview()
+    }
+    setPreviewLoading(false)
+  }
+
+  const closePreview = () => {
+    setPreviewId(null)
+    if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl('') }
+    setPreviewText('')
+    setPreviewName('')
+    setPreviewType('')
+  }
+
   const getCustomerName = (id: number) => customers.find(c => c.id === id)?.name || ''
   const getProjectName = (id: number | null) => id ? projects.find(p => p.id === id)?.name || '' : ''
   const customersProjects = projects.filter(p => p.customer_id === form.customer_id)
@@ -224,14 +294,31 @@ export default function ContractsPage() {
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div className="flex items-center gap-2">
-          <h2 className="text-xl font-bold text-white">合同管理</h2>
-          <span className="text-xs text-gray-500 bg-bg-hover px-2 py-0.5 rounded-full">{contracts.length}</span>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-bold text-white">合同管理</h2>
+            <span className="text-xs text-gray-500 bg-bg-hover px-2 py-0.5 rounded-full">{contracts.length}</span>
+          </div>
+          {/* 管理者与老板专属：成员数据切换下拉框 */}
+          {(hasPermission('contract:read') && memberList.length > 0) && (
+            <select
+              value={selectedUserId}
+              onChange={e => setSelectedUserId(e.target.value)}
+              className="px-3 py-1.5 rounded-xl bg-bg-card border border-border text-xs text-gray-300 outline-none focus:border-[#3B82F6] cursor-pointer font-bold"
+            >
+              <option value="">全部下属成员</option>
+              {memberList.map(m => (
+                <option key={m.id} value={m.id}>{m.name || m.username}</option>
+              ))}
+            </select>
+          )}
         </div>
-        <button onClick={() => { setShowForm(true); resetForm() }}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#3B82F6] text-white text-sm font-medium hover:bg-blue-600 transition-all shadow-lg shadow-blue-500/20">
-          <Plus size={16} /><span>新建合同</span>
-        </button>
+        {hasPermission('contract:create') && (
+          <button onClick={() => { setShowForm(true); resetForm() }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#3B82F6] text-white text-sm font-medium hover:bg-blue-600 transition-all shadow-lg shadow-blue-500/20">
+            <Plus size={16} /><span>新建合同</span>
+          </button>
+        )}
       </div>
 
       <div className="flex items-center gap-3 mb-5">
@@ -312,19 +399,29 @@ export default function ContractsPage() {
                   )}
                   <div className="flex items-center gap-2 pt-1">
                     {c.file_path && (
-                      <button onClick={() => handleDownload(c.id, c.file_name)}
-                        className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg bg-bg-input text-gray-300 hover:text-white border border-border">
-                        <Download size={10} />下载文件
+                      <>
+                        <button onClick={() => handlePreview(c.id, c.file_name, c.file_type)}
+                          className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg bg-[#3B82F6]/10 text-[#3B82F6] hover:bg-[#3B82F6]/20 border border-[#3B82F6]/20">
+                          <Eye size={10} />预览
+                        </button>
+                        <button onClick={() => handleDownload(c.id, c.file_name)}
+                          className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg bg-bg-input text-gray-300 hover:text-white border border-border">
+                          <Download size={10} />下载文件
+                        </button>
+                      </>
+                    )}
+                     {hasPermission('contract:edit') && (
+                      <button onClick={() => startEdit(c)}
+                        className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-bg-hover border border-border">
+                        <Pencil size={10} />编辑
                       </button>
                     )}
-                    <button onClick={() => startEdit(c)}
-                      className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-bg-hover border border-border">
-                      <Pencil size={10} />编辑
-                    </button>
-                    <button onClick={() => handleDelete(c.id)}
-                      className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-border ml-auto">
-                      <Trash2 size={10} />删除
-                    </button>
+                    {hasPermission('contract:delete') && (
+                      <button onClick={() => handleDelete(c.id)}
+                        className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-border ml-auto">
+                        <Trash2 size={10} />删除
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -445,6 +542,57 @@ export default function ContractsPage() {
                 <button onClick={() => { setShowForm(false); resetForm() }}
                   className="px-5 py-2.5 rounded-lg bg-bg-hover text-gray-400 text-sm hover:text-white">取消</button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 文件预览弹窗 */}
+      {previewId !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={closePreview}>
+          <div className="w-full max-w-6xl mx-4 h-[90vh] rounded-2xl bg-bg-card border border-border shadow-2xl flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            {/* 顶部标题栏 */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-border shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <FileText size={18} className="text-[#3B82F6] shrink-0" />
+                <span className="text-sm font-medium text-white truncate">{previewName}</span>
+                {previewType && <span className="text-[10px] text-gray-500 bg-bg-hover px-1.5 py-0.5 rounded shrink-0">{previewType.toUpperCase().replace('.', '')}</span>}
+              </div>
+              <button onClick={closePreview} className="p-1.5 rounded-lg hover:bg-bg-hover text-gray-400 hover:text-white transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* 预览内容 */}
+            <div className="flex-1 min-h-0 bg-gray-100 dark:bg-gray-900">
+              {previewLoading ? (
+                <div className="flex items-center justify-center h-full">
+                  <Loader2 size={28} className="animate-spin text-gray-400" />
+                </div>
+              ) : previewType.toLowerCase() === '.pdf' && previewUrl ? (
+                <iframe src={previewUrl} className="w-full h-full border-0" title={previewName} />
+              ) : previewText ? (
+                <div className="h-full overflow-y-auto p-6">
+                  <div className="max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-xl border border-border p-8 shadow-sm">
+                    <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-gray-800 dark:text-gray-200">
+                      {previewText}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full gap-3 text-gray-500">
+                  <FileText size={48} className="opacity-30" />
+                  <p className="text-sm">无法加载文件内容</p>
+                  <p className="text-xs text-gray-600">请尝试下载文件后在本地查看</p>
+                  <button onClick={() => {
+                    const c = contracts.find(ct => ct.id === previewId)
+                    if (c) handleDownload(c.id, c.file_name)
+                  }}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#3B82F6]/10 text-[#3B82F6] text-sm hover:bg-[#3B82F6]/20 border border-[#3B82F6]/20">
+                    <Download size={14} />下载文件
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

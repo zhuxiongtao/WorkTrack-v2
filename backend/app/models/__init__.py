@@ -13,9 +13,13 @@ from app.models.system_preference import SystemPreference
 from app.models.log_entry import LogEntry
 from app.models.ai_prompt import AIPrompt
 from app.models.weekly_summary import WeeklySummary
+from app.models.wiki import UserGroup, UserGroupMember, WikiSpace, WikiPage, WikiPermission, WikiPageVersion
+from app.models.rbac import Permission, Role, RolePermission, UserRole, GroupRole, DepartmentRole
+from app.models.department import Department
 
 __all__ = [
     "User",
+    "Department",
     "DailyReport",
     "Customer",
     "CustomerContact",
@@ -33,4 +37,16 @@ __all__ = [
     "LogEntry",
     "AIPrompt",
     "WeeklySummary",
+    "UserGroup",
+    "UserGroupMember",
+    "WikiSpace",
+    "WikiPage",
+    "WikiPermission",
+    "WikiPageVersion",
+    "Permission",
+    "Role",
+    "RolePermission",
+    "UserRole",
+    "GroupRole",
+    "DepartmentRole",
 ]

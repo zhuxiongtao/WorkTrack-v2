@@ -1,10 +1,10 @@
 import os
 import uuid
-import threading
+import logging
 from typing import Optional
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, BackgroundTasks
 from sqlmodel import Session, select
 
 from app.database import get_session
@@ -12,9 +12,9 @@ from app.models.contract import Contract
 from app.models.customer import Customer
 from app.models.project import Project
 from app.models.user import User
-from app.auth import get_current_user
+from app.auth import get_current_user, require_permission
 from app.schemas import ContractCreate, ContractUpdate, ContractOut
-from app.services.contract_parser import extract_text, extract_text_with_vision_fallback, parse_contract, UPLOAD_DIR
+from app.services.contract_parser import extract_text, extract_text_with_vision_fallback, parse_contract, UPLOAD_DIR, extract_text_from_docx, extract_text_from_legacy_doc
 from app.services.vector_store import index_document
 from app.routers.logs import write_log
 
@@ -34,7 +34,7 @@ def list_contracts(
     project_id: Optional[int] = Query(None),
     status: Optional[str] = Query(None),
     keyword: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("contract:read")),
     db: Session = Depends(get_session),
 ):
     query = select(Contract).where(Contract.user_id == current_user.id).order_by(Contract.created_at.desc())
@@ -45,11 +45,12 @@ def list_contracts(
     if status:
         query = query.where(Contract.status == status)
     if keyword:
+        pattern = f"%{keyword}%"
         query = query.where(
-            (Contract.title.contains(keyword)) |
-            (Contract.contract_no.contains(keyword)) |
-            (Contract.summary.contains(keyword)) |
-            (Contract.raw_text.contains(keyword))
+            (Contract.title.ilike(pattern)) |
+            (Contract.contract_no.ilike(pattern)) |
+            (Contract.summary.ilike(pattern)) |
+            (Contract.raw_text.ilike(pattern))
         )
     return db.exec(query).all()
 
@@ -70,8 +71,9 @@ async def create_contract(
     payment_terms: Optional[str] = Form(None),
     remarks: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("contract:create")),
     db: Session = Depends(get_session),
+    background_tasks: BackgroundTasks = None,
 ):
     customer = db.get(Customer, customer_id)
     if not customer or customer.user_id != current_user.id:
@@ -120,15 +122,24 @@ async def create_contract(
     db.refresh(contract)
 
     if file_path and file_type:
-        threading.Thread(target=_auto_parse_contract, args=(contract.id, current_user.id), daemon=True).start()
+        background_tasks.add_task(_auto_parse_contract_safe, contract.id, current_user.id)
 
     return contract
 
 
-def _auto_parse_contract(contract_id: int, user_id: int):
+def _auto_parse_contract_safe(contract_id: int, user_id: int):
     from app.database import engine
     from sqlmodel import Session as SqlSession
     db = SqlSession(engine)
+    try:
+        _auto_parse_contract(contract_id, user_id, db)
+    except Exception as e:
+        logging.getLogger(__name__).exception("后台解析合同 #%d 失败: %s", contract_id, e)
+    finally:
+        db.close()
+
+
+def _auto_parse_contract(contract_id: int, user_id: int, db: Session):
     try:
         write_log("info", "contract", f"开始后台解析合同 #{contract_id}", db=db)
         contract = db.get(Contract, contract_id)
@@ -169,12 +180,10 @@ def _auto_parse_contract(contract_id: int, user_id: int):
             write_log("warning", "contract", f"后台解析合同失败: {str(e)[:200]}", db=db)
         except Exception:
             pass
-    finally:
-        db.close()
 
 
 @router.get("/{contract_id}", response_model=ContractOut)
-def get_contract(contract_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def get_contract(contract_id: int, current_user: User = Depends(require_permission("contract:read")), db: Session = Depends(get_session)):
     contract = db.get(Contract, contract_id)
     if not contract or contract.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="合同不存在")
@@ -182,7 +191,7 @@ def get_contract(contract_id: int, current_user: User = Depends(get_current_user
 
 
 @router.put("/{contract_id}", response_model=ContractOut)
-def update_contract(contract_id: int, data: ContractUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def update_contract(contract_id: int, data: ContractUpdate, current_user: User = Depends(require_permission("contract:edit")), db: Session = Depends(get_session)):
     contract = db.get(Contract, contract_id)
     if not contract or contract.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="合同不存在")
@@ -195,7 +204,7 @@ def update_contract(contract_id: int, data: ContractUpdate, current_user: User =
 
 
 @router.delete("/{contract_id}", status_code=204)
-def delete_contract(contract_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def delete_contract(contract_id: int, current_user: User = Depends(require_permission("contract:delete")), db: Session = Depends(get_session)):
     contract = db.get(Contract, contract_id)
     if not contract or contract.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="合同不存在")
@@ -209,18 +218,40 @@ def delete_contract(contract_id: int, current_user: User = Depends(get_current_u
 
 
 @router.get("/{contract_id}/file")
-def download_contract_file(contract_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def download_contract_file(contract_id: int, preview: bool = Query(False), current_user: User = Depends(require_permission("contract:read")), db: Session = Depends(get_session)):
     from fastapi.responses import FileResponse
     contract = db.get(Contract, contract_id)
     if not contract or contract.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="合同不存在")
     if not contract.file_path or not os.path.exists(contract.file_path):
         raise HTTPException(status_code=404, detail="合同文件不存在")
+
+    # 确定 MIME 类型
+    ext = (contract.file_type or '').lower()
+    media_type_map = {
+        '.pdf': 'application/pdf',
+        '.doc': 'application/msword',
+        '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif',
+    }
+    media_type = media_type_map.get(ext)
+
+    if preview:
+        # 在线预览模式：设置 inline 让浏览器直接打开，避免下载
+        return FileResponse(
+            contract.file_path,
+            filename=contract.file_name,
+            media_type=media_type,
+            headers={"Content-Disposition": f"inline; filename={contract.file_name}"}
+        )
     return FileResponse(contract.file_path, filename=contract.file_name)
 
 
 @router.post("/{contract_id}/parse", response_model=ContractOut)
-def parse_contract_content(contract_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def parse_contract_content(contract_id: int, current_user: User = Depends(require_permission("contract:parse")), db: Session = Depends(get_session)):
     contract = db.get(Contract, contract_id)
     if not contract or contract.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="合同不存在")
@@ -272,6 +303,37 @@ def parse_contract_content(contract_id: int, current_user: User = Depends(get_cu
     db.commit()
     db.refresh(contract)
     return contract
+
+
+@router.get("/{contract_id}/preview-text")
+def preview_contract_text(contract_id: int, current_user: User = Depends(require_permission("contract:read")), db: Session = Depends(get_session)):
+    """提取合同原文用于在线预览（支持 PDF / DOCX / DOC）"""
+    contract = db.get(Contract, contract_id)
+    if not contract or contract.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="合同不存在")
+    if not contract.file_path or not os.path.exists(contract.file_path):
+        raise HTTPException(status_code=404, detail="合同文件不存在")
+
+    ext = (contract.file_type or '').lower()
+
+    if ext == '.pdf':
+        from app.services.contract_parser import extract_text_from_pdf
+        text = extract_text_from_pdf(contract.file_path)
+    elif ext == '.docx':
+        text = extract_text_from_docx(contract.file_path)
+    elif ext == '.doc':
+        text = extract_text_from_legacy_doc(contract.file_path)
+    else:
+        raise HTTPException(status_code=400, detail=f"不支持的文件类型: {ext}")
+
+    if not text:
+        # 降级：尝试用通用提取方法
+        text = extract_text(contract.file_path)
+
+    if not text:
+        raise HTTPException(status_code=400, detail="无法提取文件文本内容")
+
+    return {"text": text, "file_name": contract.file_name, "file_type": contract.file_type}
 
 
 def _validate_file_extension(filename: str):

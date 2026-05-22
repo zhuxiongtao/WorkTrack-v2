@@ -83,10 +83,9 @@ def get_stats(
     range_start, range_end = _parse_date_range(start_date, end_date, preset)
 
     # === 项目统计 ===
-    all_projects = db.exec(
-        select(Project).where(Project.user_id == current_user.id)
+    projects_in_range = db.exec(
+        select(Project).where(Project.user_id == current_user.id, Project.created_at <= range_end)
     ).all()
-    projects_in_range = [p for p in all_projects if p.created_at.date() <= range_end]
 
     total_projects = len(projects_in_range)
     status_dist: dict[str, int] = {}
@@ -94,26 +93,43 @@ def get_stats(
         if p.status:
             status_dist[p.status] = status_dist.get(p.status, 0) + 1
 
-    # 新建项目（本周期）
-    new_projects = sum(1 for p in all_projects if p.created_at.date() >= range_start and p.created_at.date() <= range_end)
+    new_projects = db.exec(
+        select(func.count(Project.id)).where(
+            Project.user_id == current_user.id,
+            Project.created_at >= range_start,
+            Project.created_at <= range_end
+        )
+    ).one() or 0
 
     # 项目金额统计（按币种）
     total_opp_cny = sum(p.opportunity_amount or 0 for p in projects_in_range if p.opportunity_amount and (p.currency or 'CNY') == 'CNY')
     total_opp_usd = sum(p.opportunity_amount or 0 for p in projects_in_range if p.opportunity_amount and (p.currency or 'CNY') == 'USD')
     total_deal_cny = sum(p.deal_amount or 0 for p in projects_in_range if p.deal_amount and (p.currency or 'CNY') == 'CNY')
     total_deal_usd = sum(p.deal_amount or 0 for p in projects_in_range if p.deal_amount and (p.currency or 'CNY') == 'USD')
-    opp_this_period_cny = sum(p.opportunity_amount or 0 for p in all_projects if p.opportunity_amount and (p.currency or 'CNY') == 'CNY' and p.created_at.date() >= range_start and p.created_at.date() <= range_end)
-    opp_this_period_usd = sum(p.opportunity_amount or 0 for p in all_projects if p.opportunity_amount and (p.currency or 'CNY') == 'USD' and p.created_at.date() >= range_start and p.created_at.date() <= range_end)
-    deal_this_period_cny = sum(p.deal_amount or 0 for p in all_projects if p.deal_amount and (p.currency or 'CNY') == 'CNY' and p.created_at.date() >= range_start and p.created_at.date() <= range_end)
-    deal_this_period_usd = sum(p.deal_amount or 0 for p in all_projects if p.deal_amount and (p.currency or 'CNY') == 'USD' and p.created_at.date() >= range_start and p.created_at.date() <= range_end)
+    period_projects = db.exec(
+        select(Project).where(
+            Project.user_id == current_user.id,
+            Project.created_at >= range_start,
+            Project.created_at <= range_end
+        )
+    ).all()
+    opp_this_period_cny = sum(p.opportunity_amount or 0 for p in period_projects if p.opportunity_amount and (p.currency or 'CNY') == 'CNY')
+    opp_this_period_usd = sum(p.opportunity_amount or 0 for p in period_projects if p.opportunity_amount and (p.currency or 'CNY') == 'USD')
+    deal_this_period_cny = sum(p.deal_amount or 0 for p in period_projects if p.deal_amount and (p.currency or 'CNY') == 'CNY')
+    deal_this_period_usd = sum(p.deal_amount or 0 for p in period_projects if p.deal_amount and (p.currency or 'CNY') == 'USD')
 
     # === 客户统计 ===
-    all_customers = db.exec(
-        select(Customer).where(Customer.user_id == current_user.id)
+    customers_in_range = db.exec(
+        select(Customer).where(Customer.user_id == current_user.id, Customer.created_at <= range_end)
     ).all()
-    customers_in_range = [c for c in all_customers if c.created_at.date() <= range_end]
     total_customers = len(customers_in_range)
-    new_customers = sum(1 for c in all_customers if c.created_at.date() >= range_start and c.created_at.date() <= range_end)
+    new_customers = db.exec(
+        select(func.count(Customer.id)).where(
+            Customer.user_id == current_user.id,
+            Customer.created_at >= range_start,
+            Customer.created_at <= range_end
+        )
+    ).one() or 0
 
     # 行业分布
     industry_dist: dict[str, int] = {}
@@ -207,21 +223,22 @@ def get_stats(
         
         return True
     
+    recent_report_dates = db.exec(
+        select(DailyReport.report_date).where(
+            DailyReport.user_id == current_user.id,
+            DailyReport.report_date >= today - timedelta(days=90),
+            DailyReport.report_date <= today
+        )
+    ).all()
+    report_dates = set(_to_date(d) for d in recent_report_dates)
+
     for delta in range(90):
         d = today - timedelta(days=delta)
         
-        # 如果是休息日，跳过（不要求写日报）
         if not is_workday(d):
             continue
         
-        # 工作日必须检查是否有日报
-        has = db.exec(
-            select(DailyReport).where(
-                DailyReport.user_id == current_user.id,
-                DailyReport.report_date == d
-            )
-        ).first()
-        if has:
+        if d in report_dates:
             streak_days += 1
         else:
             break

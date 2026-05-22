@@ -6,8 +6,9 @@ from app.models.customer import Customer
 from app.models.customer_contact import CustomerContact
 from app.models.project import Project
 from app.models.meeting_note import MeetingNote
+from app.models.contract import Contract
 from app.models.user import User
-from app.auth import get_current_user
+from app.auth import get_current_user, require_permission
 from app.schemas import CustomerCreate, CustomerUpdate, CustomerOut, CompanySearchRequest, CompanyInfoRequest
 from app.schemas import CustomerContactCreate, CustomerContactUpdate, CustomerContactOut
 from app.services.vector_store import index_document, delete_document
@@ -20,7 +21,7 @@ router = APIRouter(prefix="/api/v1/customers", tags=["客户"])
 @router.get("", response_model=list[CustomerOut])
 def list_customers(
     status: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("customer:read")),
     db: Session = Depends(get_session),
 ):
     query = select(Customer).where(Customer.user_id == current_user.id).order_by(Customer.created_at.desc())
@@ -30,7 +31,7 @@ def list_customers(
 
 
 @router.post("", response_model=CustomerOut, status_code=201)
-def create_customer(data: CustomerCreate, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def create_customer(data: CustomerCreate, background_tasks: BackgroundTasks, current_user: User = Depends(require_permission("customer:create")), db: Session = Depends(get_session)):
     create_data = data.model_dump()
     create_data["user_id"] = current_user.id
     customer = Customer(**create_data)
@@ -48,7 +49,7 @@ def create_customer(data: CustomerCreate, background_tasks: BackgroundTasks, cur
 
 
 @router.put("/{customer_id}", response_model=CustomerOut)
-def update_customer(customer_id: int, data: CustomerUpdate, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def update_customer(customer_id: int, data: CustomerUpdate, background_tasks: BackgroundTasks, current_user: User = Depends(require_permission("customer:edit")), db: Session = Depends(get_session)):
     customer = db.get(Customer, customer_id)
     if not customer or customer.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="客户不存在")
@@ -69,17 +70,57 @@ def update_customer(customer_id: int, data: CustomerUpdate, background_tasks: Ba
 
 
 @router.delete("/{customer_id}", status_code=204)
-def delete_customer(customer_id: int, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def delete_customer(customer_id: int, background_tasks: BackgroundTasks, current_user: User = Depends(require_permission("customer:delete")), db: Session = Depends(get_session)):
     customer = db.get(Customer, customer_id)
     if not customer or customer.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="客户不存在")
+
+    # 级联清理关联数据：联系人、合同、会议、项目
+    contacts = db.exec(select(CustomerContact).where(CustomerContact.customer_id == customer_id)).all()
+    for ct in contacts:
+        db.delete(ct)
+
+    contracts = db.exec(select(Contract).where(Contract.customer_id == customer_id)).all()
+    for c in contracts:
+        db.delete(c)
+
+    meetings = db.exec(select(MeetingNote).where(MeetingNote.customer_id == customer_id)).all()
+    for m in meetings:
+        m.customer_id = None  # 会议保留但解除关联
+
+    projects = db.exec(select(Project).where(Project.customer_id == customer_id)).all()
+    for p in projects:
+        p.customer_id = None  # 项目保留但解除关联
+
+    db.flush()
     db.delete(customer)
     db.commit()
     background_tasks.add_task(delete_document, "customers", str(customer_id))
 
 
+@router.get("/{customer_id}/delete-preview")
+def delete_preview(customer_id: int, current_user: User = Depends(require_permission("customer:delete")), db: Session = Depends(get_session)):
+    """删除前预览：返回关联数据详情"""
+    customer = db.get(Customer, customer_id)
+    if not customer or customer.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="客户不存在")
+
+    contacts = db.exec(select(CustomerContact).where(CustomerContact.customer_id == customer_id)).all()
+    contracts = db.exec(select(Contract).where(Contract.customer_id == customer_id)).all()
+    meetings = db.exec(select(MeetingNote).where(MeetingNote.customer_id == customer_id)).all()
+    projects = db.exec(select(Project).where(Project.customer_id == customer_id)).all()
+
+    return {
+        "customer_name": customer.name,
+        "contacts": [{"name": ct.name, "position": ct.position} for ct in contacts],
+        "contracts": [{"title": c.title, "contract_no": c.contract_no} for c in contracts],
+        "meetings_count": len(meetings),
+        "projects_count": len(projects),
+    }
+
+
 @router.get("/{customer_id}/overview")
-def get_customer_overview(customer_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def get_customer_overview(customer_id: int, current_user: User = Depends(require_permission("customer:read")), db: Session = Depends(get_session)):
     customer = db.get(Customer, customer_id)
     if not customer or customer.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="客户不存在")
@@ -99,7 +140,7 @@ def get_customer_overview(customer_id: int, current_user: User = Depends(get_cur
 
 
 @router.post("/search-company")
-def search_company(request: CompanySearchRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def search_company(request: CompanySearchRequest, current_user: User = Depends(require_permission("customer:read")), db: Session = Depends(get_session)):
     """根据关键词搜索公司全称（AI 联网检索）"""
     try:
         results = search_company_names(request.keyword, db, current_user.id)
@@ -110,7 +151,7 @@ def search_company(request: CompanySearchRequest, current_user: User = Depends(g
 
 
 @router.post("/fetch-company-info")
-def fetch_company_info_endpoint(request: CompanyInfoRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def fetch_company_info_endpoint(request: CompanyInfoRequest, current_user: User = Depends(require_permission("customer:read")), db: Session = Depends(get_session)):
     """根据公司全称获取详细信息（AI 联网检索）"""
     try:
         info = fetch_company_info(request.company_name, db, current_user.id)
@@ -121,7 +162,7 @@ def fetch_company_info_endpoint(request: CompanyInfoRequest, current_user: User 
 
 
 @router.post("/{customer_id}/refresh-news")
-def refresh_customer_news(customer_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def refresh_customer_news(customer_id: int, current_user: User = Depends(require_permission("customer:edit")), db: Session = Depends(get_session)):
     """单独刷新客户最新动态（聚焦半年内新闻）"""
     customer = db.get(Customer, customer_id)
     if not customer or customer.user_id != current_user.id:
@@ -138,7 +179,7 @@ def refresh_customer_news(customer_id: int, current_user: User = Depends(get_cur
 
 
 @router.get("/{customer_id}/contacts", response_model=list[CustomerContactOut])
-def list_contacts(customer_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def list_contacts(customer_id: int, current_user: User = Depends(require_permission("customer:read")), db: Session = Depends(get_session)):
     customer = db.get(Customer, customer_id)
     if not customer or customer.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="客户不存在")
@@ -146,7 +187,7 @@ def list_contacts(customer_id: int, current_user: User = Depends(get_current_use
 
 
 @router.post("/{customer_id}/contacts", response_model=CustomerContactOut, status_code=201)
-def create_contact(customer_id: int, data: CustomerContactCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def create_contact(customer_id: int, data: CustomerContactCreate, current_user: User = Depends(require_permission("customer:create")), db: Session = Depends(get_session)):
     customer = db.get(Customer, customer_id)
     if not customer or customer.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="客户不存在")
@@ -165,7 +206,7 @@ def create_contact(customer_id: int, data: CustomerContactCreate, current_user: 
 
 
 @router.put("/{customer_id}/contacts/{contact_id}", response_model=CustomerContactOut)
-def update_contact(customer_id: int, contact_id: int, data: CustomerContactUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def update_contact(customer_id: int, contact_id: int, data: CustomerContactUpdate, current_user: User = Depends(require_permission("customer:edit")), db: Session = Depends(get_session)):
     customer = db.get(Customer, customer_id)
     if not customer or customer.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="客户不存在")
@@ -196,7 +237,7 @@ def update_contact(customer_id: int, contact_id: int, data: CustomerContactUpdat
 
 
 @router.delete("/{customer_id}/contacts/{contact_id}", status_code=204)
-def delete_contact(customer_id: int, contact_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def delete_contact(customer_id: int, contact_id: int, current_user: User = Depends(require_permission("customer:delete")), db: Session = Depends(get_session)):
     customer = db.get(Customer, customer_id)
     if not customer or customer.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="客户不存在")

@@ -10,4 +10,5 @@ class WeeklySummary(SQLModel, table=True):
     week_start: date = Field(index=True)
     week_end: date
     summary_text: str = Field(default="")
+    status: str = Field(default="draft", max_length=50) # "draft" (草稿) 或 "submitted" (已提交)
     created_at: datetime = Field(default_factory=datetime.now)

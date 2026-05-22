@@ -165,47 +165,130 @@ def parse_contract(raw_text: str, db: Session, user_id: int = 0) -> dict:
     base_url, api_key, model, provider = _get_active_provider(db, "chat", user_id)
     client = _get_client(base_url, api_key, provider)
 
-    prompt = f"""你是一个专业的合同分析助手。请分析以下合同文本，提取关键信息并以JSON格式返回。
+    # 预处理：提取关键段落，避免关键信息被 8000 字截断
+    focused_text = _extract_key_sections(raw_text)
 
-要求：
-1. 返回纯JSON，不要有其他内容
-2. 所有日期格式为 YYYY-MM-DD
-3. 金额统一使用"万元"为单位，如85.85万则填85.85。如果原文是其他单位请换算（如500000元 → 50.00）
-4. 如果某字段无法确定，设为 null
+    prompt = f"""你是一个专业的合同分析助手。请仔细分析以下合同文本，提取关键信息并以JSON格式返回。
 
-JSON格式：
+## 核心要求
+
+### 日期识别（非常重要！）
+合同中最关键的两个日期是 **生效时间（start_date）** 和 **失效时间（end_date）**，请务必准确识别。
+日期统一格式为 YYYY-MM-DD。
+
+合同中表示日期/期限的常见中文表述：
+- "本合同自 2024年1月1日 起生效" → start_date: "2024-01-01"
+- "有效期自 2024年1月1日 至 2025年12月31日" → start_date: "2024-01-01", end_date: "2025-12-31"
+- "合同期限为三年，自2024年1月1日至2026年12月31日" → start_date: "2024-01-01", end_date: "2026-12-31"
+- "服务期限：2024.1.1 - 2025.12.31" → start_date: "2024-01-01", end_date: "2025-12-31"
+- "自双方签字盖章之日起生效，有效期一年" → 如果能从签订日期推算则推算，否则保持原文描述
+- "本合同有效期为自生效日起36个月" → 如果能推算则推算具体日期
+
+**关键词提示**：看到"期限"、"有效期"、"履行期限"、"服务期"、"合同期"、"起始"、"截止"、"届满"、"终止"等字样时，重点关注其前后的日期信息。
+
+**特别提醒**：
+1. end_date 是合同终止/失效/到期日期，不是签订日期
+2. 如果原文写明了具体日期，请原样提取
+3. 如果只有模糊描述（如"三年"），优先根据 start_date 推算具体日期，推算不出才留 null
+4. 中文日期格式"2024年1月1日"请转换为"2024-01-01"
+
+### 签订日期（sign_date）
+签订日期是合同签署的日期，通常出现在合同开头或末尾签字处。
+看到"签订日期"、"签署日期"、"签约日期"、"于____年__月__日签订"等字样时提取。
+
+### 金额处理
+- 统一使用"万元"为单位，如 85.85万则填 85.85
+- 原文为"元"请换算（如 500000元 → 50.00）
+- 注意区分"合同金额"、"总价"、"合同价款"等表述
+
+### 输出格式
+返回**纯JSON**，不要有 markdown 代码块，不要有其他文字：
+
 {{
-  "sign_date": "签订日期(YYYY-MM-DD)",
-  "start_date": "合同开始日期(YYYY-MM-DD)",
-  "end_date": "合同截止日期(YYYY-MM-DD)",
-  "party_a": "甲方全称",
-  "party_b": "乙方全称",
-  "contract_amount": 金额(万元),
-  "currency": "CNY/USD等",
-  "payment_terms": "付款方式简述",
-  "key_clauses": "关键条款摘要（交付、违约、知识产权、保密、验收等）",
-  "summary": "合同核心内容2-3句话摘要"
+  "sign_date": "签订日期(YYYY-MM-DD) 或 null",
+  "start_date": "合同生效/开始日期(YYYY-MM-DD) 或 null",
+  "end_date": "合同失效/截止/到期日期(YYYY-MM-DD) 或 null",
+  "party_a": "甲方全称 或 null",
+  "party_b": "乙方全称 或 null",
+  "contract_amount": 金额(万元) 或 null,
+  "currency": "CNY/USD等 或 null",
+  "payment_terms": "付款方式简述 或 null",
+  "key_clauses": "关键条款摘要（交付、违约、知识产权、保密、验收等）或 null",
+  "summary": "合同核心内容2-3句话摘要 或 null"
 }}
 
 合同文本：
-{raw_text[:8000]}
+{focused_text[:12000]}
 """
 
     try:
         response = client.chat.completions.create(
             model=model,
             messages=[
-                {"role": "system", "content": "你是一个专业的合同分析助手，输出JSON格式的结构化数据。"},
+                {"role": "system", "content": "你是一个专业的合同分析助手，尤其擅长从中文合同中提取日期、金额、甲乙方等关键字段。请严格按照JSON格式输出，不要添加任何解释文字。"},
                 {"role": "user", "content": prompt},
             ],
-            temperature=0.2,
+            temperature=0.1,
         )
         content = response.choices[0].message.content or ""
         content = content.strip()
+        # 清理 markdown 代码块
         if content.startswith("```"):
-            content = content.split("\n", 1)[1]
+            lines = content.split("\n")
+            content = "\n".join(lines[1:])
             if content.endswith("```"):
                 content = content[:-3]
+        content = content.strip()
         return json.loads(content)
     except Exception as e:
         return {"error": str(e)}
+
+
+def _extract_key_sections(raw_text: str) -> str:
+    """
+    从合同原文中提取包含关键信息的段落，确保 AI 优先看到重要内容。
+    按照关键词匹配优先级排序：日期/期限 > 甲乙方 > 金额 > 其他。
+    """
+    if len(raw_text) <= 12000:
+        return raw_text
+
+    lines = raw_text.split("\n")
+    key_lines = []
+    other_lines = []
+
+    # 高优先级关键词（日期、合同期限相关）
+    high_priority = [
+        "期限", "有效期", "履行期", "服务期", "合同期",
+        "生效", "失效", "起始", "截止", "届满", "终止",
+        "签订日期", "签署日期", "签约日期",
+        "自20", "至20", "自 20", "至 20",
+        "年", "月", "日",
+    ]
+    # 中优先级关键词
+    medium_priority = [
+        "甲方", "乙方", "出卖人", "买受人", "委托方", "受托方",
+        "金额", "价款", "总价", "合同价格", "费用",
+        "付款", "支付",
+    ]
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        # 高优先级匹配
+        if any(kw in stripped for kw in high_priority):
+            key_lines.append(stripped)
+        elif any(kw in stripped for kw in medium_priority):
+            # 中优先级放在后面
+            key_lines.append(stripped)
+        else:
+            other_lines.append(stripped)
+
+    # 先放关键行，再放其他行，控制总长度
+    result = "\n".join(key_lines)
+    remaining = 12000 - len(result)
+    if remaining > 0:
+        extra = "\n".join(other_lines)
+        result = result + "\n" + extra[:remaining]
+
+    return result[:12000]

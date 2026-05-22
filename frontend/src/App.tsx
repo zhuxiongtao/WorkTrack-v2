@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { Routes, Route, NavLink, useNavigate, Navigate } from 'react-router-dom'
-import { Briefcase, Calendar, Sparkles, Settings, Search, X, Sun, Moon, Clock, Menu, BookOpen, FileText, Users, LogOut, Loader2, Shield, LayoutDashboard, AlertTriangle } from 'lucide-react'
+import { Routes, Route, NavLink, useNavigate, Navigate, useLocation } from 'react-router-dom'
+import { Briefcase, Calendar, Sparkles, Settings, Search, X, Sun, Moon, Clock, Menu, BookOpen, FileText, Users, LogOut, Loader2, Shield, LayoutDashboard, AlertTriangle, Activity } from 'lucide-react'
 import { SidebarIcon } from './components/GradientIcon'
 import { ThemeProvider, useTheme } from './contexts/ThemeContext'
 import { useAuth } from './contexts/AuthContext'
@@ -17,6 +17,9 @@ import LoginPage from './pages/LoginPage'
 import UserManagementPage from './pages/UserManagementPage'
 import DashboardPage from './pages/DashboardPage'
 import SetupPage from './pages/SetupPage'
+import WikiPage from './pages/WikiPage'
+import PublicWikiPage from './pages/PublicWikiPage'
+import MonitorPage from './pages/MonitorPage'
 
 interface SearchResult {
   id: number | string
@@ -32,9 +35,11 @@ interface SearchResult {
 
 function AppContent() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { theme, toggle } = useTheme()
-  const { user, loading: authLoading, logout, isAdmin } = useAuth()
+  const { user, loading: authLoading, logout, isAdmin, hasPermission } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const isInsideSpace = /^\/wiki\/\d+/.test(location.pathname)
   const [searchQuery, setSearchQuery] = useState('')
   const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking')
 
@@ -48,9 +53,7 @@ function AppContent() {
 
   // 加载品牌配置
   useEffect(() => {
-    fetch('/api/v1/settings/branding', {
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
-    })
+    fetch('/api/v1/settings/branding')
       .then(res => res.json())
       .then(data => {
         if (data.logo_url) {
@@ -123,7 +126,7 @@ function AppContent() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [searching, setSearching] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
-  const [homePage, setHomePage] = useState('/reports')
+  const [homePage, setHomePage] = useState('/settings')
   const searchRef = useRef<HTMLDivElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
@@ -133,13 +136,41 @@ function AppContent() {
     const loadHomePage = () => {
       fetch('/api/v1/settings/preferences')
         .then((r) => r.json())
-        .then((d) => { if (d.home_page) setHomePage(d.home_page) })
+        .then((d) => {
+          if (d.home_page) {
+            // 校验首页路径权限，无权限则回退到第一个有权限的页面
+            const permMap: Record<string, string> = {
+              '/reports': 'report:read', '/projects': 'project:read', '/meetings': 'meeting:read',
+              '/ai': 'ai:use', '/customers': 'customer:read', '/contracts': 'contract:read',
+              '/dashboard': 'dashboard:read', '/wiki': 'wiki:read', '/tasks': 'task:read',
+              '/users': 'user:read', '/monitor': 'monitor:read', '/logs': 'log:read',
+            }
+            const requiredPerm = permMap[d.home_page]
+            if (!requiredPerm || hasPermission(requiredPerm)) {
+              setHomePage(d.home_page)
+            } else {
+              setHomePage(computeDefaultHome())
+            }
+          }
+        })
         .catch(() => {})
     }
     loadHomePage()
     window.addEventListener('home-page-changed', loadHomePage)
     return () => window.removeEventListener('home-page-changed', loadHomePage)
-  }, [user])
+  }, [user, hasPermission])
+
+  function computeDefaultHome(): string {
+    const pages: [string, string][] = [
+      ['/monitor', 'monitor:read'], ['/users', 'user:read'], ['/settings', ''],
+      ['/reports', 'report:read'], ['/projects', 'project:read'], ['/meetings', 'meeting:read'],
+      ['/dashboard', 'dashboard:read'], ['/ai', 'ai:use'], ['/wiki', 'wiki:read'],
+    ]
+    for (const [path, perm] of pages) {
+      if (!perm || hasPermission(perm)) return path
+    }
+    return '/settings'
+  }
 
   const [showModelWarning, setShowModelWarning] = useState(false)
   const [modelWarningDismissed, setModelWarningDismissed] = useState(false)
@@ -267,11 +298,12 @@ function AppContent() {
         </div>
       )}
 
-      {/* 未登录 -> 显示登录页 */}
+      {/* 未登录 -> 显示登录页或公开文档共享页 */}
       {!authLoading && !user && (
         <div className="flex-1">
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/wiki/public/:spaceId/:pageId" element={<PublicWikiPage />} />
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
         </div>
@@ -294,7 +326,7 @@ function AppContent() {
         transition-transform duration-300 z-50 safe-area-top safe-area-bottom
         max-md:fixed max-md:inset-y-0 max-md:left-0
         ${sidebarOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full'}
-        md:translate-x-0
+        ${isInsideSpace ? 'md:hidden' : 'md:translate-x-0'}
       `}>
         {/* Logo */}
         <NavLink to="/" className="flex items-center gap-2.5 px-4 pt-5 pb-3.5 border-b border-border">
@@ -361,6 +393,7 @@ function AppContent() {
         <nav className="flex-1 px-3 py-2 overflow-y-auto">
           <div className="space-y-0.5">
           {/* ===== AI 中心 ===== */}
+          {hasPermission('ai:use') && (
           <NavLink
             to="/ai"
             onClick={() => setSidebarOpen(false)}
@@ -373,10 +406,35 @@ function AppContent() {
             }
           >
             <SidebarIcon icon={Sparkles} gradientFrom="#8B5CF6" gradientTo="#A78BFA" isActive={false} />
-            <span>AI 中心</span>
+            <span className="inline-flex items-center">
+              <span className="text-sm bg-gradient-to-r from-violet-500 to-purple-500 bg-clip-text text-transparent font-extrabold mr-1.5">AI</span>
+              中心
+            </span>
           </NavLink>
+          )}
+
+          {/* ===== 在线文档 ===== */}
+          {hasPermission('wiki:read') && (
+          <NavLink
+            to="/wiki"
+            onClick={() => setSidebarOpen(false)}
+            className={({ isActive }) =>
+              `group flex items-center gap-3 px-3 py-1.5 rounded-xl text-sm transition-all ${
+                isActive
+                  ? 'text-gray-900 dark:text-white bg-gradient-to-r from-indigo-500/15 to-blue-500/10 font-medium ring-1 ring-indigo-500/30 shadow-lg shadow-indigo-500/10'
+                  : 'text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-bg-hover-secondary'
+              }`
+            }
+          >
+            <SidebarIcon icon={BookOpen} gradientFrom="#6366F1" gradientTo="#3B82F6" isActive={false} />
+            <span className="inline-flex items-center">
+              在线文档
+            </span>
+          </NavLink>
+          )}
 
           {/* ===== 数据看板 ===== */}
+          {hasPermission('dashboard:read') && (
           <NavLink
             to="/dashboard"
             onClick={() => setSidebarOpen(false)}
@@ -391,8 +449,10 @@ function AppContent() {
             <SidebarIcon icon={LayoutDashboard} gradientFrom="#3B82F6" gradientTo="#06B6D4" isActive={false} />
             <span>数据看板</span>
           </NavLink>
+          )}
 
           {/* ===== 日报周报 ===== */}
+          {hasPermission('report:read') && (
           <NavLink
             to="/reports"
             onClick={() => setSidebarOpen(false)}
@@ -407,8 +467,10 @@ function AppContent() {
             <SidebarIcon icon={BookOpen} gradientFrom="#10B981" gradientTo="#34D399" isActive={false} />
             <span>日报周报</span>
           </NavLink>
+          )}
 
           {/* ===== 项目管理 ===== */}
+          {hasPermission('project:read') && (
           <NavLink
             to="/projects"
             onClick={() => setSidebarOpen(false)}
@@ -423,23 +485,27 @@ function AppContent() {
             <SidebarIcon icon={Briefcase} gradientFrom="#F59E0B" gradientTo="#FBBF24" isActive={false} />
             <span>项目管理</span>
           </NavLink>
+          )}
 
-          <NavLink
-            to="/customers"
-            onClick={() => setSidebarOpen(false)}
-            className={({ isActive }) =>
-              `group flex items-center gap-3 px-3 py-1.5 rounded-xl text-sm transition-all ${
-                isActive
-                  ? 'text-gray-900 dark:text-white bg-gradient-to-r from-pink-500/15 to-rose-500/10 font-medium ring-1 ring-pink-500/30 shadow-lg shadow-pink-500/10'
-                  : 'text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-bg-hover-secondary'
-              }`
-            }
-          >
-            <SidebarIcon icon={Users} gradientFrom="#EC4899" gradientTo="#F472B6" isActive={false} />
-            <span>客户管理</span>
-          </NavLink>
+          {hasPermission('customer:read') && (
+            <NavLink
+              to="/customers"
+              onClick={() => setSidebarOpen(false)}
+              className={({ isActive }) =>
+                `group flex items-center gap-3 px-3 py-1.5 rounded-xl text-sm transition-all ${
+                  isActive
+                    ? 'text-gray-900 dark:text-white bg-gradient-to-r from-pink-500/15 to-rose-500/10 font-medium ring-1 ring-pink-500/30 shadow-lg shadow-pink-500/10'
+                    : 'text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-bg-hover-secondary'
+                }`
+              }
+            >
+              <SidebarIcon icon={Users} gradientFrom="#EC4899" gradientTo="#F472B6" isActive={false} />
+              <span>客户管理</span>
+            </NavLink>
+          )}
 
           {/* ===== 会议纪要 ===== */}
+          {hasPermission('meeting:read') && (
           <NavLink
             to="/meetings"
             onClick={() => setSidebarOpen(false)}
@@ -454,24 +520,28 @@ function AppContent() {
               <SidebarIcon icon={Calendar} gradientFrom="#06B6D4" gradientTo="#22D3EE" isActive={false} />
               <span>会议纪要</span>
             </NavLink>
+          )}
 
             {/* ===== 合同管理 ===== */}
-            <NavLink
-              to="/contracts"
-              onClick={() => setSidebarOpen(false)}
-              className={({ isActive }) =>
-                `group flex items-center gap-3 px-3 py-1.5 rounded-xl text-sm transition-all ${
-                  isActive
-                    ? 'text-gray-900 dark:text-white bg-gradient-to-r from-cyan-500/15 to-teal-500/10 font-medium ring-1 ring-cyan-500/30 shadow-lg shadow-cyan-500/10'
-                    : 'text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-bg-hover-secondary'
-                }`
-              }
-            >
-              <SidebarIcon icon={FileText} gradientFrom="#06B6D4" gradientTo="#14B8A6" isActive={false} />
-              <span>合同管理</span>
-            </NavLink>
+            {hasPermission('contract:read') && (
+              <NavLink
+                to="/contracts"
+                onClick={() => setSidebarOpen(false)}
+                className={({ isActive }) =>
+                  `group flex items-center gap-3 px-3 py-1.5 rounded-xl text-sm transition-all ${
+                    isActive
+                      ? 'text-gray-900 dark:text-white bg-gradient-to-r from-cyan-500/15 to-teal-500/10 font-medium ring-1 ring-cyan-500/30 shadow-lg shadow-cyan-500/10'
+                      : 'text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-bg-hover-secondary'
+                  }`
+                }
+              >
+                <SidebarIcon icon={FileText} gradientFrom="#06B6D4" gradientTo="#14B8A6" isActive={false} />
+                <span>合同管理</span>
+              </NavLink>
+            )}
 
             {/* ===== 定时任务 ===== */}
+            {hasPermission('task:read') && (
             <NavLink
               to="/tasks"
               onClick={() => setSidebarOpen(false)}
@@ -486,9 +556,10 @@ function AppContent() {
               <SidebarIcon icon={Clock} gradientFrom="#8B5CF6" gradientTo="#C084FC" isActive={false} />
               <span>定时任务</span>
             </NavLink>
+            )}
 
-            {/* ===== 用户管理（仅管理员可见） ===== */}
-            {isAdmin && (
+            {/* ===== 用户管理 ===== */}
+            {hasPermission('user:read') && (
               <NavLink
                 to="/users"
                 onClick={() => setSidebarOpen(false)}
@@ -502,6 +573,24 @@ function AppContent() {
               >
                 <SidebarIcon icon={Shield} gradientFrom="#EF4444" gradientTo="#F87171" isActive={false} />
                 <span>用户管理</span>
+              </NavLink>
+            )}
+
+            {/* ===== 运维监控 ===== */}
+            {hasPermission('monitor:read') && (
+              <NavLink
+                to="/monitor"
+                onClick={() => setSidebarOpen(false)}
+                className={({ isActive }) =>
+                  `group flex items-center gap-3 px-3 py-1.5 rounded-xl text-sm transition-all ${
+                    isActive
+                    ? 'text-gray-900 dark:text-white bg-gradient-to-r from-emerald-500/15 to-teal-500/10 font-medium ring-1 ring-emerald-500/30 shadow-lg shadow-emerald-500/10'
+                    : 'text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-bg-hover-secondary'
+                  }`
+                }
+              >
+                <SidebarIcon icon={Activity} gradientFrom="#10B981" gradientTo="#14B8A6" isActive={false} />
+                <span>运维监控</span>
               </NavLink>
             )}
 
@@ -535,7 +624,7 @@ function AppContent() {
             <div className="flex items-center gap-1">
               <button
                 onClick={() => { navigate('/logs'); setSidebarOpen(false) }}
-                className="p-1.5 rounded-lg hover:bg-bg-hover text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+                className={`p-1.5 rounded-lg hover:bg-bg-hover text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors ${hasPermission('log:read') ? '' : 'hidden'}`}
                 title="运行日志"
               >
                 <FileText size={14} />
@@ -561,9 +650,9 @@ function AppContent() {
               )}
               <div className="min-w-0">
                 <p className="text-xs text-gray-300 truncate">{user?.name || user?.username}</p>
-                {isAdmin && (
-                  <p className="text-[9px] text-accent-blue/70">管理员</p>
-                )}
+                <p className="text-[9px] text-accent-blue/70">
+                  {isAdmin ? '管理员' : user?.roles?.includes('dept_leader') ? '部门负责人' : user?.roles?.includes('boss') ? '老板' : ''}
+                </p>
               </div>
             </div>
             <button
@@ -637,17 +726,21 @@ function AppContent() {
           )}
           <Routes>
             <Route path="/" element={<Navigate to={homePage} replace />} />
-            <Route path="/reports" element={<ReportHubPage />} />
-            <Route path="/projects" element={<ProjectsPage />} />
-            <Route path="/meetings" element={<MeetingsPage />} />
-            <Route path="/ai" element={<AIPage />} />
-            <Route path="/customers" element={<CustomersPage />} />
-            <Route path="/contracts" element={<ContractsPage />} />
-            <Route path="/tasks" element={<ScheduledTasksPage />} />
-            <Route path="/logs" element={<LogViewerPage />} />
+            <Route path="/reports" element={hasPermission('report:read') ? <ReportHubPage /> : <Navigate to={homePage} replace />} />
+            <Route path="/projects" element={hasPermission('project:read') ? <ProjectsPage /> : <Navigate to={homePage} replace />} />
+            <Route path="/meetings" element={hasPermission('meeting:read') ? <MeetingsPage /> : <Navigate to={homePage} replace />} />
+            <Route path="/ai" element={hasPermission('ai:use') ? <AIPage /> : <Navigate to={homePage} replace />} />
+            <Route path="/customers" element={hasPermission('customer:read') ? <CustomersPage /> : <Navigate to={homePage} replace />} />
+            <Route path="/contracts" element={hasPermission('contract:read') ? <ContractsPage /> : <Navigate to={homePage} replace />} />
+            <Route path="/tasks" element={hasPermission('task:read') ? <ScheduledTasksPage /> : <Navigate to={homePage} replace />} />
+            <Route path="/logs" element={hasPermission('log:read') ? <LogViewerPage /> : <Navigate to={homePage} replace />} />
+            <Route path="/monitor" element={hasPermission('monitor:read') ? <MonitorPage /> : <Navigate to={homePage} replace />} />
             <Route path="/settings" element={<SettingsPage />} />
-            {isAdmin && <Route path="/users" element={<UserManagementPage />} />}
-            <Route path="/dashboard" element={<DashboardPage />} />
+            {hasPermission('user:read') && <Route path="/users" element={<UserManagementPage />} />}
+            <Route path="/dashboard" element={hasPermission('dashboard:read') ? <DashboardPage /> : <Navigate to={homePage} replace />} />
+            <Route path="/wiki" element={hasPermission('wiki:read') ? <WikiPage /> : <Navigate to={homePage} replace />} />
+            <Route path="/wiki/:spaceId" element={hasPermission('wiki:read') ? <WikiPage /> : <Navigate to={homePage} replace />} />
+            <Route path="/wiki/public/:spaceId/:pageId" element={<PublicWikiPage />} />
           </Routes>
         </div>
       </main>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Plus, Sparkles, X, Trash2, Loader2, Calendar, Mic, Square, Play, Pause, FileText, FileAudio, Link2, Search, Building2, ExternalLink, Edit3, Maximize2, Minimize2 } from 'lucide-react'
 import MarkdownRenderer from '../components/MarkdownRenderer'
@@ -6,6 +6,7 @@ import SearchableSelect from '../components/SearchableSelect'
 import FileUpload from '../components/FileUpload'
 import RichTextEditor from '../components/RichTextEditor'
 import { useToast } from '../contexts/ToastContext'
+import { useAuth } from '../contexts/AuthContext'
 
 interface Meeting {
   id: number; title: string; meeting_date: string; content_md: string; audio_url: string | null; customer_id: number | null; project_id: number | null
@@ -18,12 +19,17 @@ interface ProjectBrief {
 }
 
 export default function MeetingsPage() {
+  const { hasPermission } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const { toast: showToast, confirm: showConfirm } = useToast()
   const [meetings, setMeetings] = useState<Meeting[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
+  
+  // 成员筛选（主管、Boss审查）
+  const [memberList, setMemberList] = useState<any[]>([])
+  const [selectedUserId, setSelectedUserId] = useState<number | string>('')
   const [isMaximized, setIsMaximized] = useState(false)
   const [inputMode, setInputMode] = useState<'text' | 'voice'>('text')
   const [form, setForm] = useState({ title: '', content_md: '', project_id: 0, customer_id: 0, meeting_date: new Date().toISOString().slice(0, 16), files_json: null as string | null })
@@ -58,35 +64,52 @@ export default function MeetingsPage() {
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([])
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('')
 
-  const loadMeetings = () => {
-    fetch('/api/v1/meetings')
+  const loadMeetings = useCallback(() => {
+    setLoading(true)
+    const url = '/api/v1/meetings' + (selectedUserId ? `?user_id=${selectedUserId}` : '')
+    fetch(url)
       .then((res) => res.json())
       .then((data) => { setMeetings(Array.isArray(data) ? data : []); setLoading(false) })
       .catch(() => setLoading(false))
-  }
+  }, [selectedUserId])
 
-  const loadProjects = () => {
-    fetch('/api/v1/projects')
+  const loadProjects = useCallback(() => {
+    const url = '/api/v1/projects' + (selectedUserId ? `?user_id=${selectedUserId}` : '')
+    fetch(url)
       .then((res) => res.json())
       .then((data) => setProjects((data || []).map((p: { id: number; name: string; customer_name: string; status: string }) => ({
         id: p.id, name: p.name, customer_name: p.customer_name, status: p.status
       }))))
       .catch(() => {})
-  }
+  }, [selectedUserId])
 
-  const loadCustomers = () => {
-    fetch('/api/v1/customers')
+  const loadCustomers = useCallback(() => {
+    const url = '/api/v1/customers' + (selectedUserId ? `?user_id=${selectedUserId}` : '')
+    fetch(url)
       .then((res) => res.json())
       .then((data) => setCustomers(Array.isArray(data) ? data.map((c: any) => ({ id: c.id, name: c.name })) : []))
       .catch(() => {})
-  }
+  }, [selectedUserId])
+
+  // 1. 装载拉取成员
+  useEffect(() => {
+    fetch('/api/v1/users/simple')
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setMemberList(d) })
+      .catch(() => {})
+  }, [])
+
+  // 2. 触发联动
+  useEffect(() => {
+    loadMeetings()
+    loadProjects()
+    loadCustomers()
+  }, [loadMeetings, loadProjects, loadCustomers])
 
   const loadLinkedProject = async (projectId: number | null) => {
     if (!projectId) { setLinkedProject(null); return }
-    // 先从已加载的列表中查找
     const found = projects.find((p) => p.id === projectId)
     if (found) { setLinkedProject(found); return }
-    // 否则单独请求
     try {
       const res = await fetch(`/api/v1/projects/${projectId}`)
       if (res.ok) {
@@ -100,8 +123,6 @@ export default function MeetingsPage() {
     if (!pid) return undefined
     return projects.find((p) => p.id === pid)
   }
-
-  useEffect(() => { loadMeetings(); loadProjects(); loadCustomers() }, [])
 
   // 从 localStorage 恢复上次选择的麦克风设备
   useEffect(() => {
@@ -473,9 +494,25 @@ export default function MeetingsPage() {
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
-        <div>
-          <h2 className="text-2xl font-bold text-white">会议纪要</h2>
-          <p className="text-sm text-gray-500 mt-1">{meetings.length} 条记录</p>
+        <div className="flex items-center gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-white">会议纪要</h2>
+            <p className="text-sm text-gray-500 mt-1">{meetings.length} 条记录</p>
+          </div>
+          {/* 管理者与老板专属：成员数据切换下拉框 */}
+          {(hasPermission('meeting:read') && memberList.length > 0) && (
+            <select
+              value={selectedUserId}
+              onChange={e => setSelectedUserId(e.target.value)}
+              style={{ colorScheme: 'dark' }}
+              className="px-3 py-1.5 rounded-xl bg-bg-card border border-border text-xs text-gray-300 outline-none focus:border-[#3B82F6] cursor-pointer font-bold"
+            >
+              <option value="">全部下属成员</option>
+              {memberList.map(m => (
+                <option key={m.id} value={m.id}>{m.name || m.username}</option>
+              ))}
+            </select>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-bg-card border border-border focus-within:border-[#3B82F6] transition-colors">
@@ -484,9 +521,11 @@ export default function MeetingsPage() {
               className="bg-transparent text-sm text-gray-300 outline-none w-36 placeholder-gray-600" />
             {searchText && <button onClick={() => setSearchText('')} className="text-gray-500 hover:text-white"><X size={14} /></button>}
           </div>
-          <button onClick={openCreate} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#3B82F6] text-white text-sm font-medium hover:bg-blue-600 transition-all shadow-lg shadow-blue-500/20">
-            <Plus size={17} /><span>新建会议</span>
-          </button>
+          {hasPermission('meeting:create') && (
+            <button onClick={openCreate} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#3B82F6] text-white text-sm font-medium hover:bg-blue-600 transition-all shadow-lg shadow-blue-500/20 shrink-0">
+              <Plus size={17} /><span>新建会议</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -594,10 +633,14 @@ export default function MeetingsPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={() => { closeDetail(); openEdit(modalMeeting) }}
-                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-gray-300 hover:text-white transition-colors border border-border"><Edit3 size={12} />编辑</button>
-                <button onClick={() => handleDelete(modalMeeting.id)}
-                  className="text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors border border-border"><Trash2 size={13} /></button>
+                {hasPermission('meeting:edit') && (
+                  <button onClick={() => { closeDetail(); openEdit(modalMeeting) }}
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-gray-300 hover:text-white transition-colors border border-border"><Edit3 size={12} />编辑</button>
+                )}
+                {hasPermission('meeting:delete') && (
+                  <button onClick={() => handleDelete(modalMeeting.id)}
+                    className="text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors border border-border"><Trash2 size={13} /></button>
+                )}
                 <button onClick={closeDetail} className="ml-2 p-2 rounded-lg hover:bg-bg-hover text-gray-500 hover:text-white transition-colors"><X size={18} /></button>
               </div>
             </div>
@@ -764,10 +807,8 @@ export default function MeetingsPage() {
                     uploadFn={async (file: File) => {
                       const formData = new FormData()
                       formData.append('file', file)
-                      const token = localStorage.getItem('auth_token')
                       const res = await fetch('/api/v1/files/upload', {
                         method: 'POST',
-                        headers: { Authorization: `Bearer ${token}` },
                         body: formData,
                       })
                       if (!res.ok) throw new Error('Upload failed')
@@ -784,10 +825,8 @@ export default function MeetingsPage() {
                     uploadFn={async (file: File) => {
                       const formData = new FormData()
                       formData.append('file', file)
-                      const token = localStorage.getItem('auth_token')
                       const res = await fetch('/api/v1/files/upload', {
                         method: 'POST',
-                        headers: { Authorization: `Bearer ${token}` },
                         body: formData,
                       })
                       if (!res.ok) throw new Error('Upload failed')

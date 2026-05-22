@@ -95,38 +95,38 @@ export default function SearchableSelect({
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-left outline-none focus:border-[#3B82F6] transition-colors flex items-center justify-between gap-2"
+        className="w-full h-10 px-3.5 rounded-xl bg-gray-50 dark:bg-bg-input border border-gray-200 dark:border-border/60 text-xs text-left outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all flex items-center justify-between gap-2 font-semibold"
       >
-        <span className={hasValue ? 'text-gray-300 truncate' : 'text-gray-600 truncate'}>
+        <span className={hasValue ? 'text-gray-800 dark:text-gray-300 truncate' : 'text-gray-400 dark:text-gray-600 truncate'}>
           {getDisplay()}
         </span>
         <span className="flex items-center gap-1 flex-shrink-0">
           {hasValue && (
-            <X size={14} className="text-gray-500 hover:text-gray-300" onClick={handleClear} />
+            <X size={14} className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300" onClick={handleClear} />
           )}
-          <ChevronDown size={14} className={`text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+          <ChevronDown size={14} className={`text-gray-400 dark:text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} />
         </span>
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1 min-w-[320px] w-full rounded-lg bg-bg-card border border-border shadow-xl overflow-visible">
+        <div className="absolute z-50 mt-1.5 left-0 w-full rounded-xl bg-bg-card border border-gray-200 dark:border-border/60 shadow-xl overflow-hidden">
           {/* 搜索框 */}
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
-            <Search size={13} className="text-gray-500 flex-shrink-0" />
+          <div className="flex items-center gap-2 px-3 py-2.5 border-b border-gray-200/60 dark:border-border/40 bg-gray-50 dark:bg-bg-hover/10 rounded-t-xl">
+            <Search size={13} className="text-gray-400 dark:text-gray-500 flex-shrink-0" />
             <input
               ref={inputRef}
               type="text"
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               placeholder={searchPlaceholder}
-              className="bg-transparent text-sm text-gray-300 outline-none flex-1 placeholder-gray-600"
+              className="bg-transparent text-sm text-gray-800 dark:text-gray-300 outline-none flex-1 placeholder-gray-400 dark:placeholder-gray-600"
             />
           </div>
 
           {/* 列表 */}
-          <div className="max-h-48 overflow-y-auto">
+          <div className="max-h-48 overflow-y-auto py-1">
             {filtered.length === 0 ? (
-              <p className="text-xs text-gray-600 text-center py-4">{emptyText}</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 text-center py-4">{emptyText}</p>
             ) : (
               filtered.map((o) => {
                 const selected = idSet.has(o.id)
@@ -135,20 +135,22 @@ export default function SearchableSelect({
                     key={o.id}
                     type="button"
                     onClick={() => handleSelect(o.id)}
-                    className={`w-full text-left flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
-                      selected ? 'bg-[#3B82F6]/10 text-[#3B82F6]' : 'text-gray-300 hover:bg-bg-hover'
+                    className={`w-full text-left flex items-center gap-2 px-3.5 py-2 text-sm transition-colors cursor-pointer ${
+                      selected
+                        ? 'bg-blue-50 dark:bg-accent-blue/10 text-blue-600 dark:text-blue-400 font-medium'
+                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-bg-hover hover:text-gray-900 dark:hover:text-gray-100'
                     }`}
                   >
                     {multiple && (
                       <span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 text-[10px] transition-colors ${
-                        selected ? 'bg-[#3B82F6] border-[#3B82F6] text-white' : 'border-gray-600'
+                        selected ? 'bg-accent-blue border-accent-blue text-white' : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-transparent'
                       }`}>
                         {selected && <Check size={10} />}
                       </span>
                     )}
                     <span className="truncate">{o.label}</span>
                     {o.sub && (
-                      <span className="text-[11px] text-gray-600 truncate flex-shrink-0 ml-auto max-w-[40%]">{o.sub}</span>
+                      <span className="text-[11px] text-gray-400 dark:text-gray-500 truncate flex-shrink-0 ml-auto max-w-[40%]">{o.sub}</span>
                     )}
                   </button>
                 )

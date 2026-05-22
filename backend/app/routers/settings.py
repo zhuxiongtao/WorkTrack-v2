@@ -1,6 +1,6 @@
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import Session, select, or_
+from sqlmodel import Session, select, or_, func
 from pydantic import BaseModel
 from app.database import get_session
 from app.models.model_provider import ModelProvider, TaskModelConfig, ProviderModel
@@ -8,7 +8,7 @@ from app.models.field_option import FieldOption
 from app.models.system_preference import SystemPreference
 from app.models.ai_prompt import AIPrompt
 from app.models.user import User
-from app.auth import get_current_user, get_current_admin_user
+from app.auth import get_current_user, get_current_admin_user, has_permission
 from app.services.ai_service import _extract_message_text, _get_active_provider, _get_client
 from app.config import settings as app_settings
 
@@ -21,31 +21,38 @@ router = APIRouter(prefix="/api/v1/settings", tags=["设置"])
 
 
 def _get_visible_providers_query(db: Session, user: User | None):
-    """返回当前用户可见的供应商查询条件"""
+    """返回当前用户可见的供应商查询条件（RBAC + 旧字段兼容）"""
     if user is None:
         return select(ModelProvider).where(ModelProvider.user_id == None)
-    if user.is_admin:
+    # 管理员或拥有 ai:manage_shared 权限 → 全部可见
+    if has_permission(user, "ai:manage_shared", db):
         return select(ModelProvider)
     conditions = []
-    if user.use_shared_models:
+    # 可使用共享供应商（ai:use）
+    if has_permission(user, "ai:use", db):
         conditions.append(ModelProvider.user_id == None)
-    if user.can_manage_models:
+    # 可管理自有供应商（ai:manage_own）
+    if has_permission(user, "ai:manage_own", db):
         conditions.append(ModelProvider.user_id == user.id)
     if not conditions:
         return select(ModelProvider).where(ModelProvider.id == -1)
-    query = select(ModelProvider).where(or_(*conditions))
-    return query
+    return select(ModelProvider).where(or_(*conditions))
 
 
-def _check_provider_access(provider: ModelProvider, user: User | None) -> bool:
-    """检查用户是否有权限访问某个供应商（读或写）"""
-    if user is None or not user.is_admin:
-        if user and user.can_manage_models and provider.user_id == user.id:
-            return True  # 拥有自己创建的
-        if user and user.use_shared_models and provider.user_id is None:
-            return True  # 可使用共享的
+def _check_provider_access(provider: ModelProvider, user: User | None, db: Session | None = None) -> bool:
+    """检查用户是否有权限访问某个供应商（RBAC + 旧字段兼容）"""
+    if user is None:
         return False
-    return True  # 管理员全部可访问
+    # 管理员或 ai:manage_shared → 全部可访问
+    if has_permission(user, "ai:manage_shared", db):
+        return True
+    # 自有供应商 → ai:manage_own
+    if provider.user_id == user.id and has_permission(user, "ai:manage_own", db):
+        return True
+    # 共享供应商 → ai:use
+    if provider.user_id is None and has_permission(user, "ai:use", db):
+        return True
+    return False
 
 
 class ProviderCreate(BaseModel):
@@ -79,11 +86,11 @@ def list_providers(db: Session = Depends(get_session),
 @router.post("/providers", status_code=201)
 def create_provider(data: ProviderCreate, db: Session = Depends(get_session),
                     current_user: User = Depends(get_current_user)):
-    is_admin = current_user.is_admin
-    if not is_admin and not current_user.can_manage_models:
+    if not has_permission(current_user, "ai:manage_own", db) and not has_permission(current_user, "ai:manage_shared", db):
         raise HTTPException(status_code=403, detail="无权限创建模型供应商")
     provider = ModelProvider(**data.model_dump())
-    if not is_admin:
+    # 非管理员（无 manage_shared）→ 强制归属自己
+    if not has_permission(current_user, "ai:manage_shared", db):
         provider.user_id = current_user.id
     db.add(provider)
     db.commit()
@@ -97,9 +104,10 @@ def update_provider(provider_id: int, data: ProviderUpdate, db: Session = Depend
     provider = db.get(ModelProvider, provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="供应商不存在")
-    if not _check_provider_access(provider, current_user):
+    if not _check_provider_access(provider, current_user, db):
         raise HTTPException(status_code=403, detail="无权限修改此供应商")
-    if not current_user.is_admin and provider.user_id != current_user.id:
+    # 非 ai:manage_shared 只能修改自己的供应商
+    if not has_permission(current_user, "ai:manage_shared", db) and provider.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="只能修改自己的供应商")
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
@@ -116,9 +124,9 @@ def delete_provider(provider_id: int, db: Session = Depends(get_session),
     provider = db.get(ModelProvider, provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="供应商不存在")
-    if not _check_provider_access(provider, current_user):
+    if not _check_provider_access(provider, current_user, db):
         raise HTTPException(status_code=403, detail="无权限删除此供应商")
-    if not current_user.is_admin and provider.user_id != current_user.id:
+    if not has_permission(current_user, "ai:manage_shared", db) and provider.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="只能删除自己的供应商")
     # 先清理引用该供应商的 TaskModelConfig
     task_cfgs = db.exec(
@@ -161,7 +169,7 @@ def list_provider_models(provider_id: int, db: Session = Depends(get_session),
     provider = db.get(ModelProvider, provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="供应商不存在")
-    if not _check_provider_access(provider, current_user):
+    if not _check_provider_access(provider, current_user, db):
         raise HTTPException(status_code=403, detail="无权限访问此供应商")
     models = db.exec(
         select(ProviderModel).where(ProviderModel.provider_id == provider_id).order_by(ProviderModel.created_at)
@@ -176,9 +184,9 @@ def add_provider_model(provider_id: int, data: ModelAdd, db: Session = Depends(g
     provider = db.get(ModelProvider, provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="供应商不存在")
-    if not _check_provider_access(provider, current_user):
+    if not _check_provider_access(provider, current_user, db):
         raise HTTPException(status_code=403, detail="无权限操作此供应商")
-    if not current_user.is_admin and provider.user_id != current_user.id:
+    if not has_permission(current_user, "ai:manage_shared", db) and provider.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="只能管理自己的供应商模型")
     existing = db.exec(
         select(ProviderModel).where(
@@ -203,9 +211,9 @@ def remove_provider_model(provider_id: int, model_id: int, db: Session = Depends
     provider = db.get(ModelProvider, provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="供应商不存在")
-    if not _check_provider_access(provider, current_user):
+    if not _check_provider_access(provider, current_user, db):
         raise HTTPException(status_code=403, detail="无权限操作此供应商")
-    if not current_user.is_admin and provider.user_id != current_user.id:
+    if not has_permission(current_user, "ai:manage_shared", db) and provider.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="只能管理自己的供应商模型")
     model = db.get(ProviderModel, model_id)
     if not model or model.provider_id != provider_id:
@@ -226,9 +234,9 @@ def update_provider_model(provider_id: int, model_id: int, data: ModelUpdate, db
     provider = db.get(ModelProvider, provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="供应商不存在")
-    if not _check_provider_access(provider, current_user):
+    if not _check_provider_access(provider, current_user, db):
         raise HTTPException(status_code=403, detail="无权限操作此供应商")
-    if not current_user.is_admin and provider.user_id != current_user.id:
+    if not has_permission(current_user, "ai:manage_shared", db) and provider.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="只能管理自己的供应商模型")
     model = db.get(ProviderModel, model_id)
     if not model or model.provider_id != provider_id:
@@ -255,7 +263,7 @@ def update_provider_model(provider_id: int, model_id: int, data: ModelUpdate, db
 
 
 @router.post("/providers/{provider_id}/models/{model_id}/test")
-def test_provider_model(provider_id: int, model_id: int, db: Session = Depends(get_session)):
+def test_provider_model(provider_id: int, model_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
     """测试单个模型连通性（按 model_type 调用相应 API）"""
     model = db.get(ProviderModel, model_id)
     if not model or model.provider_id != provider_id:
@@ -316,7 +324,7 @@ def test_provider_model(provider_id: int, model_id: int, db: Session = Depends(g
 
 
 @router.post("/providers/{provider_id}/test")
-def test_provider(provider_id: int, db: Session = Depends(get_session)):
+def test_provider(provider_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
     """测试模型供应商连接"""
     provider = db.get(ModelProvider, provider_id)
     if not provider:
@@ -396,9 +404,9 @@ def fetch_provider_models(provider_id: int, db: Session = Depends(get_session),
     provider = db.get(ModelProvider, provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="供应商不存在")
-    if not _check_provider_access(provider, current_user):
+    if not _check_provider_access(provider, current_user, db):
         raise HTTPException(status_code=403, detail="无权限拉取模型列表")
-    if not current_user.is_admin and provider.user_id != current_user.id:
+    if not has_permission(current_user, "ai:manage_shared", db) and provider.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="只能管理自己的供应商")
 
     try:
@@ -449,9 +457,9 @@ class TaskModelUpdate(BaseModel):
 def get_task_models(db: Session = Depends(get_session),
                     current_user: User = Depends(get_current_user)):
     """获取任务模型配置：用户私有 +（有权限时）共享"""
-    is_admin = current_user.is_admin
-    use_shared = is_admin or current_user.use_shared_models
-    uid = current_user.id if not is_admin else None
+    can_manage = has_permission(current_user, "ai:manage_shared", db)
+    use_shared = can_manage or has_permission(current_user, "ai:use", db)
+    uid = current_user.id if not can_manage else None
 
     conditions: list = []
     if uid is not None:
@@ -485,8 +493,8 @@ def get_task_models(db: Session = Depends(get_session),
 def update_task_model(data: TaskModelUpdate, db: Session = Depends(get_session),
                       current_user: User = Depends(get_current_user)):
     """更新任务模型配置：管理员更新共享的，普通用户更新自己的"""
-    is_admin = current_user.is_admin
-    uid = None if is_admin else current_user.id
+    can_manage_shared = has_permission(current_user, "ai:manage_shared", db)
+    uid = None if can_manage_shared else current_user.id
     config = db.exec(
         select(TaskModelConfig).where(
             TaskModelConfig.task_type == data.task_type,
@@ -519,7 +527,7 @@ class FieldOptionBatchUpdate(BaseModel):
 
 
 @router.get("/field-options")
-def list_field_options(category: Optional[str] = None, db: Session = Depends(get_session)):
+def list_field_options(category: Optional[str] = None, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
     """获取字段选项，可按分类筛选"""
     query = select(FieldOption).order_by(FieldOption.sort_order, FieldOption.id)
     if category:
@@ -578,7 +586,7 @@ def batch_update_field_options(data: FieldOptionBatchUpdate, db: Session = Depen
 
 
 @router.get("/field-options/categories")
-def list_field_categories(db: Session = Depends(get_session)):
+def list_field_categories(current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
     """获取所有选项分类"""
     opts = db.exec(select(FieldOption)).all()
     categories = list(set(o.category for o in opts))
@@ -1013,14 +1021,14 @@ def system_info(db: Session = Depends(get_session)):
         db_type = "未知"
 
     # 供应商统计
-    total_providers = db.exec(select(ModelProvider)).all()
-    configured_count = len(total_providers)
-    active_count = len([p for p in total_providers if p.is_active and p.api_key])
+    configured_count = db.exec(select(func.count(ModelProvider.id))).one() or 0
+    active_count = db.exec(
+        select(func.count(ModelProvider.id)).where(ModelProvider.is_active == True, ModelProvider.api_key != "")
+    ).one() or 0
 
     # 用户数
-    user_count = db.exec(select(User)).all()
-    admin_count = len([u for u in user_count if u.is_admin])
-    total_users = len(user_count)
+    total_users = db.exec(select(func.count(User.id))).one() or 0
+    admin_count = db.exec(select(func.count(User.id)).where(User.is_admin == True)).one() or 0
 
     # 运行时间
     uptime_seconds = int(time.time() - _SERVER_START_TIME)

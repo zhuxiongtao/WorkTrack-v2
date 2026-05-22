@@ -44,9 +44,9 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
           code: ({ className: cls, children, ...props }: any) => {
             const isInline = !cls
             return isInline ? (
-              <code className="px-1 py-0.5 rounded bg-bg-input text-xs text-[#F59E0B]" {...props}>{children}</code>
+              <code className="px-1 py-0.5 rounded bg-bg-input border border-border text-xs text-amber-600 dark:text-[#F59E0B]" {...props}>{children}</code>
             ) : (
-              <code className={`block p-2 rounded-lg bg-bg-input text-xs text-gray-300 overflow-x-auto ${cls || ''}`} {...props}>{children}</code>
+              <code className={`block p-2 rounded-lg bg-bg-input border border-border text-xs text-gray-700 dark:text-gray-300 overflow-x-auto ${cls || ''}`} {...props}>{children}</code>
             )
           },
           pre: ({ children }) => <pre className="my-2">{children}</pre>,
@@ -58,7 +58,7 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
           ),
           hr: () => <hr className="my-2 border-border" />,
           table: ({ children }) => <div className="overflow-x-auto my-2"><table className="min-w-full text-xs border-collapse">{children}</table></div>,
-          th: ({ children }) => <th className="border border-border px-2 py-1 bg-bg-input text-gray-300">{children}</th>,
+          th: ({ children }) => <th className="border border-border px-2 py-1 bg-gray-100 dark:bg-bg-input text-gray-700 dark:text-gray-300 font-semibold">{children}</th>,
           td: ({ children }) => <td className="border border-border px-2 py-1">{children}</td>,
           img: ({ src, alt }) => (
             <img src={src} alt={alt || ''} className="max-w-full rounded-lg my-2" />

@@ -19,5 +19,6 @@ requests>=2.31.0
 PyMuPDF>=1.24.0
 python-docx>=1.1.0
 olefile>=0.47
+psutil>=5.9.0
 # Windows-only when on Windows: pip install pywin32>=306
 

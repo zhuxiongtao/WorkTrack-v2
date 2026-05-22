@@ -5,7 +5,7 @@ from app.database import get_session
 from app.models.project import Project
 from app.models.meeting_note import MeetingNote
 from app.models.user import User
-from app.auth import get_current_user
+from app.auth import get_current_user, require_permission
 from app.schemas import ProjectCreate, ProjectUpdate, ProjectOut, MeetingNoteOut
 from app.services.vector_store import index_document, delete_document
 from app.services.ai_service import generate_project_analysis
@@ -15,12 +15,20 @@ router = APIRouter(prefix="/api/v1/projects", tags=["项目"])
 
 @router.get("", response_model=list[ProjectOut])
 def list_projects(
+    user_id: Optional[int] = Query(None),
     customer_id: Optional[int] = Query(None),
     status: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("project:read")),
     db: Session = Depends(get_session),
 ):
-    query = select(Project).where(Project.user_id == current_user.id).order_by(Project.created_at.desc())
+    target_uid = user_id if user_id is not None else current_user.id
+    
+    # 统一数据行级访问权限核验（主管、老板、自己）
+    from app.auth import check_data_access
+    if not check_data_access(target_uid, current_user, db):
+        raise HTTPException(status_code=403, detail="无权查看该用户的项目列表")
+
+    query = select(Project).where(Project.user_id == target_uid).order_by(Project.created_at.desc())
     if customer_id:
         query = query.where(Project.customer_id == customer_id)
     if status:
@@ -29,7 +37,7 @@ def list_projects(
 
 
 @router.post("", response_model=ProjectOut, status_code=201)
-def create_project(data: ProjectCreate, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def create_project(data: ProjectCreate, background_tasks: BackgroundTasks, current_user: User = Depends(require_permission("project:create")), db: Session = Depends(get_session)):
     meeting_ids = data.meeting_ids or []
     create_data = data.model_dump(exclude={"meeting_ids"})
     create_data["user_id"] = current_user.id
@@ -55,16 +63,22 @@ def create_project(data: ProjectCreate, background_tasks: BackgroundTasks, curre
 
 
 @router.get("/{project_id}", response_model=ProjectOut)
-def get_project(project_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def get_project(project_id: int, current_user: User = Depends(require_permission("project:read")), db: Session = Depends(get_session)):
     """获取单个项目详情"""
     project = db.get(Project, project_id)
-    if not project or project.user_id != current_user.id:
+    if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
+        
+    # 统一角色权限核验（部门负责人、老板、创作者）
+    from app.auth import check_data_access
+    if not check_data_access(project.user_id, current_user, db):
+        raise HTTPException(status_code=403, detail="无权查看该项目")
+
     return project
 
 
 @router.put("/{project_id}", response_model=ProjectOut)
-def update_project(project_id: int, data: ProjectUpdate, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def update_project(project_id: int, data: ProjectUpdate, background_tasks: BackgroundTasks, current_user: User = Depends(require_permission("project:edit")), db: Session = Depends(get_session)):
     project = db.get(Project, project_id)
     if not project or project.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="项目不存在")
@@ -100,7 +114,7 @@ def update_project(project_id: int, data: ProjectUpdate, background_tasks: Backg
 
 
 @router.delete("/{project_id}", status_code=204)
-def delete_project(project_id: int, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def delete_project(project_id: int, background_tasks: BackgroundTasks, current_user: User = Depends(require_permission("project:delete")), db: Session = Depends(get_session)):
     project = db.get(Project, project_id)
     if not project or project.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="项目不存在")
@@ -110,7 +124,7 @@ def delete_project(project_id: int, background_tasks: BackgroundTasks, current_u
 
 
 @router.post("/{project_id}/ai-analysis")
-def ai_analyze_project(project_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def ai_analyze_project(project_id: int, current_user: User = Depends(require_permission("project:edit")), db: Session = Depends(get_session)):
     """触发 AI 项目分析，结果自动保存到项目"""
     project = db.get(Project, project_id)
     if not project or project.user_id != current_user.id:
@@ -125,7 +139,7 @@ def ai_analyze_project(project_id: int, current_user: User = Depends(get_current
 
 
 @router.get("/{project_id}/meetings", response_model=list[MeetingNoteOut])
-def get_project_meetings(project_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def get_project_meetings(project_id: int, current_user: User = Depends(require_permission("project:read")), db: Session = Depends(get_session)):
     """获取关联到项目的会议列表"""
     project = db.get(Project, project_id)
     if not project or project.user_id != current_user.id:

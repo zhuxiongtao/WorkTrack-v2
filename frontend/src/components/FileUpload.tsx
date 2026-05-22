@@ -49,10 +49,8 @@ export default function FileUpload({ filesJson, onChange, disabled }: FileUpload
       const formData = new FormData()
       formData.append('file', file)
 
-      const token = localStorage.getItem('auth_token')
       const res = await fetch('/api/v1/files/upload', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
         body: formData,
       })
 

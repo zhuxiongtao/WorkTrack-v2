@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.config import settings as app_settings
 from app.database import init_db
-from app.routers import daily_reports, customers, projects, meetings, scheduled_tasks, ai_agent, search, settings, logs, auth, users, dashboard, setup, files, contracts
+from app.routers import daily_reports, customers, projects, meetings, scheduled_tasks, ai_agent, search, settings, logs, auth, users, dashboard, setup, files, contracts, wiki, rbac, monitor
 
 
 def create_app() -> FastAPI:
@@ -37,8 +37,10 @@ def create_app() -> FastAPI:
             "/api/v1/files",           # 上传的文件（图片/附件公开访问）
             "/api/v1/setup",           # 首次运行初始化向导
             "/api/v1/settings/branding",  # 品牌配置（Logo 文件、标题等公开读取）
+            "/api/v1/wiki/public",      # 公开分享的 AI 文档外链访问端点
         ]
         path = request.url.path
+        # print(f"MIDDLEWARE CHECK: {path}, MATCH: {any(path == p or path.startswith(p + '/') for p in public_paths)}")
         if any(path == p or path.startswith(p + "/") for p in public_paths) or path.startswith("/api/v1/auth/"):
             return await call_next(request)
 
@@ -71,6 +73,9 @@ def create_app() -> FastAPI:
     app.include_router(setup.router)
     app.include_router(files.router)
     app.include_router(contracts.router)
+    app.include_router(wiki.router)
+    app.include_router(rbac.router)
+    app.include_router(monitor.router)
 
     # 启动时初始化数据库和调度器
     @app.on_event("startup")
@@ -78,9 +83,21 @@ def create_app() -> FastAPI:
         init_db()
         from app.routers.logs import write_log
         from app.database import engine
-        from sqlmodel import Session
+        from sqlmodel import Session, select, desc
+        from app.models.log_entry import LogEntry
+        from datetime import datetime, timedelta
         with Session(engine) as db:
-            write_log("info", "system", "WorkTrack 服务已启动", details=f"版本: 1.0.0", db=db)
+            # 检查上一次启动日志，防止开发环境下 Uvicorn 频繁 reload 导致数据库被启动日志刷屏
+            stmt = select(LogEntry).where(
+                LogEntry.category == "system",
+                LogEntry.message == "WorkTrack 服务已启动"
+            ).order_by(desc(LogEntry.created_at)).limit(1)
+            last_log = db.exec(stmt).first()
+
+            now = datetime.now()
+            # 如果是首次启动，或者距离上一次启动日志已超过 15 分钟，则记录一条新日志
+            if not last_log or (now - last_log.created_at) > timedelta(minutes=15):
+                write_log("info", "system", "WorkTrack 服务已启动", details=f"版本: 1.0.0", db=db)
         from app.services.scheduler import start_scheduler
         start_scheduler()
 

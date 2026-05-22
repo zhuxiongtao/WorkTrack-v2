@@ -77,9 +77,16 @@ def register(req: RegisterRequest, db: Session = Depends(get_session),
     db.refresh(user)
 
     token = create_access_token(user.id, user.username, user.token_version)
+    from app.auth import get_user_permissions
     return TokenResponse(
         access_token=token,
-        user={"id": user.id, "username": user.username, "name": user.name, "is_admin": user.is_admin, "can_manage_models": user.can_manage_models, "use_shared_models": user.use_shared_models},
+        user={
+            "id": user.id, "username": user.username, "name": user.name, "is_admin": user.is_admin,
+            "email": user.email, "is_active": user.is_active, "avatar": user.avatar,
+            "last_login_at": user.last_login_at.isoformat() if user.last_login_at else None,
+            "can_manage_models": user.can_manage_models, "use_shared_models": user.use_shared_models,
+            "permissions": get_user_permissions(user, db)
+        },
     )
 
 
@@ -91,6 +98,9 @@ def login(req: LoginRequest, db: Session = Depends(get_session)):
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误")
 
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="您的账号已被管理员停用")
+
     lock_msg = check_account_locked(user)
     if lock_msg:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=lock_msg)
@@ -101,9 +111,16 @@ def login(req: LoginRequest, db: Session = Depends(get_session)):
 
     record_login_success(user, db)
     token = create_access_token(user.id, user.username, user.token_version)
+    from app.auth import get_user_permissions
     return TokenResponse(
         access_token=token,
-        user={"id": user.id, "username": user.username, "name": user.name, "is_admin": user.is_admin},
+        user={
+            "id": user.id, "username": user.username, "name": user.name, "is_admin": user.is_admin,
+            "email": user.email, "is_active": user.is_active, "avatar": user.avatar,
+            "last_login_at": user.last_login_at.isoformat() if user.last_login_at else None,
+            "can_manage_models": user.can_manage_models, "use_shared_models": user.use_shared_models,
+            "permissions": get_user_permissions(user, db)
+        },
     )
 
 
@@ -151,7 +168,11 @@ def update_profile(req: UpdateProfileRequest, current_user: User = Depends(get_c
 
 # ===== 获取当前用户 =====
 @router.get("/me")
-def me(current_user: User = Depends(get_current_user)):
+def me(current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+    from app.auth import get_user_permissions, _get_all_role_ids
+    from app.models.rbac import Role
+    all_role_ids = _get_all_role_ids(current_user.id, db)
+    role_codes = list(db.exec(select(Role.code).where(Role.id.in_(all_role_ids))).all()) if all_role_ids else []
     return {
         "id": current_user.id,
         "username": current_user.username,
@@ -163,6 +184,8 @@ def me(current_user: User = Depends(get_current_user)):
         "use_shared_models": current_user.use_shared_models,
         "avatar": current_user.avatar,
         "last_login_at": current_user.last_login_at.isoformat() if current_user.last_login_at else None,
+        "permissions": get_user_permissions(current_user, db),
+        "roles": role_codes,
     }
 
 
@@ -203,7 +226,7 @@ async def upload_avatar(file: UploadFile = File(...), current_user: User = Depen
 
 
 @router.get("/avatar-file/{filename}")
-def serve_avatar(filename: str):
+def serve_avatar(filename: str, current_user: User = Depends(get_current_user)):
     """获取头像文件"""
     filepath = os.path.join(AVATAR_DIR, filename)
     if not os.path.exists(filepath):

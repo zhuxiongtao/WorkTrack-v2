@@ -46,8 +46,8 @@ html {
   --bg-sidebar: #f3f5f8;
   --bg-hover: #eef0f4;
   --bg-hover-secondary: #e4e7ec;
-  --border: #e0e3e8;
-  --accent-blue: #93C5FD;
+  --border: #d1d5db;
+  --accent-blue: #2563EB;
 }
 
 /* ===== 亮色模式 - 强制反色 Tailwind dark: 变体（兜底保障） ===== */
@@ -65,16 +65,40 @@ html {
 
 /* ===== 亮色模式 - 裸浅色文字反色（未使用 dark: 前缀的元素） ===== */
 [data-theme="light"] .text-white { color: #111827 !important; }
+[data-theme="light"] .text-gray-100 { color: #111827 !important; }
 [data-theme="light"] .text-gray-200 { color: #1F2937 !important; }
 [data-theme="light"] .text-gray-300 { color: #374151 !important; }
 [data-theme="light"] .text-gray-400 { color: #4B5563 !important; }
 [data-theme="light"] .text-gray-500 { color: #6B7280 !important; }
 [data-theme="light"] .text-gray-600 { color: #374151 !important; }
+
+/* ===== 修复亮色模式下彩色/深色背景中文字被强制变黑的问题 ===== */
+[data-theme="light"] .bg-accent-blue,
+[data-theme="light"] .bg-accent-blue *,
+[data-theme="light"] .bg-\[\#3B82F6\],
+[data-theme="light"] .bg-\[\#3B82F6\] *,
+[data-theme="light"] .bg-blue-500,
+[data-theme="light"] .bg-blue-500 *,
+[data-theme="light"] .bg-red-500,
+[data-theme="light"] .bg-red-500 *,
+[data-theme="light"] .bg-emerald-500,
+[data-theme="light"] .bg-emerald-500 *,
+[data-theme="light"] .bg-purple-500,
+[data-theme="light"] .bg-purple-500 *,
+[data-theme="light"] .bg-amber-500,
+[data-theme="light"] .bg-amber-500 *,
+[data-theme="light"] .bg-violet-500,
+[data-theme="light"] .bg-violet-500 *,
+[data-theme="light"] .text-white-force {
+  color: #ffffff !important;
+}
+
 [data-theme="light"] .placeholder-gray-500::placeholder { color: #9CA3AF !important; }
 [data-theme="light"] .placeholder-gray-600::placeholder { color: #9CA3AF !important; }
 
 /* ===== 亮色模式 - hover 反色 ===== */
 [data-theme="light"] .hover\:text-white:hover { color: #111827 !important; }
+[data-theme="light"] .hover\:text-gray-200:hover { color: #1F2937 !important; }
 [data-theme="light"] .hover\:text-gray-300:hover { color: #374151 !important; }
 
 [data-theme="light"] .border-theme { border-color: var(--border) !important; }
@@ -149,7 +173,7 @@ body {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* ===== AI 聊天 Markdown 消息样式 ===== */
+/* ===== AI 聊天 / 日报详情 Markdown/HTML 渲染 ===== */
 .markdown-body > *:first-child { margin-top: 0 !important; }
 .markdown-body > *:last-child { margin-bottom: 0 !important; }
 .markdown-body p { margin: 0.35em 0; line-height: 1.65; }
@@ -158,17 +182,35 @@ body {
 .markdown-body li > p { margin: 0; }
 .markdown-body h1, .markdown-body h2, .markdown-body h3,
 .markdown-body h4, .markdown-body h5, .markdown-body h6 { margin: 0.6em 0 0.3em; }
-.markdown-body hr { margin: 0.5em 0; opacity: 0.3; }
+.markdown-body h1 { font-size: 1.4em; font-weight: 700; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
+:root[data-theme="dark"] .markdown-body h1 { border-color: #374151; }
+.markdown-body h2 { font-size: 1.2em; font-weight: 700; }
+.markdown-body h3 { font-size: 1.05em; font-weight: 600; }
+.markdown-body hr { margin: 0.5em 0; opacity: 0.3; border-color: inherit; }
 .markdown-body code {
   font-size: 0.85em; padding: 1px 3px; border-radius: 3px;
-  background: rgba(59, 130, 246, 0.12); color: #F59E0B;
+  background: #e5e7eb; color: #b45309;
 }
-.markdown-body pre { margin: 0.4em 0; }
+:root[data-theme="dark"] .markdown-body code { background: #1f2937; color: #f59e0b; }
+.markdown-body pre {
+  margin: 0.4em 0; padding: 12px; border-radius: 8px;
+  background: #e5e7eb; border: 1px solid #d1d5db; overflow-x: auto;
+}
+:root[data-theme="dark"] .markdown-body pre { background: #1f2937; border-color: #374151; }
 .markdown-body pre code { background: transparent; color: inherit; padding: 0; }
-.markdown-body blockquote { margin: 0.4em 0; }
+.markdown-body blockquote {
+  margin: 0.4em 0; padding-left: 12px;
+  border-left: 3px solid #3B82F6; color: #6b7280;
+}
+:root[data-theme="dark"] .markdown-body blockquote { color: #9ca3af; }
 .markdown-body table { margin: 0.4em 0; border-collapse: collapse; font-size: 0.9em; }
-.markdown-body th, .markdown-body td { padding: 3px 8px; border: 1px solid var(--border); }
+.markdown-body th, .markdown-body td { padding: 3px 8px; border: 1px solid #d1d5db; }
+:root[data-theme="dark"] .markdown-body th,
+:root[data-theme="dark"] .markdown-body td { border-color: #374151; }
+.markdown-body th { background: #e5e7eb; font-weight: 600; }
+:root[data-theme="dark"] .markdown-body th { background: #1f2937; }
 .markdown-body img { max-width: 100%; border-radius: 8px; margin: 0.4em 0; }
+.markdown-body a { color: #3B82F6; text-decoration: underline; }
 
 /* ===== 会议卡片 Markdown 预览紧凑样式 ===== */
 .markdown-preview-card h1, .markdown-preview-card h2, .markdown-preview-card h3,

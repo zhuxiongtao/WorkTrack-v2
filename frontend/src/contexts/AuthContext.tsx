@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 
+let _interceptorInstalled = false
+
 interface User {
   id: number
   username: string
@@ -11,6 +13,8 @@ interface User {
   use_shared_models: boolean
   avatar: string | null
   last_login_at: string | null
+  permissions?: string[]
+  roles?: string[]
 }
 
 interface AuthContextValue {
@@ -22,6 +26,7 @@ interface AuthContextValue {
   changePassword: (oldPassword: string, newPassword: string) => Promise<void>
   isAdmin: boolean
   fetchWithAuth: (url: string, options?: RequestInit) => Promise<Response>
+  hasPermission: (perm: string) => boolean
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -33,6 +38,7 @@ const AuthContext = createContext<AuthContextValue>({
   changePassword: async () => {},
   isAdmin: false,
   fetchWithAuth: async () => new Response(),
+  hasPermission: () => false,
 })
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -49,6 +55,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // 全局 fetch 拦截：自动为 /api/ 请求添加 Authorization header
   useEffect(() => {
+    if (_interceptorInstalled) return
+
     if (originalFetch.current === null) {
       originalFetch.current = window.fetch.bind(window)
     }
@@ -57,7 +65,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
       const currentToken = tokenRef.current
 
-      // 只拦截同源 /api/ 请求，且当前有 token
       if (currentToken && (url.startsWith('/api/') || url.includes('/api/'))) {
         const headers = new Headers(init?.headers)
         if (!headers.has('Authorization')) {
@@ -69,23 +76,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return originalFetch.current!(input, init)
     }
 
+    _interceptorInstalled = true
+
     return () => {
       // 组件卸载时恢复原始 fetch
       if (originalFetch.current) {
         window.fetch = originalFetch.current
         originalFetch.current = null
       }
+      _interceptorInstalled = false
     }
   }, [])
 
   // 初始化时用现有 token 获取用户信息
   useEffect(() => {
     if (token) {
-      fetch('/api/v1/auth/me', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      fetch('/api/v1/auth/me')
         .then((res) => {
-          if (!res.ok) throw new Error('token invalid')
+          if (res.status === 401) {
+            localStorage.removeItem('auth_token')
+            setToken(null)
+            setUser(null)
+            throw new Error('token invalid')
+          }
+          if (!res.ok) throw new Error('fetch failed')
           return res.json()
         })
         .then((data) => {
@@ -162,6 +176,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [fetchWithAuth],
   )
 
+  /** 判断权限 */
+  const hasPermission = useCallback((perm: string): boolean => {
+    if (!user) return false
+    return Array.isArray(user.permissions) && user.permissions.includes(perm)
+  }, [user])
+
   return (
     <AuthContext.Provider
       value={{
@@ -173,6 +193,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         changePassword,
         isAdmin: user?.is_admin ?? false,
         fetchWithAuth,
+        hasPermission,
       }}
     >
       {children}

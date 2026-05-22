@@ -1,12 +1,13 @@
-import { useState, useEffect, useRef } from 'react'
-import { Plus, X, Trash2, Loader2, Sparkles, Calendar, ChevronDown, ChevronRight, Upload, Mic, MicOff, Maximize2, Minimize2 } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { Plus, X, Trash2, Loader2, Sparkles, Calendar, ChevronDown, ChevronRight, Upload, Mic, MicOff, Maximize2, Minimize2, Send } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../contexts/ToastContext'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import FileUpload from '../components/FileUpload'
 import RichTextEditor from '../components/RichTextEditor'
-import { useToast } from '../contexts/ToastContext'
 
 interface ReportCard {
-  id: number; date: string; title: string; snippet: string; ai_summary: string; has_summary: boolean
+  id: number; date: string; title: string; snippet: string; ai_summary: string; has_summary: boolean; status?: string
 }
 
 interface WeekGroup {
@@ -22,19 +23,25 @@ interface YearGroup {
 }
 
 interface ReportDetail {
-  id: number; report_date: string; content_md: string; ai_summary: string | null
+  id: number; user_id: number; report_date: string; content_md: string; ai_summary: string | null
   files_json?: string | null
+  status: string
 }
 
 const MONTH_NAMES = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月']
 const WEEKDAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
 export default function ReportsPage() {
+  const { hasPermission, user: currentUser } = useAuth()
   const { confirm: showConfirm, toast: showToast } = useToast()
   const [grouped, setGrouped] = useState<YearGroup[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  
+  // 成员筛选（主管、Boss审查下属汇报）
+  const [memberList, setMemberList] = useState<any[]>([])
+  const [selectedUserId, setSelectedUserId] = useState<number | string>('')
   const [editingReport, setEditingReport] = useState<ReportDetail | null>(null)
   const [formContent, setFormContent] = useState('')
   const [formDate, setFormDate] = useState('')
@@ -153,8 +160,10 @@ export default function ReportsPage() {
   const [modalDetail, setModalDetail] = useState<ReportDetail | null>(null)
   const [modalLoading, setModalLoading] = useState(false)
 
-  const loadReports = () => {
-    fetch('/api/v1/reports/grouped')
+  const loadReports = useCallback(() => {
+    setLoading(true)
+    const url = '/api/v1/reports/grouped' + (selectedUserId ? `?user_id=${selectedUserId}` : '')
+    fetch(url)
       .then((res) => res.json())
       .then((data) => {
         setGrouped(data.grouped || [])
@@ -169,9 +178,17 @@ export default function ReportsPage() {
         }
       })
       .catch(() => setLoading(false))
-  }
+  }, [selectedUserId])
 
-  useEffect(() => { loadReports() }, [])
+  useEffect(() => { loadReports() }, [loadReports])
+
+  useEffect(() => {
+    // 预拉取员工简易列表
+    fetch('/api/v1/users/simple')
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setMemberList(d) })
+      .catch(() => {})
+  }, [])
 
   const openDetail = async (id: number) => {
     setModalLoading(true)
@@ -201,12 +218,12 @@ export default function ReportsPage() {
     setShowForm(true)
   }
 
-  const handleSave = async () => {
+  const handleSave = async (statusVal: 'draft' | 'submitted') => {
     if (!formContent.trim()) return
     setSaving(true)
     try {
       const today = new Date().toISOString().slice(0, 10)
-      const base = { content_md: formContent, report_date: formDate || undefined, files_json: formFiles || undefined }
+      const base = { content_md: formContent, report_date: formDate || undefined, files_json: formFiles || undefined, status: statusVal }
       if (editingReport) {
         await fetch(`/api/v1/reports/${editingReport.id}`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -215,13 +232,13 @@ export default function ReportsPage() {
       } else {
         await fetch('/api/v1/reports', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...base, report_date: formDate || today }),
+          body: JSON.stringify({ ...base, status: statusVal, report_date: formDate || today }),
         })
       }
       setShowForm(false)
       loadReports()
       if (modalDetail) openDetail(modalDetail.id)
-      showToast(editingReport ? '日报已更新' : '日报保存成功', 'success')
+      showToast(statusVal === 'submitted' ? '日报已提交发布给上级领导' : '日报草稿已保存', 'success')
     } finally { setSaving(false) }
   }
 
@@ -254,13 +271,31 @@ export default function ReportsPage() {
     <div>
       {/* 头部 */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
-        <div>
-          <h2 className="text-2xl font-bold text-white">日报</h2>
-          <p className="text-sm text-gray-500 mt-1">{total} 条记录</p>
+        <div className="flex items-center gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-white">日报</h2>
+            <p className="text-sm text-gray-500 mt-1">{total} 条记录</p>
+          </div>
+          {/* 管理者与老板专属：成员数据切换下拉框 */}
+          {(hasPermission('report:view_all') && memberList.length > 0) && (
+            <select
+              value={selectedUserId}
+              onChange={e => setSelectedUserId(e.target.value)}
+              style={{ colorScheme: 'dark' }}
+              className="px-3 py-1.5 rounded-xl bg-bg-card border border-border text-xs text-gray-300 outline-none focus:border-[#3B82F6] cursor-pointer font-bold"
+            >
+              <option value="">全部下属成员</option>
+              {memberList.map(m => (
+                <option key={m.id} value={m.id}>{m.name || m.username}</option>
+              ))}
+            </select>
+          )}
         </div>
-        <button onClick={openCreate} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent-blue text-white text-sm font-medium hover:bg-accent-blue/85 transition-all shadow-lg shadow-accent-blue/20">
-          <Plus size={17} /><span>写日报</span>
-        </button>
+        {hasPermission('report:create') && (
+          <button onClick={openCreate} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent-blue text-white text-sm font-medium hover:bg-accent-blue/85 transition-all shadow-lg shadow-accent-blue/20 shrink-0">
+            <Plus size={17} /><span>写日报</span>
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -308,22 +343,29 @@ export default function ReportsPage() {
                               <button
                                 key={r.id}
                                 onClick={() => openDetail(r.id)}
-                                className="w-full text-left p-4 rounded-xl bg-bg-card border border-border hover:border-[#3B82F6]/60 hover:bg-bg-hover-secondary transition-all group/card h-36 flex flex-col"
+                                className="group/card relative w-full text-left rounded-xl bg-bg-card border border-border/60 hover:border-[#3B82F6]/50 hover:shadow-md hover:shadow-[#3B82F6]/5 transition-all duration-200 flex flex-col overflow-hidden"
+                                style={{ borderTopWidth: '3px', borderTopColor: '#3B82F660' }}
                               >
-                                <div className="flex items-center justify-between mb-2 shrink-0">
-                                  <div className="flex items-center gap-1.5">
-                                    <Calendar size={11} className="text-gray-500" />
-                                    <span className="text-xs text-gray-400">
-                                      {d.getMonth() + 1}/{d.getDate()} {WEEKDAY_NAMES[d.getDay()]}
-                                    </span>
+                                <div className="p-3 flex-1 flex flex-col">
+                                  <div className="flex items-center justify-between mb-1.5 shrink-0">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-[10px] font-medium text-gray-500 tracking-wide">
+                                        {d.getMonth() + 1}/{d.getDate()} · {WEEKDAY_NAMES[d.getDay()]}
+                                      </span>
+                                      {r.status === 'draft' ? (
+                                        <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/10 text-amber-500 font-bold border border-amber-500/15">草稿</span>
+                                      ) : (
+                                        <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/10 text-emerald-500 font-bold border border-emerald-500/15">已提交</span>
+                                      )}
+                                    </div>
+                                    {r.has_summary && <Sparkles size={10} className="text-[#8B5CF6]" />}
                                   </div>
-                                  {r.has_summary && <Sparkles size={11} className="text-[#8B5CF6]" />}
+                                  {r.ai_summary ? (
+                                    <p className="text-[11px] text-gray-400 dark:text-gray-300 line-clamp-3 leading-relaxed flex-1">{r.ai_summary}</p>
+                                  ) : (
+                                    <p className="text-[11px] text-gray-500 line-clamp-3 leading-relaxed flex-1 italic">点击查看详情</p>
+                                  )}
                                 </div>
-                                {r.ai_summary ? (
-                                  <p className="text-xs text-gray-300 line-clamp-4 leading-relaxed flex-1">{r.ai_summary}</p>
-                                ) : (
-                                  <p className="text-xs text-gray-600 line-clamp-4 leading-relaxed flex-1 italic">暂无 AI 摘要，点击查看详情</p>
-                                )}
                               </button>
                             )
                           })}
@@ -350,14 +392,35 @@ export default function ReportsPage() {
                 </h3>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
+                {modalDetail.status === 'draft' && modalDetail.user_id === currentUser?.id && (
+                  <button
+                    onClick={async () => {
+                      if (!await showConfirm('确认将该篇日报提交发布给上级领导吗？')) return
+                      await fetch(`/api/v1/reports/${modalDetail.id}`, {
+                        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: 'submitted' }),
+                      })
+                      showToast('日报已成功提交给主管审查！', 'success')
+                      closeDetail()
+                      loadReports()
+                    }}
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-accent-blue text-white hover:bg-blue-600 transition-colors border border-transparent shadow-sm font-bold cursor-pointer"
+                  >
+                    <Send size={11} /> 提交上级
+                  </button>
+                )}
                 <button onClick={() => handleAiSummarize(modalDetail.id)} disabled={aiLoading === modalDetail.id}
                   className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-gray-300 hover:text-[#8B5CF6] hover:bg-border transition-colors disabled:opacity-50 border border-border">
                   {aiLoading === modalDetail.id ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}AI 整理
                 </button>
-                <button onClick={() => { closeDetail(); openEdit(modalDetail) }}
-                  className="text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-gray-300 hover:text-white transition-colors border border-border">编辑</button>
-                <button onClick={() => handleDelete(modalDetail.id)}
-                  className="text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors border border-border"><Trash2 size={13} /></button>
+                {hasPermission('report:edit') && (
+                  <button onClick={() => { closeDetail(); openEdit(modalDetail) }}
+                    className="text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-gray-300 hover:text-white transition-colors border border-border">编辑</button>
+                )}
+                {hasPermission('report:delete') && (
+                  <button onClick={() => handleDelete(modalDetail.id)}
+                    className="text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors border border-border"><Trash2 size={13} /></button>
+                )}
                 <button onClick={closeDetail} className="ml-2 p-2 rounded-lg hover:bg-bg-hover text-gray-500 hover:text-white transition-colors"><X size={18} /></button>
               </div>
             </div>
@@ -368,7 +431,7 @@ export default function ReportsPage() {
                 <div className="text-center py-12"><Loader2 size={20} className="mx-auto animate-spin text-gray-500" /></div>
               ) : (
                 <>
-                  <div className="text-sm text-gray-300 leading-relaxed prose prose-invert prose-sm max-w-none">
+                  <div className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed max-w-none">
                     <MarkdownRenderer content={modalDetail.content_md} />
                   </div>
                   {modalDetail.files_json && (() => {
@@ -392,7 +455,7 @@ export default function ReportsPage() {
                   {modalDetail.ai_summary && (
                     <div className="mt-6 p-5 rounded-xl bg-gradient-to-br from-bg-hover to-bg-card border border-border">
                       <p className="text-xs text-gray-500 mb-2 flex items-center gap-2"><Sparkles size={13} className="text-[#8B5CF6]" />AI 摘要</p>
-                      <div className="text-sm text-gray-300 leading-relaxed"><MarkdownRenderer content={modalDetail.ai_summary} /></div>
+                      <div className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed"><MarkdownRenderer content={modalDetail.ai_summary} /></div>
                     </div>
                   )}
                 </>
@@ -440,10 +503,8 @@ export default function ReportsPage() {
                   uploadFn={async (file: File) => {
                     const formData = new FormData()
                     formData.append('file', file)
-                    const token = localStorage.getItem('auth_token')
                     const res = await fetch('/api/v1/files/upload', {
                       method: 'POST',
-                      headers: { Authorization: `Bearer ${token}` },
                       body: formData,
                     })
                     if (!res.ok) throw new Error('Upload failed')
@@ -488,10 +549,17 @@ export default function ReportsPage() {
                   {recording ? '停止录音' : '语音录入'}
                 </button>
               </div>
-              <button onClick={handleSave} disabled={saving || !formContent.trim()}
-                className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-accent-blue text-white text-sm font-medium hover:bg-accent-blue/85 disabled:opacity-50 transition-all">
-                {saving && <Loader2 size={15} className="animate-spin" />}{saving ? '保存中...' : '保存'}
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => handleSave('draft')} disabled={saving || !formContent.trim()}
+                  className="px-4 py-2.5 rounded-xl bg-bg-hover hover:bg-gray-200 text-xs text-gray-500 hover:text-gray-850 dark:text-gray-400 dark:hover:text-gray-200 border border-gray-200 dark:border-border/30 transition-colors cursor-pointer font-semibold shadow-sm">
+                  {saving ? <Loader2 size={13} className="animate-spin" /> : '💾 保存草稿'}
+                </button>
+                <button onClick={() => handleSave('submitted')} disabled={saving || !formContent.trim()}
+                  className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-accent-blue text-white text-xs font-bold hover:bg-blue-600 disabled:opacity-50 transition-all cursor-pointer shadow-sm">
+                  {saving ? <Loader2 size={13} className="animate-spin" /> : <Send size={12} />}
+                  <span>🚀 提交上级</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

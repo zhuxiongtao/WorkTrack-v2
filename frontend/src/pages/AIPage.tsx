@@ -233,7 +233,10 @@ export default function AIPage() {
               </button>
             )}
             <div className="min-w-0">
-              <h2 className="text-lg max-md:text-base font-bold text-white truncate">AI 中心</h2>
+              <h2 className="text-lg max-md:text-base font-bold text-white truncate flex items-center gap-1.5">
+                <span className="text-sm bg-gradient-to-r from-violet-500 to-purple-500 bg-clip-text text-transparent font-extrabold">AI</span>
+                中心
+              </h2>
               <p className="text-xs text-gray-500 mt-0.5 hidden sm:block">智能助手 · 搜索日报客户项目会议 · AI 分析 · 联网查询 · 自动任务</p>
             </div>
           </div>

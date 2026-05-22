@@ -1,7 +1,7 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlmodel import Session, select
+from sqlmodel import Session, select, func
 from sqlalchemy import delete as sa_delete
 from app.database import get_session
 from app.services.ai_agent import run_agent_chat
@@ -75,18 +75,27 @@ class ConversationOut(BaseModel):
 @router.get("/conversations", response_model=list[ConversationOut])
 def list_conversations(current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
     """获取当前用户的对话列表"""
-    convs = db.exec(
-        select(ChatConversation).where(ChatConversation.user_id == current_user.id).order_by(ChatConversation.updated_at.desc())
+    msg_count_sq = (
+        select(
+            ChatMessage.conversation_id,
+            func.count(ChatMessage.id).label("msg_count")
+        ).group_by(ChatMessage.conversation_id)
+    ).subquery()
+    rows = db.exec(
+        select(
+            ChatConversation,
+            func.coalesce(msg_count_sq.c.msg_count, 0)
+        )
+        .outerjoin(msg_count_sq, ChatConversation.id == msg_count_sq.c.conversation_id)
+        .where(ChatConversation.user_id == current_user.id)
+        .order_by(ChatConversation.updated_at.desc())
     ).all()
     result = []
-    for c in convs:
-        count = db.exec(
-            select(ChatMessage).where(ChatMessage.conversation_id == c.id)
-        ).all()
+    for conv, count in rows:
         result.append(ConversationOut(
-            id=c.id, title=c.title or "新对话",
-            created_at=c.created_at, updated_at=c.updated_at,
-            message_count=len(count),
+            id=conv.id, title=conv.title or "新对话",
+            created_at=conv.created_at, updated_at=conv.updated_at,
+            message_count=count,
         ))
     return result
 

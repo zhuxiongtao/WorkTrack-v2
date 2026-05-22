@@ -8,7 +8,7 @@ from sqlmodel import Session, select
 from app.database import get_session
 from app.models.meeting_note import MeetingNote
 from app.models.user import User
-from app.auth import get_current_user
+from app.auth import get_current_user, require_permission
 from app.schemas import MeetingNoteCreate, MeetingNoteUpdate, MeetingNoteOut
 from app.services.vector_store import index_document, delete_document
 from app.services.ai_service import extract_meeting_minutes, transcribe_audio, organize_transcript
@@ -18,14 +18,22 @@ router = APIRouter(prefix="/api/v1/meetings", tags=["会议"])
 
 @router.get("", response_model=list[MeetingNoteOut])
 def list_meetings(
+    user_id: Optional[int] = Query(None),
     customer_id: Optional[int] = Query(None),
     project_id: Optional[int] = Query(None),
     start_date: Optional[datetime] = Query(None),
     end_date: Optional[datetime] = Query(None),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("meeting:read")),
     db: Session = Depends(get_session),
 ):
-    query = select(MeetingNote).where(MeetingNote.user_id == current_user.id).order_by(MeetingNote.meeting_date.desc())
+    target_uid = user_id if user_id is not None else current_user.id
+    
+    # 统一级数据权限核验（部门负责人、老板、自己）
+    from app.auth import check_data_access
+    if not check_data_access(target_uid, current_user, db):
+        raise HTTPException(status_code=403, detail="无权查看该用户的会议纪要列表")
+
+    query = select(MeetingNote).where(MeetingNote.user_id == target_uid).order_by(MeetingNote.meeting_date.desc())
     if customer_id:
         query = query.where(MeetingNote.customer_id == customer_id)
     if project_id:
@@ -38,7 +46,7 @@ def list_meetings(
 
 
 @router.post("", response_model=MeetingNoteOut, status_code=201)
-def create_meeting(data: MeetingNoteCreate, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def create_meeting(data: MeetingNoteCreate, background_tasks: BackgroundTasks, current_user: User = Depends(require_permission("meeting:create")), db: Session = Depends(get_session)):
     create_data = data.model_dump()
     create_data["user_id"] = current_user.id
     meeting = MeetingNote(**create_data)
@@ -56,7 +64,7 @@ def create_meeting(data: MeetingNoteCreate, background_tasks: BackgroundTasks, c
 
 
 @router.put("/{meeting_id}", response_model=MeetingNoteOut)
-def update_meeting(meeting_id: int, data: MeetingNoteUpdate, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def update_meeting(meeting_id: int, data: MeetingNoteUpdate, background_tasks: BackgroundTasks, current_user: User = Depends(require_permission("meeting:edit")), db: Session = Depends(get_session)):
     meeting = db.get(MeetingNote, meeting_id)
     if not meeting or meeting.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="会议不存在")
@@ -77,7 +85,7 @@ def update_meeting(meeting_id: int, data: MeetingNoteUpdate, background_tasks: B
 
 
 @router.delete("/{meeting_id}", status_code=204)
-def delete_meeting(meeting_id: int, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def delete_meeting(meeting_id: int, background_tasks: BackgroundTasks, current_user: User = Depends(require_permission("meeting:delete")), db: Session = Depends(get_session)):
     meeting = db.get(MeetingNote, meeting_id)
     if not meeting or meeting.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="会议不存在")
@@ -87,7 +95,7 @@ def delete_meeting(meeting_id: int, background_tasks: BackgroundTasks, current_u
 
 
 @router.post("/{meeting_id}/ai-extract")
-def ai_extract_meeting(meeting_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def ai_extract_meeting(meeting_id: int, current_user: User = Depends(require_permission("meeting:edit")), db: Session = Depends(get_session)):
     """手动触发 AI 提取会议结构化信息"""
     meeting = db.get(MeetingNote, meeting_id)
     if not meeting or meeting.user_id != current_user.id:
@@ -134,7 +142,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 @router.post("/{meeting_id}/upload-audio")
-async def upload_meeting_audio(meeting_id: int, file: UploadFile = File(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+async def upload_meeting_audio(meeting_id: int, file: UploadFile = File(...), current_user: User = Depends(require_permission("meeting:edit")), db: Session = Depends(get_session)):
     """上传会议录音文件"""
     meeting = db.get(MeetingNote, meeting_id)
     if not meeting or meeting.user_id != current_user.id:
@@ -158,7 +166,7 @@ async def upload_meeting_audio(meeting_id: int, file: UploadFile = File(...), cu
 
 
 @router.post("/{meeting_id}/transcribe")
-def transcribe_meeting_audio(meeting_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def transcribe_meeting_audio(meeting_id: int, current_user: User = Depends(require_permission("meeting:edit")), db: Session = Depends(get_session)):
     """将会议录音转写为文字，并可选 AI 整理"""
     meeting = db.get(MeetingNote, meeting_id)
     if not meeting or meeting.user_id != current_user.id:
@@ -178,7 +186,7 @@ def transcribe_meeting_audio(meeting_id: int, current_user: User = Depends(get_c
 
 
 @router.post("/{meeting_id}/transcribe-and-organize")
-def transcribe_and_organize(meeting_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def transcribe_and_organize(meeting_id: int, current_user: User = Depends(require_permission("meeting:edit")), db: Session = Depends(get_session)):
     """转写并 AI 整理，自动填入会议纪要"""
     meeting = db.get(MeetingNote, meeting_id)
     if not meeting or meeting.user_id != current_user.id:
@@ -202,7 +210,7 @@ def transcribe_and_organize(meeting_id: int, current_user: User = Depends(get_cu
 
 
 @router.get("/audio/{filename}")
-def serve_audio(filename: str):
+def serve_audio(filename: str, current_user: User = Depends(get_current_user)):
     """获取录音文件"""
     from fastapi.responses import FileResponse
     filepath = os.path.join(UPLOAD_DIR, filename)
