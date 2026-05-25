@@ -24,7 +24,17 @@ def list_customers(
     current_user: User = Depends(require_permission("customer:read")),
     db: Session = Depends(get_session),
 ):
-    query = select(Customer).where(Customer.user_id == current_user.id).order_by(Customer.created_at.desc())
+    from app.auth import check_data_access, get_user_permissions
+    perms = get_user_permissions(current_user, db)
+    if current_user.is_admin or "customer:read" in perms and (current_user.is_admin or "project:view_all" in perms or "report:view_all" in perms):
+        query = select(Customer).order_by(Customer.created_at.desc())
+    else:
+        from app.routers.users import get_dept_member_ids
+        dept_member_ids = get_dept_member_ids(current_user, db)
+        if dept_member_ids is not None:
+            query = select(Customer).where(Customer.user_id.in_(dept_member_ids)).order_by(Customer.created_at.desc())
+        else:
+            query = select(Customer).where(Customer.user_id == current_user.id).order_by(Customer.created_at.desc())
     if status:
         query = query.where(Customer.status == status)
     return db.exec(query).all()

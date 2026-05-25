@@ -27,6 +27,7 @@ interface AuthContextValue {
   isAdmin: boolean
   fetchWithAuth: (url: string, options?: RequestInit) => Promise<Response>
   hasPermission: (perm: string) => boolean
+  setUser: React.Dispatch<React.SetStateAction<User | null>>
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -39,6 +40,7 @@ const AuthContext = createContext<AuthContextValue>({
   isAdmin: false,
   fetchWithAuth: async () => new Response(),
   hasPermission: () => false,
+  setUser: () => {},
 })
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -194,6 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAdmin: user?.is_admin ?? false,
         fetchWithAuth,
         hasPermission,
+        setUser,
       }}
     >
       {children}

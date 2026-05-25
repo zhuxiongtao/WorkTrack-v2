@@ -21,7 +21,7 @@ from app.models.user import User
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 # 头像存储目录
-AVATAR_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "avatars")
+AVATAR_DIR = settings.effective_avatar_dir
 os.makedirs(AVATAR_DIR, exist_ok=True)
 ALLOWED_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.webp'}
 
@@ -226,8 +226,10 @@ async def upload_avatar(file: UploadFile = File(...), current_user: User = Depen
 
 
 @router.get("/avatar-file/{filename}")
-def serve_avatar(filename: str, current_user: User = Depends(get_current_user)):
-    """获取头像文件"""
+def serve_avatar(filename: str):
+    """获取头像文件（公开访问，浏览器 <img> 标签无法携带认证头）"""
+    if '..' in filename or '/' in filename or '\\' in filename:
+        raise HTTPException(status_code=404, detail="头像文件不存在")
     filepath = os.path.join(AVATAR_DIR, filename)
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="头像文件不存在")

@@ -14,8 +14,27 @@ from app.database import get_session
 from app.models.user import User
 from app.models.rbac import Role, DepartmentRole
 from app.models.wiki import UserGroup
+from app.models.department import Department
 
 router = APIRouter(prefix="/api/v1/users", tags=["用户管理"])
+
+
+def get_dept_member_ids(current_user: User, db: Session) -> Optional[List[int]]:
+    """获取当前用户所在部门及其子部门的所有成员 ID。
+    如果用户没有部门或不是部门领导，返回 None（表示不限制）。
+    如果是部门领导，返回本部门+子部门成员 ID 列表用于数据过滤。
+    """
+    if not current_user.department_id:
+        return None
+    from app.auth import get_user_permissions
+    perms = get_user_permissions(current_user, db)
+    if "report:view_all" in perms or current_user.is_admin:
+        return None
+    dept_ids = [current_user.department_id]
+    child_depts = db.exec(select(Department).where(Department.parent_id == current_user.department_id)).all()
+    dept_ids.extend(d.id for d in child_depts)
+    members = db.exec(select(User).where(User.department_id.in_(dept_ids))).all()
+    return [m.id for m in members] if members else [current_user.id]
 
 
 # ===== 请求/响应模型 =====
@@ -265,9 +284,16 @@ def list_users(
 # ===== 获取简单用户列表（供协同和选择器使用，面向所有登录用户） =====
 @router.get("/simple")
 def get_users_simple(db: Session = Depends(get_session),
-                      _user: User = Depends(get_current_user)):
+                      _user: User = Depends(get_current_user),
+                      department_id: Optional[int] = Query(None)):
     """获取基础用户列表（供在线文档等协作者选择使用，任何登录用户均可访问）"""
-    users = db.exec(select(User).where(User.is_active == True, User.status != "resigned").order_by(User.name)).all()
+    query = select(User).where(User.is_active == True, User.status != "resigned")
+    dept_member_ids = get_dept_member_ids(_user, db)
+    if department_id:
+        query = query.where(User.department_id == department_id)
+    elif dept_member_ids is not None:
+        query = query.where(User.id.in_(dept_member_ids))
+    users = db.exec(query.order_by(User.name)).all()
     return [{"id": u.id, "username": u.username, "name": u.name, "department_id": u.department_id} for u in users]
 
 
@@ -302,7 +328,7 @@ def create_department(data: DepartmentCreate, db: Session = Depends(get_session)
     existing = db.exec(select(Department).where(Department.name == data.name)).first()
     if existing:
         raise HTTPException(status_code=409, detail="部门名称已存在")
-    dept = Department(name=data.name, manager_id=data.manager_id, parent_id=data.parent_id)
+    dept = Department(name=data.name, manager_id=data.manager_id if data.manager_id != 0 else None, parent_id=data.parent_id if data.parent_id != 0 else None)
     db.add(dept)
     db.commit()
     db.refresh(dept)

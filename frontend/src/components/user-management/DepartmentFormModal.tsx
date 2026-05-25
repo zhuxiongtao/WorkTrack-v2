@@ -106,13 +106,13 @@ export function DepartmentFormModal({ isOpen, editingDepartment, parentDepartmen
       if (editingDepartment) {
         await updateMutation.mutateAsync({
           id: editingDepartment.id,
-          data: { name: name.trim(), parent_id: parentId ?? 0, manager_id: managerId ?? 0 },
+          data: { name: name.trim(), parent_id: parentId, manager_id: managerId },
         })
       } else {
         await createMutation.mutateAsync({
           name: name.trim(),
-          parent_id: parentId ?? 0,
-          manager_id: managerId ?? 0,
+          parent_id: parentId,
+          manager_id: managerId,
         })
       }
       onClose()

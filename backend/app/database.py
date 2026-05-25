@@ -186,23 +186,24 @@ PERMISSION_DEFS = [
 ROLE_DEFS = {
     "admin": {
         "name": "系统管理员",
-        "description": "系统运维管理员，负责用户管理、系统配置与运维监控，不参与业务操作",
+        "description": "系统运维管理员，负责用户管理、系统配置、运维监控与模型供应商管理",
         "perms": [
             "user:read", "user:create", "user:edit", "user:delete", "user:manage_roles",
             "settings:read", "settings:edit",
             "log:read",
             "monitor:read",
+            "ai:use", "ai:manage_own", "ai:manage_shared",
         ],
     },
     "dept_leader": {
         "name": "部门领导",
-        "description": "部门领导，可查看全部数据并有部分管理权限",
+        "description": "部门领导，可查看本部门数据并有部分管理权限",
         "perms": [
             "user:read",
-            "project:read", "project:create", "project:edit", "project:view_all",
+            "project:read", "project:create", "project:edit",
             "customer:read", "customer:create", "customer:edit",
             "contract:read", "contract:parse",
-            "report:read", "report:view_all",
+            "report:read", "report:create", "report:edit",
             "meeting:read",
             "ai:use", "ai:manage_own",
             "wiki:read", "wiki:create", "wiki:edit",
@@ -219,7 +220,7 @@ ROLE_DEFS = {
             "project:read", "project:create", "project:edit", "project:delete",
             "customer:read", "customer:create", "customer:edit", "customer:delete",
             "contract:read", "contract:create", "contract:edit", "contract:delete", "contract:parse",
-            "report:read", "report:create", "report:edit",
+            "report:read", "report:create",
             "ai:use",
             "wiki:read",
             "dashboard:read",
@@ -241,7 +242,7 @@ ROLE_DEFS = {
         "name": "运营",
         "description": "运营人员，查看报告和客户数据",
         "perms": [
-            "report:read", "report:view_all",
+            "report:read",
             "meeting:read", "meeting:create", "meeting:edit",
             "customer:read",
             "project:read",
@@ -336,24 +337,21 @@ def _init_rbac_data(engine):
             existing_role = next((r for r in existing_roles if r.code == role_code), None)
             if existing_role:
                 role = existing_role
-                # 已存在的系统角色：同步权限（清除旧权限，重新按定义分配）
-                for rp in session.exec(select(RolePermission).where(RolePermission.role_id == role.id)).all():
-                    session.delete(rp)
+                # 已存在的系统角色：增量同步权限（仅补充新增权限，不清除用户手动修改的权限）
+                existing_rp = session.exec(select(RolePermission).where(RolePermission.role_id == role.id)).all()
+                existing_perm_ids = {rp.permission_id for rp in existing_rp}
                 # 同步名称和描述
                 role.name = role_def["name"]
                 role.description = role_def["description"]
                 session.add(role)
                 session.commit()
 
-                # 分配权限
+                # 仅补充 ROLE_DEFS 中有但数据库中尚未分配的权限
                 perms = role_def["perms"]
-                if perms == "all":
-                    for _code, perm_obj in perm_map.items():
-                        session.add(RolePermission(role_id=role.id, permission_id=perm_obj.id))
-                else:
-                    for _code in perms:
-                        if _code in perm_map:
-                            session.add(RolePermission(role_id=role.id, permission_id=perm_map[_code].id))
+                perm_codes_to_add = perms if perms != "all" else list(perm_map.keys())
+                for _code in perm_codes_to_add:
+                    if _code in perm_map and perm_map[_code].id not in existing_perm_ids:
+                        session.add(RolePermission(role_id=role.id, permission_id=perm_map[_code].id))
                 session.commit()
             elif is_first_deploy:
                 # 首次部署：创建所有预置角色

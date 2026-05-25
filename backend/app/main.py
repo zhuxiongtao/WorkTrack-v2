@@ -40,7 +40,6 @@ def create_app() -> FastAPI:
             "/api/v1/wiki/public",      # 公开分享的 AI 文档外链访问端点
         ]
         path = request.url.path
-        # print(f"MIDDLEWARE CHECK: {path}, MATCH: {any(path == p or path.startswith(p + '/') for p in public_paths)}")
         if any(path == p or path.startswith(p + "/") for p in public_paths) or path.startswith("/api/v1/auth/"):
             return await call_next(request)
 

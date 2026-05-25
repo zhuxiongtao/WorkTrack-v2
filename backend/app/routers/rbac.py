@@ -24,6 +24,7 @@ class RoleCreate(BaseModel):
 
 class RoleUpdate(BaseModel):
     name: Optional[str] = None
+    code: Optional[str] = None
     description: Optional[str] = None
     permission_codes: Optional[List[str]] = None
 

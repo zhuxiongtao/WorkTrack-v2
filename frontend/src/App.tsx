@@ -708,7 +708,7 @@ function AppContent() {
                   <p className="text-sm font-medium text-amber-800 dark:text-amber-300">需要配置模型才能使用 AI 功能</p>
                   <p className="text-xs text-amber-700/70 dark:text-gray-400 mt-1">你的账号需要自己配置模型供应商。点击下方链接前往设置页面添加供应商和模型。</p>
                   <button
-                    onClick={() => navigate('/settings')}
+                    onClick={() => navigate('/settings?tab=models')}
                     className="inline-flex items-center gap-1.5 mt-3 px-4 py-2 rounded-lg bg-amber-200 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 text-sm font-medium hover:bg-amber-300 dark:hover:bg-amber-500/30 transition-colors"
                   >
                     <Settings size={14} /> 前往模型管理

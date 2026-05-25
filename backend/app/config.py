@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pathlib import Path
 import os
 
 
@@ -35,6 +36,9 @@ class Settings(BaseSettings):
     # Tavily 搜索 API Key（兜底用，优先使用系统偏好设置）
     tavily_api_key: str = ""
 
+    # 头像存储目录（留空则自动推导为 backend/data/avatars，可通过 AVATAR_DIR 环境变量覆盖）
+    avatar_dir: str = ""
+
     @property
     def effective_embedding_base_url(self) -> str:
         return self.embedding_base_url or self.llm_base_url
@@ -42,6 +46,12 @@ class Settings(BaseSettings):
     @property
     def effective_embedding_api_key(self) -> str:
         return self.embedding_api_key or self.llm_api_key
+
+    @property
+    def effective_avatar_dir(self) -> str:
+        if self.avatar_dir:
+            return self.avatar_dir
+        return str(Path(__file__).resolve().parent.parent / "data" / "avatars")
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

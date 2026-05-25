@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { Plus, X, Save, Trash2, Loader2, Key, Globe, Cpu, Settings2, ListChecks, Sparkles, Brain, Eye, EyeOff, Mic, MessageSquare, Search, ChevronDown, Home, RotateCcw, Edit3, Server, User, Package, MapPin, Activity, Cloud, Palette, Upload, Copy, Terminal, Zap, Building2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
+import { useSearchParams } from 'react-router-dom'
 
 interface Provider {
   id: number
@@ -65,13 +66,37 @@ const TYPE_LABEL: Record<string, string> = { chat: '对话', embedding: '嵌入'
 
 export default function SettingsPage() {
   // ===== 标签页状态 =====
-  const { user, fetchWithAuth, hasPermission } = useAuth()
+  const { user, setUser, fetchWithAuth, hasPermission } = useAuth()
   const { toast: showToast, confirm: showConfirm } = useToast()
   const canAccessModels = hasPermission('ai:manage_own') || hasPermission('ai:manage_shared')
   const canManageModels = hasPermission('ai:manage_own') || hasPermission('ai:manage_shared')
   const canEditSettings = hasPermission('settings:edit')
+  const canManageShared = hasPermission('ai:manage_shared')
   const canUseAI = hasPermission('ai:use')
-  const [activeTab, setActiveTab] = useState(canAccessModels ? 'models' : canUseAI ? 'prompts' : canEditSettings ? 'system' : 'account')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const accessibleTabs = [
+    ...(canAccessModels ? ['models' as const] : []),
+    ...(canUseAI ? ['prompts' as const] : []),
+    ...(canEditSettings ? ['system' as const] : []),
+    'account' as const,
+  ]
+  const resolveInitialTab = () => {
+    const tabParam = searchParams.get('tab')
+    if (tabParam && accessibleTabs.includes(tabParam as any)) return tabParam
+    return canAccessModels ? 'models' : canUseAI ? 'prompts' : canEditSettings ? 'system' : 'account'
+  }
+  const [activeTab, setActiveTab] = useState(resolveInitialTab)
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab)
+    setSearchParams({ tab }, { replace: true })
+  }
+
+  useEffect(() => {
+    const tabParam = searchParams.get('tab')
+    if (tabParam && tabParam !== activeTab && accessibleTabs.includes(tabParam as any)) {
+      setActiveTab(tabParam)
+    }
+  }, [searchParams])
 
   const TABS = [
     ...(canAccessModels ? [{ key: 'models', label: '模型管理', icon: Cpu, desc: '供应商与任务模型配置' }] : []),
@@ -513,7 +538,7 @@ export default function SettingsPage() {
               return (
                 <button
                   key={tab.key}
-                  onClick={() => setActiveTab(tab.key)}
+                  onClick={() => handleTabChange(tab.key)}
                   className={`whitespace-nowrap transition-all duration-200 group shrink-0
                     max-md:flex max-md:items-center max-md:gap-1.5 max-md:px-3 max-md:py-1.5 max-md:rounded-lg max-md:text-xs
                     md:w-full md:text-left md:px-4 md:py-3 md:rounded-xl
@@ -577,17 +602,17 @@ export default function SettingsPage() {
                         <div className="flex items-center gap-3 mb-1.5 flex-wrap">
                           <span className="text-sm font-semibold text-gray-900 dark:text-white truncate max-w-[300px]">{p.name}</span>
                           <button
-                            onClick={() => canManageModels && (canEditSettings || p.user_id === user?.id) && handleToggleActive(p)}
+                            onClick={() => canManageModels && (canManageShared || p.user_id === user?.id) && handleToggleActive(p)}
                             className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${
                               p.is_active ? 'bg-green-500/10 text-green-400' : 'bg-gray-500/10 text-gray-500'
-                            } ${canManageModels && (canEditSettings || p.user_id === user?.id) ? 'cursor-pointer' : 'cursor-default'}`}
+                            } ${canManageModels && (canManageShared || p.user_id === user?.id) ? 'cursor-pointer' : 'cursor-default'}`}
                           >
                             {p.is_active ? '已启用' : '已停用'}
                           </button>
-                          {p.user_id == null && !canEditSettings && (
+                          {p.user_id == null && !canManageShared && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-500/10 text-gray-500 shrink-0">共享</span>
                           )}
-                          {p.user_id != null && !canEditSettings && (
+                          {p.user_id != null && !canManageShared && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 shrink-0">我的</span>
                           )}
                         </div>
@@ -601,10 +626,10 @@ export default function SettingsPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        {canManageModels && (canEditSettings || p.user_id === user?.id) && (
+                        {canManageModels && (canManageShared || p.user_id === user?.id) && (
                           <button onClick={() => openEdit(p)} className="px-2.5 py-1.5 rounded-lg bg-bg-hover text-xs text-gray-400 hover:text-white border border-border">编辑</button>
                         )}
-                        {canManageModels && (canEditSettings || p.user_id === user?.id) && (
+                        {canManageModels && (canManageShared || p.user_id === user?.id) && (
                           <button onClick={() => handleDelete(p.id)} className="px-2 py-1.5 rounded-lg bg-bg-hover text-xs text-red-400 hover:text-red-300 border border-border"><Trash2 size={12} /></button>
                         )}
                       </div>
@@ -666,7 +691,7 @@ export default function SettingsPage() {
                     )}
 
                     {/* 添加模型 */}
-                    {canManageModels && (isAdmin || p.user_id === user?.id) && (
+                    {canManageModels && (canManageShared || p.user_id === user?.id) && (
                     <div className="relative">
                       <button onClick={() => {
                         const isOpen = expandedDropdown === p.id
@@ -1479,7 +1504,7 @@ export default function SettingsPage() {
                           throw new Error(`[${res.status}] ${msg}`)
                         }
                         const data = await res.json()
-                        if(user) user.avatar = data.avatar_url
+                        setUser(prev => prev ? { ...prev, avatar: data.avatar_url } : prev)
                         showToast('头像已更新', 'success')
                       } catch(err: any) { showToast(err.message || '上传失败', 'error') }
                     }} />

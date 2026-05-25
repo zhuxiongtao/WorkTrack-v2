@@ -20,6 +20,17 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # 0. 创建部门表（department 表缺少迁移脚本，需在此补充）
+    op.create_table('department',
+        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column('name', sa.String(length=100), nullable=False),
+        sa.Column('manager_id', sa.Integer(), nullable=True),
+        sa.Column('parent_id', sa.Integer(), nullable=True),
+        sa.ForeignKeyConstraint(['manager_id'], ['user.id'], ),
+        sa.ForeignKeyConstraint(['parent_id'], ['department.id'], ),
+        sa.PrimaryKeyConstraint('id'),
+    )
+
     # 1. 创建权限表
     op.create_table('rbac_permission',
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
@@ -97,3 +108,4 @@ def downgrade() -> None:
     op.drop_table('rbac_role_permission')
     op.drop_table('rbac_role')
     op.drop_table('rbac_permission')
+    op.drop_table('department')
