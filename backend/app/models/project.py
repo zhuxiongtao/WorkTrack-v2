@@ -1,11 +1,11 @@
 from typing import Optional
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from sqlmodel import SQLModel, Field
 
 
 class Project(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    user_id: int = Field(default=1, foreign_key="user.id", index=True)
+    user_id: Optional[int] = Field(default=None, foreign_key="user.id", index=True)
     customer_id: Optional[int] = Field(default=None, foreign_key="customer.id")
     customer_name: str = ""  # 客户名称
     name: str  # 项目名称
@@ -23,5 +23,5 @@ class Project(SQLModel, table=True):
     cloud_provider: Optional[str] = None  # 供应商（逗号分隔多选）
     files_json: Optional[str] = Field(default=None, description="附件列表 JSON: [{name, path, size, type}]")
     deadline: Optional[date] = None
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -10,17 +11,52 @@ from slowapi.errors import RateLimitExceeded
 from app.utils.time import utc_now, ensure_utc
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    init_db()
+    from app.routers.logs import write_log
+    from app.database import engine
+    from sqlmodel import Session, select, desc
+    from app.models.log_entry import LogEntry
+    from datetime import datetime, timedelta
+    with Session(engine) as db:
+        stmt = select(LogEntry).where(
+            LogEntry.category == "system",
+            LogEntry.message == "WorkTrack 服务已启动"
+        ).order_by(desc(LogEntry.created_at)).limit(1)
+        last_log = db.exec(stmt).first()
+
+        now = utc_now()
+        if not last_log or (now - ensure_utc(last_log.created_at)) > timedelta(minutes=15):
+            write_log("info", "system", "WorkTrack 服务已启动", details=f"版本: 1.0.0", db=db)
+    from app.services.scheduler import start_scheduler
+    start_scheduler()
+
+    yield
+
+    # Shutdown
+    from app.services.scheduler import shutdown_scheduler
+    shutdown_scheduler()
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="WorkTrack",
         description="个人工作管理平台 - 日报、客户项目、会议纪要，集成 AI 与 MCP 服务",
         version="1.0.0",
-        docs_url="/docs" if app_settings.cors_origins == "*" else None,
+        docs_url="/docs" if app_settings.cors_origins != "*" else None,
         redoc_url=None,
-        openapi_url="/openapi.json" if app_settings.cors_origins == "*" else None,
+        openapi_url="/openapi.json" if app_settings.cors_origins != "*" else None,
+        lifespan=lifespan,
     )
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+    from app.exceptions import WorkTrackError
+    app.add_exception_handler(WorkTrackError, lambda req, exc: JSONResponse(
+        status_code=500, content={"detail": exc.message}
+    ))
 
     # CORS 中间件
     cors_origins = [origin.strip() for origin in app_settings.cors_origins.split(",") if origin.strip()]
@@ -80,35 +116,6 @@ def create_app() -> FastAPI:
     app.include_router(rbac.router)
     app.include_router(monitor.router)
     app.include_router(data_export.router)
-
-    # 启动时初始化数据库和调度器
-    @app.on_event("startup")
-    def on_startup():
-        init_db()
-        from app.routers.logs import write_log
-        from app.database import engine
-        from sqlmodel import Session, select, desc
-        from app.models.log_entry import LogEntry
-        from datetime import datetime, timedelta
-        with Session(engine) as db:
-            # 检查上一次启动日志，防止开发环境下 Uvicorn 频繁 reload 导致数据库被启动日志刷屏
-            stmt = select(LogEntry).where(
-                LogEntry.category == "system",
-                LogEntry.message == "WorkTrack 服务已启动"
-            ).order_by(desc(LogEntry.created_at)).limit(1)
-            last_log = db.exec(stmt).first()
-
-            now = utc_now()
-            if not last_log or (now - ensure_utc(last_log.created_at)) > timedelta(minutes=15):
-                write_log("info", "system", "WorkTrack 服务已启动", details=f"版本: 1.0.0", db=db)
-        from app.services.scheduler import start_scheduler
-        start_scheduler()
-
-    # 关闭时关闭调度器
-    @app.on_event("shutdown")
-    def on_shutdown():
-        from app.services.scheduler import shutdown_scheduler
-        shutdown_scheduler()
 
     # 挂载 MCP 服务（带 API Key 认证）
     from app.mcp_server import mcp, MCPAuthMiddleware

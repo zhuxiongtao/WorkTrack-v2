@@ -4,6 +4,7 @@ MCP (Model Context Protocol) 服务 - 对外暴露 WorkTrack 工具
 """
 import json
 import os
+import time
 from fastmcp import FastMCP
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
@@ -25,30 +26,44 @@ from typing import Optional
 
 MCP_CONFIG_KEY = "mcp_api_key"
 MCP_ENABLED_KEY = "mcp_enabled"
+_MCP_CACHE_TTL = 60
+_mcp_cache: dict = {"enabled": None, "api_key": None, "expires": 0}
+
+
+def _refresh_mcp_cache() -> None:
+    now = time.time()
+    if now < _mcp_cache["expires"]:
+        return
+    try:
+        with Session(engine) as db:
+            enabled_pref = db.exec(
+                select(SystemPreference).where(
+                    SystemPreference.key == MCP_ENABLED_KEY,
+                    SystemPreference.user_id == None,
+                )
+            ).first()
+            _mcp_cache["enabled"] = enabled_pref.value == "true" if enabled_pref else False
+
+            key_pref = db.exec(
+                select(SystemPreference).where(
+                    SystemPreference.key == MCP_CONFIG_KEY,
+                    SystemPreference.user_id == None,
+                )
+            ).first()
+            _mcp_cache["api_key"] = key_pref.value if key_pref and key_pref.value else None
+            _mcp_cache["expires"] = now + _MCP_CACHE_TTL
+    except Exception:
+        pass
 
 
 def get_mcp_api_key() -> Optional[str]:
-    """从数据库获取当前 MCP API Key"""
-    with Session(engine) as db:
-        pref = db.exec(
-            select(SystemPreference).where(
-                SystemPreference.key == MCP_CONFIG_KEY,
-                SystemPreference.user_id == None,
-            )
-        ).first()
-        return pref.value if pref and pref.value else None
+    _refresh_mcp_cache()
+    return _mcp_cache["api_key"]
 
 
 def is_mcp_enabled() -> bool:
-    """检查 MCP 服务是否已启用"""
-    with Session(engine) as db:
-        pref = db.exec(
-            select(SystemPreference).where(
-                SystemPreference.key == MCP_ENABLED_KEY,
-                SystemPreference.user_id == None,
-            )
-        ).first()
-        return pref.value == "true" if pref else False
+    _refresh_mcp_cache()
+    return _mcp_cache["enabled"] if _mcp_cache["enabled"] is not None else False
 
 
 class MCPAuthMiddleware(BaseHTTPMiddleware):
@@ -450,7 +465,6 @@ def list_meetings(days: int = 30, customer_id: Optional[int] = None) -> list:
                 "title": m.title,
                 "date": str(m.meeting_date),
                 "customer_id": m.customer_id,
-                "duration_minutes": m.duration_minutes,
                 "notes_preview": (m.content_md or "")[:300],
                 "decisions": "",
                 "todos": "",
@@ -477,7 +491,7 @@ def get_meeting(meeting_id: int) -> dict:
             "project_id": m.project_id,
             "duration_minutes": 0,
             "attendees": m.attendees,
-            "notes": m.content_md or "",
+            "content_md": m.content_md or "",
             "decisions": "",
             "todos": "",
         }
@@ -487,8 +501,8 @@ def get_meeting(meeting_id: int) -> dict:
 
 @mcp.tool()
 def create_meeting(title: str, meeting_date: str, customer_id: Optional[int] = None,
-                   project_id: Optional[int] = None, notes: str = "",
-                   attendees: str = "", duration_minutes: int = 0) -> dict:
+                   project_id: Optional[int] = None, content_md: str = "",
+                   attendees: str = "") -> dict:
     """创建新会议记录。meeting_date 格式 YYYY-MM-DD"""
     db = next(get_session())
     try:
@@ -497,9 +511,8 @@ def create_meeting(title: str, meeting_date: str, customer_id: Optional[int] = N
             meeting_date=date.fromisoformat(meeting_date),
             customer_id=customer_id,
             project_id=project_id,
-            notes=notes,
+            content_md=content_md,
             attendees=attendees,
-            duration_minutes=duration_minutes,
         )
         db.add(m)
         db.commit()
@@ -521,7 +534,7 @@ def global_search(query: str, top_k: int = 10) -> list:
         results = []
         # 搜索项目
         proj_q = select(Project).where(
-            or_(Project.name.contains(query), Project.description.contains(query))
+            or_(Project.name.contains(query), Project.progress.contains(query))
         ).limit(top_k)
         projects = db.exec(proj_q).all()
         for p in projects:

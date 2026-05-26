@@ -68,7 +68,7 @@ def get_monitor_stats(
     total_providers = db.exec(select(func.count(ModelProvider.id))).one()
 
     # ===== 系统资源 =====
-    cpu_percent = psutil.cpu_percent(interval=1)
+    cpu_percent = psutil.cpu_percent(interval=0)
     memory_info = psutil.virtual_memory()
     disk_info = psutil.disk_usage("/")
 

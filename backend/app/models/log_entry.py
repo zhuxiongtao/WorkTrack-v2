@@ -1,5 +1,5 @@
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlmodel import SQLModel, Field
 
 
@@ -10,4 +10,4 @@ class LogEntry(SQLModel, table=True):
     category: str = Field(default="system")  # system / task / ai / report / meeting / project / other
     message: str  # 简要描述
     details: Optional[str] = None  # 详细堆栈/上下文
-    created_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

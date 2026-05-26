@@ -214,14 +214,19 @@ def create_report(data: DailyReportCreate, background_tasks: BackgroundTasks, cu
 
 
 @router.put("/{report_id}", response_model=DailyReportOut)
-def update_report(report_id: int, data: DailyReportUpdate, background_tasks: BackgroundTasks, current_user: User = Depends(require_permission("report:edit")), db: Session = Depends(get_session)):
+def update_report(report_id: int, data: DailyReportUpdate, background_tasks: BackgroundTasks, current_user: User = Depends(require_permission("report:submit")), db: Session = Depends(get_session)):
+    from app.auth import has_permission
     report = db.get(DailyReport, report_id)
-    if not report or report.user_id != current_user.id:
+    if not report:
         raise HTTPException(status_code=404, detail="日报不存在")
+    is_own = report.user_id == current_user.id
+    if not is_own and not has_permission(current_user, "report:edit", db):
+        raise HTTPException(status_code=403, detail="权限不足：修改他人日报需要 report:edit")
+    content_changing = data.content_md is not None and data.content_md != report.content_md
     if report.status == "submitted":
         if data.status == "draft":
             raise HTTPException(status_code=400, detail="已提交的日报不能回退为草稿")
-        if data.content_md is not None and data.content_md != report.content_md:
+        if content_changing:
             raise HTTPException(status_code=400, detail="已提交的日报不能修改内容")
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
@@ -229,7 +234,7 @@ def update_report(report_id: int, data: DailyReportUpdate, background_tasks: Bac
     db.add(report)
     db.commit()
     db.refresh(report)
-    content_changed = data.content_md is not None and data.content_md != report.content_md and report.status == "submitted"
+    content_changed = data.content_md is not None and data.content_md != report.content_md
     if content_changed:
         background_tasks.add_task(
             index_document,
@@ -243,10 +248,13 @@ def update_report(report_id: int, data: DailyReportUpdate, background_tasks: Bac
 
 
 @router.delete("/{report_id}", status_code=204)
-def delete_report(report_id: int, background_tasks: BackgroundTasks, current_user: User = Depends(require_permission("report:delete")), db: Session = Depends(get_session)):
+def delete_report(report_id: int, background_tasks: BackgroundTasks, current_user: User = Depends(require_permission("report:submit")), db: Session = Depends(get_session)):
     report = db.get(DailyReport, report_id)
-    if not report or report.user_id != current_user.id:
+    if not report:
         raise HTTPException(status_code=404, detail="日报不存在")
+    from app.auth import has_permission
+    if report.user_id != current_user.id and not has_permission(current_user, "report:delete", db):
+        raise HTTPException(status_code=403, detail="权限不足：删除他人日报需要 report:delete")
     db.delete(report)
     db.commit()
     # 后台删除向量索引
@@ -254,7 +262,7 @@ def delete_report(report_id: int, background_tasks: BackgroundTasks, current_use
 
 
 @router.post("/{report_id}/ai-summarize", response_model=DailyReportOut)
-def ai_summarize_report(report_id: int, current_user: User = Depends(require_permission("report:edit")), db: Session = Depends(get_session)):
+def ai_summarize_report(report_id: int, current_user: User = Depends(require_permission("report:submit")), db: Session = Depends(get_session)):
     """手动触发 AI 总结日报"""
     report = db.get(DailyReport, report_id)
     if not report or report.user_id != current_user.id:
@@ -452,7 +460,7 @@ class WeeklySummaryUpdate(BaseModel):
 
 @router.put("/weekly-summary/{week_start}")
 def update_weekly_summary(week_start: str, data: WeeklySummaryUpdate,
-                           current_user: User = Depends(require_permission("report:edit")),
+                           current_user: User = Depends(require_permission("report:submit")),
                            db: Session = Depends(get_session)):
     """编辑/更新或提交某周的 AI 总结"""
     week_start_date = date.fromisoformat(week_start)

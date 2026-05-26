@@ -50,7 +50,14 @@ def get_collection(name: str):
 
 
 def _get_embedding_client(base_url: str, api_key: str) -> OpenAI:
-    return OpenAI(base_url=base_url, api_key=api_key, timeout=30)
+    _key = (base_url, api_key)
+    if _get_embedding_client._cache.get("key") == _key and _get_embedding_client._cache.get("client"):
+        return _get_embedding_client._cache["client"]
+    client = OpenAI(base_url=base_url, api_key=api_key, timeout=30)
+    _get_embedding_client._cache = {"key": _key, "client": client}
+    return client
+
+_get_embedding_client._cache = {}
 
 
 def embed_text(text: str, db: Session = None) -> list[float]:

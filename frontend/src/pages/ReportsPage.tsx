@@ -426,11 +426,11 @@ export default function ReportsPage() {
                   className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-gray-300 hover:text-[#8B5CF6] hover:bg-border transition-colors disabled:opacity-50 border border-border">
                   {aiLoading === modalDetail.id ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}AI 整理
                 </button>
-                {hasPermission('report:edit') && (
+                {(hasPermission('report:submit') || hasPermission('report:edit')) && (
                   <button onClick={() => { closeDetail(); openEdit(modalDetail) }}
                     className="text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-gray-300 hover:text-white transition-colors border border-border">编辑</button>
                 )}
-                {hasPermission('report:delete') && (
+                {(hasPermission('report:submit') || hasPermission('report:delete')) && (
                   <button onClick={() => handleDelete(modalDetail.id)}
                     className="text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors border border-border"><Trash2 size={13} /></button>
                 )}

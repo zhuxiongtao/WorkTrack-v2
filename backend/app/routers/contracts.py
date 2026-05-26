@@ -12,7 +12,7 @@ from app.models.contract import Contract
 from app.models.customer import Customer
 from app.models.project import Project
 from app.models.user import User
-from app.auth import get_current_user, require_permission
+from app.auth import get_current_user, require_permission, get_visible_user_ids, check_data_access
 from app.schemas import ContractCreate, ContractUpdate, ContractOut
 from app.services.contract_parser import extract_text, extract_text_with_vision_fallback, parse_contract, UPLOAD_DIR, extract_text_from_docx, extract_text_from_legacy_doc
 from app.services.vector_store import index_document
@@ -39,7 +39,10 @@ def list_contracts(
     current_user: User = Depends(require_permission("contract:read")),
     db: Session = Depends(get_session),
 ):
-    query = select(Contract).where(Contract.user_id == current_user.id).order_by(Contract.created_at.desc())
+    query = select(Contract).order_by(Contract.created_at.desc())
+    visible_ids = get_visible_user_ids(current_user, db, module="contract")
+    if visible_ids is not None:
+        query = query.where(Contract.user_id.in_(visible_ids))
     if customer_id:
         query = query.where(Contract.customer_id == customer_id)
     if project_id:
@@ -47,7 +50,8 @@ def list_contracts(
     if status:
         query = query.where(Contract.status == status)
     if keyword:
-        pattern = f"%{keyword}%"
+        escaped = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{escaped}%"
         query = query.where(
             (Contract.title.ilike(pattern)) |
             (Contract.contract_no.ilike(pattern)) |
@@ -187,7 +191,7 @@ def _auto_parse_contract(contract_id: int, user_id: int, db: Session):
 @router.get("/{contract_id}", response_model=ContractOut)
 def get_contract(contract_id: int, current_user: User = Depends(require_permission("contract:read")), db: Session = Depends(get_session)):
     contract = db.get(Contract, contract_id)
-    if not contract or contract.user_id != current_user.id:
+    if not contract or not check_data_access(contract.user_id, current_user, db):
         raise HTTPException(status_code=404, detail="合同不存在")
     return contract
 
@@ -223,7 +227,7 @@ def delete_contract(contract_id: int, current_user: User = Depends(require_permi
 def download_contract_file(contract_id: int, preview: bool = Query(False), current_user: User = Depends(require_permission("contract:read")), db: Session = Depends(get_session)):
     from fastapi.responses import FileResponse
     contract = db.get(Contract, contract_id)
-    if not contract or contract.user_id != current_user.id:
+    if not contract or not check_data_access(contract.user_id, current_user, db):
         raise HTTPException(status_code=404, detail="合同不存在")
     if not contract.file_path or not os.path.exists(contract.file_path):
         raise HTTPException(status_code=404, detail="合同文件不存在")

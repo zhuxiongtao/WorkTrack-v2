@@ -1,11 +1,11 @@
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlmodel import SQLModel, Field
 
 
 class Customer(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    user_id: int = Field(default=1, foreign_key="user.id", index=True)
+    user_id: Optional[int] = Field(default=None, foreign_key="user.id", index=True)
     name: str
     industry: Optional[str] = None
     contact: Optional[str] = None
@@ -17,4 +17,4 @@ class Customer(SQLModel, table=True):
     recent_news: Optional[str] = None       # 近期动向
     logo_url: Optional[str] = None          # 公司Logo URL
     website: Optional[str] = None           # 公司官网/产品官网
-    created_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

@@ -1,5 +1,5 @@
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlmodel import SQLModel, Field, Relationship
 
 
@@ -18,7 +18,7 @@ class ModelProvider(SQLModel, table=True):
     # Vertex AI / GCP 专用字段
     project_id: Optional[str] = Field(default=None)  # GCP 项目 ID
     location: Optional[str] = Field(default=None)  # GCP 区域，如 us-central1
-    created_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     # 关联的模型列表
     models_rel: list["ProviderModel"] = Relationship(back_populates="provider", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
 
@@ -29,7 +29,7 @@ class ProviderModel(SQLModel, table=True):
     provider_id: int = Field(foreign_key="modelprovider.id", index=True)
     model_name: str  # 模型名称，如 deepseek-chat
     model_type: str = "chat"  # chat / embedding / speech_to_text / vision
-    created_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     provider: ModelProvider = Relationship(back_populates="models_rel")
 
 

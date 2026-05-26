@@ -7,7 +7,7 @@
 """
 import os
 import secrets
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select, text
 from sqlmodel import create_engine as sm_create_engine
@@ -15,6 +15,7 @@ from sqlmodel import create_engine as sm_create_engine
 from app.database import engine, get_session, DEFAULT_FIELD_OPTIONS, _init_default_options_in_session
 from app.models.user import User
 from app.models.field_option import FieldOption
+from app.rate_limit import limiter
 
 router = APIRouter(prefix="/api/v1/setup", tags=["setup"])
 
@@ -80,7 +81,8 @@ def test_db(req: TestDbRequest):
 
 
 @router.post("/initialize", response_model=InitializeResponse)
-def initialize(req: InitializeRequest):
+@limiter.limit("5/minute")
+def initialize(request: Request, req: InitializeRequest):
     """初始化系统：创建管理员用户、配置密钥、初始化默认数据"""
     import traceback
     import logging

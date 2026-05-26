@@ -16,6 +16,7 @@ from app.database import get_session
 from app.models.user import User
 
 # ===== RBAC 权限缓存 =====
+_RBAC_CACHE_MAX = 10000
 _rbac_cache: dict[tuple[int, str], tuple[bool, float]] = {}
 _rbac_cache_ttl = 60
 
@@ -238,6 +239,10 @@ def has_permission(user: User, permission_code: str, db: Session) -> bool:
         return cached[0]
 
     result = _check_rbac(user.id, permission_code, db)
+    if len(_rbac_cache) >= _RBAC_CACHE_MAX:
+        oldest_keys = sorted(_rbac_cache, key=lambda k: _rbac_cache[k][1])[:len(_rbac_cache) - _RBAC_CACHE_MAX + 1]
+        for k in oldest_keys:
+            del _rbac_cache[k]
     _rbac_cache[cache_key] = (result, now + _rbac_cache_ttl)
     return result
 
@@ -315,8 +320,7 @@ def check_data_access(owner_id: int, current_user: User, db: Session) -> bool:
     3. boss 角色 → 全公司放行
     4. 有对应模块的 view_all 权限 → 放行（用于 admin 级跨部门查看）
     5. 部门负责人（manager_id）→ 管辖部门+子部门+汇报链
-    6. 同部门成员 → 仅当本部门有 dept_leader 类角色时可见
-    7. 直属汇报关系 → leader_id 匹配
+    6. 直属汇报关系 → leader_id 匹配
     """
     if owner_id == current_user.id:
         return True
@@ -346,9 +350,6 @@ def check_data_access(owner_id: int, current_user: User, db: Session) -> bool:
     if owner_user.department_id is not None and owner_user.department_id in managed:
         return True
 
-    if current_user.department_id and owner_user.department_id == current_user.department_id:
-        return True
-
     if owner_user.leader_id == current_user.id:
         return True
 
@@ -363,7 +364,7 @@ def get_visible_user_ids(current_user: User, db: Session, module: str = "") -> O
     1. is_admin / boss 角色 → None（全公司）
     2. 有 {module}:view_all 权限 → None（跨部门可见，如 admin 级管理者）
     3. 部门负责人（Department.manager_id）→ 管辖部门+子部门全部成员
-    4. 普通员工 → 本部门+子部门成员（基于 DepartmentRole 继承的权限决定能看哪些模块的数据）
+    4. 普通员工 → 仅自己 + 直属下级(leader_id指向自己的)
     5. 无部门用户 → 仅自己
     
     module 参数: 业务模块名（如 "report", "customer", "project"），用于判断 view_all 权限
@@ -390,30 +391,23 @@ def get_visible_user_ids(current_user: User, db: Session, module: str = "") -> O
 
     managed = _get_managed_dept_tree(current_user.id, db)
 
-    from app.models.department import Department
     visible_dept_ids: set[int] = set()
 
     if managed:
         visible_dept_ids.update(managed)
 
-    if current_user.department_id:
-        visible_dept_ids.add(current_user.department_id)
-        descendants = _get_department_descendants(current_user.department_id, db)
-        visible_dept_ids.update(descendants)
-
     if not visible_dept_ids:
-        return [current_user.id]
-
-    members = db.exec(select(User).where(User.department_id.in_(visible_dept_ids))).all()
-    member_ids = [m.id for m in members]
+        member_ids = [current_user.id]
+    else:
+        members = db.exec(select(User).where(User.department_id.in_(visible_dept_ids))).all()
+        member_ids = [m.id for m in members]
+        if current_user.id not in member_ids:
+            member_ids.append(current_user.id)
 
     leader_subordinate_ids = list(db.exec(
         select(User.id).where(User.leader_id == current_user.id)
     ).all())
     member_ids = list(set(member_ids + leader_subordinate_ids))
-
-    if current_user.id not in member_ids:
-        member_ids.append(current_user.id)
 
     return member_ids
 

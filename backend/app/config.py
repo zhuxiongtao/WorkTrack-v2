@@ -97,12 +97,20 @@ class Settings(BaseSettings):
             self.jwt_secret_key = secrets.token_urlsafe(32)
             warnings.warn(
                 "⚠️  JWT_SECRET_KEY 未设置，已自动生成随机密钥。重启后已有 Token 将失效！"
-                "生产环境请务必设置 JWT_SECRET_KEY 环境变量。",
+                "生产环境请务必设置 JWT_SECRET_KEY 环境变量。"
+                "建议使用: python -c \"import secrets; print(secrets.token_urlsafe(32))\"",
                 stacklevel=2,
             )
         if "worktrack:worktrack" in self.database_url and os.getenv("DATABASE_URL") is None:
             warnings.warn(
-                "⚠️  使用默认数据库凭据（worktrack:worktrack），生产环境请通过 DATABASE_URL 环境变量设置安全的连接串。",
+                "⚠️  使用默认数据库凭据（worktrack:worktrack），这是严重安全隐患！"
+                "生产环境请务必通过 DATABASE_URL 环境变量设置安全的连接串。",
+                stacklevel=2,
+            )
+        if self.cors_origins == "*":
+            warnings.warn(
+                "⚠️  CORS_ORIGINS 设置为 *（允许所有来源），存在跨域安全风险！"
+                "生产环境请设置具体的域名，如: https://your-domain.com",
                 stacklevel=2,
             )
 

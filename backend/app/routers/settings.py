@@ -80,7 +80,11 @@ class ProviderUpdate(BaseModel):
 def list_providers(db: Session = Depends(get_session),
                    current_user: User = Depends(get_current_user)):
     query = _get_visible_providers_query(db, current_user)
-    return db.exec(query.order_by(ModelProvider.created_at.desc())).all()
+    providers = db.exec(query.order_by(ModelProvider.created_at.desc())).all()
+    for p in providers:
+        if p.api_key:
+            p.api_key = p.api_key[:4] + "****" + p.api_key[-4:] if len(p.api_key) > 8 else "****"
+    return providers
 
 
 @router.post("/providers", status_code=201)
@@ -95,6 +99,8 @@ def create_provider(data: ProviderCreate, db: Session = Depends(get_session),
     db.add(provider)
     db.commit()
     db.refresh(provider)
+    if provider.api_key:
+        provider.api_key = provider.api_key[:4] + "****" + provider.api_key[-4:] if len(provider.api_key) > 8 else "****"
     return provider
 
 
@@ -115,6 +121,8 @@ def update_provider(provider_id: int, data: ProviderUpdate, db: Session = Depend
     db.add(provider)
     db.commit()
     db.refresh(provider)
+    if provider.api_key:
+        provider.api_key = provider.api_key[:4] + "****" + provider.api_key[-4:] if len(provider.api_key) > 8 else "****"
     return provider
 
 
