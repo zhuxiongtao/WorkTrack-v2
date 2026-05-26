@@ -3,22 +3,35 @@
 import os
 import uuid
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from app.auth import (
     hash_password, verify_password, create_access_token, get_current_user,
-    get_current_admin_user, validate_password_strength,
+    require_permission, validate_password_strength,
     check_account_locked, record_login_failure, record_login_success,
     bump_token_version,
 )
 from app.config import settings
 from app.database import get_session
 from app.models.user import User
+from app.rate_limit import limiter
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+
+
+def _build_user_response(user: User, db: Session) -> dict:
+    from app.auth import get_user_permissions
+    return {
+        "id": user.id, "username": user.username, "name": user.name, "is_admin": user.is_admin,
+        "email": user.email, "is_active": user.is_active, "avatar": user.avatar,
+        "last_login_at": user.last_login_at.isoformat() if user.last_login_at else None,
+        "can_manage_models": user.can_manage_models, "use_shared_models": user.use_shared_models,
+        "permissions": get_user_permissions(user, db),
+    }
+
 
 # 头像存储目录
 AVATAR_DIR = settings.effective_avatar_dir
@@ -57,7 +70,7 @@ class TokenResponse(BaseModel):
 # ===== 注册 =====
 @router.post("/register")
 def register(req: RegisterRequest, db: Session = Depends(get_session),
-             _admin: User = Depends(get_current_admin_user)):
+             _admin: User = Depends(require_permission("user:create"))):
     """注册新用户（仅管理员可操作，或根据 allow_registration 配置开放）"""
     pwd_err = validate_password_strength(req.password)
     if pwd_err:
@@ -77,22 +90,16 @@ def register(req: RegisterRequest, db: Session = Depends(get_session),
     db.refresh(user)
 
     token = create_access_token(user.id, user.username, user.token_version)
-    from app.auth import get_user_permissions
     return TokenResponse(
         access_token=token,
-        user={
-            "id": user.id, "username": user.username, "name": user.name, "is_admin": user.is_admin,
-            "email": user.email, "is_active": user.is_active, "avatar": user.avatar,
-            "last_login_at": user.last_login_at.isoformat() if user.last_login_at else None,
-            "can_manage_models": user.can_manage_models, "use_shared_models": user.use_shared_models,
-            "permissions": get_user_permissions(user, db)
-        },
+        user=_build_user_response(user, db),
     )
 
 
 # ===== 登录 =====
 @router.post("/login")
-def login(req: LoginRequest, db: Session = Depends(get_session)):
+@limiter.limit("5/minute")
+def login(req: LoginRequest, request: Request, db: Session = Depends(get_session)):
     user = db.exec(select(User).where(User.username == req.username)).first()
 
     if not user:
@@ -111,16 +118,9 @@ def login(req: LoginRequest, db: Session = Depends(get_session)):
 
     record_login_success(user, db)
     token = create_access_token(user.id, user.username, user.token_version)
-    from app.auth import get_user_permissions
     return TokenResponse(
         access_token=token,
-        user={
-            "id": user.id, "username": user.username, "name": user.name, "is_admin": user.is_admin,
-            "email": user.email, "is_active": user.is_active, "avatar": user.avatar,
-            "last_login_at": user.last_login_at.isoformat() if user.last_login_at else None,
-            "can_manage_models": user.can_manage_models, "use_shared_models": user.use_shared_models,
-            "permissions": get_user_permissions(user, db)
-        },
+        user=_build_user_response(user, db),
     )
 
 

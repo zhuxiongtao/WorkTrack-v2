@@ -1,16 +1,20 @@
+import logging
 import chromadb
 from chromadb.config import Settings
 from openai import OpenAI
 from sqlmodel import Session, select
 from app.config import settings
 from app.models.model_provider import ModelProvider, TaskModelConfig
+from app.exceptions import VectorStoreError
+
+logger = logging.getLogger("worktrack")
 
 # 初始化 ChromaDB 持久化客户端
 import os
-os.makedirs(settings.chroma_persist_dir, exist_ok=True)
+os.makedirs(settings.effective_chroma_dir, exist_ok=True)
 
 chroma_client = chromadb.PersistentClient(
-    path=settings.chroma_persist_dir,
+    path=settings.effective_chroma_dir,
     settings=Settings(anonymized_telemetry=False),
 )
 
@@ -71,7 +75,7 @@ def index_document(
             documents=[text],
         )
     except Exception as e:
-        print(f"向量索引失败 [{collection_name}]: {e}")
+        logger.error("向量索引失败 [%s]: %s", collection_name, e)
 
 
 def search_similar(
@@ -98,4 +102,4 @@ def delete_document(collection_name: str, doc_id: str):
         collection = get_collection(collection_name)
         collection.delete(ids=[doc_id])
     except Exception as e:
-        print(f"向量删除失败 [{collection_name}]: {e}")
+        logger.error("向量删除失败 [%s]: %s", collection_name, e)

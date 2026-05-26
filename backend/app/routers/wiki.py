@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlmodel import Session, select
 from app.database import get_session
-from app.auth import get_current_user, require_permission
+from app.auth import get_current_user, require_permission, verify_password, hash_password, has_permission
 from app.models.user import User
 from app.models.wiki import WikiSpace, WikiPage, WikiPermission, WikiPageVersion, UserGroup, UserGroupMember
 from app.schemas import (
@@ -18,6 +18,20 @@ router = APIRouter(prefix="/api/v1/wiki", tags=["Wiki"])
 
 
 # ===================== 工具函数 =====================
+
+def _verify_share_access(space: WikiSpace, password: str | None) -> None:
+    """校验公开空间的到期时间和提取密码，不通过则抛出 HTTPException"""
+    from datetime import datetime, timezone
+    if space.share_expires_at:
+        now = datetime.now(timezone.utc)
+        expires = space.share_expires_at
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        if now > expires:
+            raise HTTPException(status_code=status.HTTP_410_GONE, detail="该共享链接已到期失效")
+    if space.share_password:
+        if not password or not verify_password(password.strip(), space.share_password):
+            raise HTTPException(status_code=401, detail="提取密码错误")
 
 def _get_user_permission(target_type: str, target_id: int, user_id: int, db: Session) -> str | None:
     """查询用户对空间/页面的最高权限。owner 视为 admin"""
@@ -61,7 +75,7 @@ def _check_access(target_type: str, target_id: int, user_id: int, db: Session, r
     """检查用户是否有指定权限"""
     # 1. 系统超级管理员拥有一切穿透特权，防止管理员管理非自己创建的空间时报 403 无权限错误
     user = db.get(User, user_id)
-    if user and user.is_admin:
+    if user and has_permission(user, "wiki:manage_space", db):
         return True
 
     perm = _get_user_permission(target_type, target_id, user_id, db)
@@ -249,6 +263,8 @@ def update_space(space_id: int, data: WikiSpaceUpdate, current_user: User = Depe
         raise HTTPException(status_code=403, detail="无权限")
 
     update_data = data.model_dump(exclude_unset=True)
+    if "share_password" in update_data and update_data["share_password"]:
+        update_data["share_password"] = hash_password(update_data["share_password"])
     for k, v in update_data.items():
         setattr(space, k, v)
     db.add(space)
@@ -415,7 +431,7 @@ def _prepare_page_out(page: WikiPage, db: Session, current_user: Optional[User] 
 
     # 3. 动态核算当前请求访问者对本篇文档的最高权限角色级别（Viewer/Editor/Admin），供前端精准拦截渲染
     if current_user:
-        if current_user.is_admin:
+        if current_user.is_admin or has_permission(current_user, "wiki:manage_space", db):
             out.my_permission = "admin"
         else:
             space = db.get(WikiSpace, page.space_id)
@@ -778,20 +794,7 @@ def verify_public_space_password(space_id: int, data: SharePasswordVerify, db: S
     space = db.get(WikiSpace, space_id)
     if not space or not space.is_public:
         raise HTTPException(status_code=403, detail="该空间未被公开共享")
-
-    # 校验失效时间
-    if space.share_expires_at:
-        now = datetime.now(timezone.utc)
-        expires = space.share_expires_at
-        if expires.tzinfo is None:
-            expires = expires.replace(tzinfo=timezone.utc)
-        if now > expires:
-            raise HTTPException(status_code=status.HTTP_410_GONE, detail="该共享链接已到期失效")
-
-    if space.share_password:
-        if data.password.strip() != space.share_password.strip():
-            raise HTTPException(status_code=401, detail="提取密码错误")
-
+    _verify_share_access(space, data.password)
     return {"ok": True}
 
 
@@ -824,19 +827,7 @@ def get_public_page(page_id: int, password: Optional[str] = None, shared_page_id
     if not space or not space.is_public:
         raise HTTPException(status_code=403, detail="该文档未被公开共享")
 
-    # 2. 校验失效时间
-    if space.share_expires_at:
-        now = datetime.now(timezone.utc)
-        expires = space.share_expires_at
-        if expires.tzinfo is None:
-            expires = expires.replace(tzinfo=timezone.utc)
-        if now > expires:
-            raise HTTPException(status_code=status.HTTP_410_GONE, detail="该共享链接已到期失效")
-
-    # 3. 校验提取密码
-    if space.share_password:
-        if not password or password.strip() != space.share_password.strip():
-            raise HTTPException(status_code=401, detail="请输入正确的提取密码")
+    _verify_share_access(space, password)
 
     return _prepare_page_out(page, db)
 
@@ -848,19 +839,7 @@ def list_public_pages(space_id: int, password: Optional[str] = None, page_id: Op
     if not space or not space.is_public:
         raise HTTPException(status_code=403, detail="该空间未被公开共享")
 
-    # 1. 校验失效时间
-    if space.share_expires_at:
-        now = datetime.now(timezone.utc)
-        expires = space.share_expires_at
-        if expires.tzinfo is None:
-            expires = expires.replace(tzinfo=timezone.utc)
-        if now > expires:
-            raise HTTPException(status_code=status.HTTP_410_GONE, detail="该共享链接已到期失效")
-
-    # 2. 校验提取密码
-    if space.share_password:
-        if not password or password.strip() != space.share_password.strip():
-            raise HTTPException(status_code=401, detail="提取密码错误")
+    _verify_share_access(space, password)
 
     pages = db.exec(
         select(WikiPage).where(WikiPage.space_id == space_id).order_by(WikiPage.sort_order)

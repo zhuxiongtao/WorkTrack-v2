@@ -1,12 +1,17 @@
 import json
+import logging
 import os
 import base64
 from sqlmodel import Session, select
 from app.services.ai_service import _get_active_provider, _get_client
 from app.models.model_provider import TaskModelConfig, ModelProvider
+from app.exceptions import DocumentParseError
+from app.config import settings
+
+logger = logging.getLogger("worktrack")
 
 
-UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads", "contracts")
+UPLOAD_DIR = settings.effective_contracts_dir
 
 
 def _resolve_vision_provider(db: Session, user_id: int):
@@ -74,7 +79,8 @@ def extract_text_from_docx(file_path: str) -> str:
         doc = Document(file_path)
         paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
         return "\n".join(paragraphs)
-    except Exception:
+    except Exception as e:
+        logger.error("提取 docx 文本失败: %s", e)
         return ""
 
 
@@ -121,11 +127,13 @@ def extract_text_from_legacy_doc(file_path: str) -> str:
                     try: _os.remove(tmp_pdf)
                     except Exception: pass
                     return text.strip()
-            except Exception:
+            except Exception as e:
+                logger.error("Windows 下 win32com 转换失败: %s", e)
                 pass
 
         return ""
-    except Exception:
+    except Exception as e:
+        logger.error("legacy doc 转换失败: %s", e)
         return ""
     finally:
         try:
@@ -156,7 +164,8 @@ def extract_text_with_vision_fallback(file_path: str, file_type: str, db: Sessio
             text = _extract_text_via_vision(file_path, db, user_id)
         except RuntimeError as e:
             raise RuntimeError(f"此合同无法直接提取文字，需要配置视觉模型来识别：{e}")
-        except Exception:
+        except Exception as e:
+            logger.error("视觉识别失败: %s", e)
             raise RuntimeError(f"此合同无法直接提取文字，视觉识别失败：{traceback.format_exc()[-300:]}")
     return text
 

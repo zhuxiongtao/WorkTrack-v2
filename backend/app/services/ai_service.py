@@ -1,4 +1,5 @@
 import json
+import logging
 import re as _re_module
 from urllib.parse import urlparse
 from openai import OpenAI
@@ -12,6 +13,10 @@ from app.models.model_provider import ModelProvider, TaskModelConfig, ProviderMo
 from app.models.ai_prompt import AIPrompt
 from app.models.user import User
 from app.services.web_search import search_and_summarize, _get_tavily_api_key
+from app.exceptions import AIServiceError, AITimeoutError, AIRateLimitError
+from app.utils.time import utc_now
+
+logger = logging.getLogger("worktrack")
 
 
 # ---- Vertex AI 认证支持 ----
@@ -321,8 +326,7 @@ class _FakeResponse:
 
 
 
-
-# 默认提示词（与 settings.py 中的 DEFAULT_PROMPTS 保持一致）
+# 统一默认提示词（单一来源，与 settings.py 中的 DEFAULT_PROMPTS 同步）
 _DEFAULT_PROMPTS = {
     "daily_summary": {
         "system_prompt": "你是一个专业的工作助手，请用简洁的中文总结以下日报内容，提取关键工作事项和成果。",
@@ -343,6 +347,18 @@ _DEFAULT_PROMPTS = {
     "project_analysis": {
         "system_prompt": "你是一个专业的项目管理助手，请基于项目跟进记录、客户情况、会议纪要等多维度信息，综合分析项目状态并给出专业建议。",
         "user_prompt_template": "请分析以下项目：\n\n【基本信息】\n项目名称: {name}\n当前状态: {status}\n涉及产品: {product}\n项目场景: {scenario}\n销售负责人: {sales_person}\n商机金额: {amount}\n截止日期: {deadline}\n\n【客户信息】\n客户名称: {customer_name}\n客户行业: {customer_industry}\n客户规模: {customer_scale}\n核心产品: {customer_products}\n客户简介: {customer_profile}\n\n【跟进记录】\n{progress}\n\n【关联会议】\n{meetings}\n\n请基于以上信息给出全面的项目分析，包括：\n1. 当前状态评估（结合跟进记录和客户情况）\n2. 风险提示（考虑客户行业、规模、项目进展等）\n3. 后续建议（具体的下一步行动建议）",
+    },
+    "insight_week": {
+        "system_prompt": "你是一个专业的业务洞察分析师，请根据提供的工作数据，给出简洁有价值的周度洞察分析。",
+        "user_prompt_template": "请分析本周（{range}）工作数据：\n\n项目: {projects_summary}\n客户: {customers_summary}\n会议: {meetings_summary}\n日报: {reports_summary}",
+    },
+    "insight_month": {
+        "system_prompt": "你是一个专业的业务洞察分析师，请根据提供的工作数据，给出简洁有价值的月度洞察分析。",
+        "user_prompt_template": "请分析本月（{range}）工作数据：\n\n项目: {projects_summary}\n客户: {customers_summary}\n会议: {meetings_summary}\n日报: {reports_summary}\n周报: {weeklies_summary}",
+    },
+    "insight_quarter": {
+        "system_prompt": "你是一个专业的业务洞察分析师，请根据提供的工作数据，给出简洁有价值的季度洞察分析，重点关注趋势和战略建议。",
+        "user_prompt_template": "请分析本季度（{range}）工作数据：\n\n项目: {projects_summary}\n客户: {customers_summary}\n会议: {meetings_summary}\n日报: {reports_summary}\n周报: {weeklies_summary}",
     },
 }
 
@@ -429,7 +445,7 @@ def _get_active_provider(db: Session, task_type: str = "chat", user_id: int = 0)
                 return base_url, api_key, model_name, provider
 
     # 3. 如果没有任何 TaskModelConfig，报错而不是随机选一个 provider
-    raise RuntimeError("未配置模型供应商，请先在设置中配置")
+    raise AIServiceError("未配置模型供应商，请先在设置中配置")
 
 
 def _get_client(base_url: str, api_key: str, provider: ModelProvider = None):
@@ -618,8 +634,8 @@ def search_company_names(keyword: str, db: Session, user_id: int = 0) -> list[di
         has_tavily = bool(_get_tavily_api_key(db, user_id))
         if has_tavily:
             search_context = search_and_summarize(f"{keyword} 公司 企业信息 官网", db, search_depth="basic", user_id=user_id)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error("搜索公司名称时 Tavily 搜索失败: %s", e)
 
     # 构建提示词
     search_hint = (
@@ -698,12 +714,12 @@ def fetch_company_info(company_name: str, db: Session, user_id: int = 0) -> dict
             search_context = search_and_summarize(f"{company_name} 公司简介 主营业务 行业 规模 官网", db, search_depth="advanced", user_id=user_id)
 
             # 搜索2：最新动态（半年内），使用当前年份关键词
-            current_year = datetime.now().year
+            current_year = utc_now().year
             last_year = current_year - 1
             news_query = f"{company_name} {current_year} {last_year} 最新新闻 动态 融资 合作 产品发布 财报"
             news_context = search_and_summarize(news_query, db, search_depth="advanced", user_id=user_id)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error("获取公司信息时搜索失败: %s", e)
 
     # 构建提示词
     search_hint = ""
@@ -720,7 +736,7 @@ def fetch_company_info(company_name: str, db: Session, user_id: int = 0) -> dict
     if not search_context and not news_context:
         extra = {"extra_body": {"enable_search": True}}
 
-    current_date = datetime.now().strftime("%Y年%m月")
+    current_date = utc_now().strftime("%Y年%m月")
 
     # 读取行业标准化分类
     industry_categories = []
@@ -734,8 +750,8 @@ def fetch_company_info(company_name: str, db: Session, user_id: int = 0) -> dict
         ).first()
         if pref and pref.value:
             industry_categories = [c.strip() for c in pref.value.split("\n") if c.strip()]
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error("读取行业分类配置失败: %s", e)
     if not industry_categories:
         industry_categories = [
             "大模型基础研发与训练平台", "AI Agent / 智能体开发", "向量数据库 / 知识检索 RAG",
@@ -963,7 +979,8 @@ def _domain_looks_plausible(website_url: str, company_name: str) -> bool:
         if len(overlap) >= 1 or len(clean_domain) >= 4:
             return True
         return False
-    except Exception:
+    except Exception as e:
+        logger.error("域名可信度校验异常: %s", e)
         return True  # 解析失败不过滤，交给前端展示
 
 
@@ -987,14 +1004,14 @@ def refresh_company_news(company_name: str, db: Session, user_id: int = 0) -> st
         has_tavily = bool(_get_tavily_api_key(db, user_id))
         if has_tavily:
             from app.services.web_search import search_and_summarize as _sas
-            current_year = datetime.now().year
+            current_year = utc_now().year
             last_year = current_year - 1
             news_query = f"{company_name} {current_year} {last_year} 最新新闻 动态 融资 合作 产品发布 财报"
             news_context = _sas(news_query, db, search_depth="advanced", user_id=user_id)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error("刷新公司新闻时 Tavily 搜索失败: %s", e)
 
-    current_date = datetime.now().strftime("%Y年%m月")
+    current_date = utc_now().strftime("%Y年%m月")
     system_prompt = (
         f"当前日期：{current_date}\n"
         f"请从搜索信息中提取 {company_name} 近半年内的最新重要动态。\n"

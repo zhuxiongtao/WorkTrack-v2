@@ -1,6 +1,7 @@
 """认证模块：密码哈希、JWT 令牌、用户依赖注入、安全策略"""
 
 import re
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -13,6 +14,10 @@ from sqlmodel import Session, select
 from app.config import settings
 from app.database import get_session
 from app.models.user import User
+
+# ===== RBAC 权限缓存 =====
+_rbac_cache: dict[tuple[int, str], tuple[bool, float]] = {}
+_rbac_cache_ttl = 60
 
 # ===== 密码哈希 =====
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -165,9 +170,10 @@ def get_optional_user(
 
 def get_current_admin_user(
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
 ) -> User:
     """管理员权限守卫，非管理员返回 403"""
-    if not current_user.is_admin:
+    if not has_permission(current_user, "user:manage_roles", db):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="需要管理员权限")
     return current_user
 
@@ -178,7 +184,6 @@ def get_current_admin_user(
 _LEGACY_PERM_MAP = {
     "ai:use": lambda u: u.use_shared_models,
     "ai:manage_own": lambda u: u.can_manage_models,
-    "ai:manage_shared": lambda u: u.is_admin,
 }
 
 
@@ -220,14 +225,21 @@ def has_permission(user: User, permission_code: str, db: Session) -> bool:
     两条路径（任一满足即通过）：
     1. 旧 boolean 字段向后兼容
     2. RBAC 查询（用户角色 + 部门角色 + 用户组角色）
+    结果缓存 60 秒以减少数据库查询。
     """
-    # 1. 旧字段兼容
     if permission_code in _LEGACY_PERM_MAP:
         if _LEGACY_PERM_MAP[permission_code](user):
             return True
 
-    # 2. RBAC 查询
-    return _check_rbac(user.id, permission_code, db)
+    cache_key = (user.id, permission_code)
+    now = time.time()
+    cached = _rbac_cache.get(cache_key)
+    if cached and now < cached[1]:
+        return cached[0]
+
+    result = _check_rbac(user.id, permission_code, db)
+    _rbac_cache[cache_key] = (result, now + _rbac_cache_ttl)
+    return result
 
 
 def _check_rbac(user_id: int, permission_code: str, db: Session) -> bool:
@@ -296,12 +308,15 @@ def require_permission(permission_code: str):
 
 def check_data_access(owner_id: int, current_user: User, db: Session) -> bool:
     """
-    统一数据行级访问权限校验（适用于日报周报、项目、客户、合同、会议纪要等数据实体）：
-    1. 用户自身数据：完全放行 (owner_id == current_user.id)
-    2. 系统超级管理员 (is_admin)：最高管理权，完全放行
-    3. 老板 (boss 角色)：公司拥有者，完全放行
-    4. 部门负责人 (dept_leader 角色)：按角色约束
-    5. 部门负责人 (manager 字段)：自动继承，为该部门及所有子部门员工的负责人
+    统一数据行级访问权限校验。
+    判定优先级：
+    1. 本人数据 → 放行
+    2. is_admin → 放行
+    3. boss 角色 → 全公司放行
+    4. 有对应模块的 view_all 权限 → 放行（用于 admin 级跨部门查看）
+    5. 部门负责人（manager_id）→ 管辖部门+子部门+汇报链
+    6. 同部门成员 → 仅当本部门有 dept_leader 类角色时可见
+    7. 直属汇报关系 → leader_id 匹配
     """
     if owner_id == current_user.id:
         return True
@@ -310,33 +325,108 @@ def check_data_access(owner_id: int, current_user: User, db: Session) -> bool:
         return True
 
     from app.models.rbac import UserRole, DepartmentRole, Role
-    # 查询当前用户直接分配的所有角色 ID
     user_roles_ids = list(db.exec(select(UserRole.role_id).where(UserRole.user_id == current_user.id)).all())
-
-    # 查询用户所属部门的角色
     if current_user.department_id:
         dept_role_ids = list(db.exec(
             select(DepartmentRole.role_id).where(DepartmentRole.department_id == current_user.department_id)
         ).all())
     else:
         dept_role_ids = []
-
     all_role_ids = list(set(user_roles_ids + dept_role_ids))
-    roles = list(db.exec(select(Role.code).where(Role.id.in_(all_role_ids))).all()) if all_role_ids else []
-    
-    if "boss" in roles:
+    role_codes = set(db.exec(select(Role.code).where(Role.id.in_(all_role_ids))).all()) if all_role_ids else set()
+
+    if "boss" in role_codes:
         return True
 
-    if "dept_leader" in roles:
-        managed = _get_managed_dept_tree(current_user.id, db)
-        owner_user = db.get(User, owner_id)
-        if owner_user:
-            if owner_user.department_id is not None and owner_user.department_id in managed:
-                return True
-            if owner_user.leader_id == current_user.id:
-                return True
+    owner_user = db.get(User, owner_id)
+    if not owner_user:
+        return False
+
+    managed = _get_managed_dept_tree(current_user.id, db)
+    if owner_user.department_id is not None and owner_user.department_id in managed:
+        return True
+
+    if current_user.department_id and owner_user.department_id == current_user.department_id:
+        return True
+
+    if owner_user.leader_id == current_user.id:
+        return True
 
     return False
+
+
+def get_visible_user_ids(current_user: User, db: Session, module: str = "") -> Optional[list[int]]:
+    """
+    统一数据可见范围控制。返回 None 表示不限制（全公司可见），否则返回可见用户 ID 列表。
+    
+    判定优先级：
+    1. is_admin / boss 角色 → None（全公司）
+    2. 有 {module}:view_all 权限 → None（跨部门可见，如 admin 级管理者）
+    3. 部门负责人（Department.manager_id）→ 管辖部门+子部门全部成员
+    4. 普通员工 → 本部门+子部门成员（基于 DepartmentRole 继承的权限决定能看哪些模块的数据）
+    5. 无部门用户 → 仅自己
+    
+    module 参数: 业务模块名（如 "report", "customer", "project"），用于判断 view_all 权限
+    """
+    if current_user.is_admin:
+        return None
+
+    from app.models.rbac import UserRole, DepartmentRole, Role
+    user_roles_ids = list(db.exec(select(UserRole.role_id).where(UserRole.user_id == current_user.id)).all())
+    if current_user.department_id:
+        dept_role_ids = list(db.exec(
+            select(DepartmentRole.role_id).where(DepartmentRole.department_id == current_user.department_id)
+        ).all())
+    else:
+        dept_role_ids = []
+    all_role_ids = list(set(user_roles_ids + dept_role_ids))
+    role_codes = set(db.exec(select(Role.code).where(Role.id.in_(all_role_ids))).all()) if all_role_ids else set()
+
+    if "boss" in role_codes:
+        return None
+
+    if module and has_permission(current_user, f"{module}:view_all", db):
+        return None
+
+    managed = _get_managed_dept_tree(current_user.id, db)
+
+    from app.models.department import Department
+    visible_dept_ids: set[int] = set()
+
+    if managed:
+        visible_dept_ids.update(managed)
+
+    if current_user.department_id:
+        visible_dept_ids.add(current_user.department_id)
+        descendants = _get_department_descendants(current_user.department_id, db)
+        visible_dept_ids.update(descendants)
+
+    if not visible_dept_ids:
+        return [current_user.id]
+
+    members = db.exec(select(User).where(User.department_id.in_(visible_dept_ids))).all()
+    member_ids = [m.id for m in members]
+
+    leader_subordinate_ids = list(db.exec(
+        select(User.id).where(User.leader_id == current_user.id)
+    ).all())
+    member_ids = list(set(member_ids + leader_subordinate_ids))
+
+    if current_user.id not in member_ids:
+        member_ids.append(current_user.id)
+
+    return member_ids
+
+
+def _get_department_descendants(dept_id: int, db: Session) -> list[int]:
+    """递归获取指定部门的所有子部门 ID 列表（不含自身）"""
+    from app.models.department import Department
+    result = []
+    children = db.exec(select(Department.id).where(Department.parent_id == dept_id)).all()
+    for child_id in children:
+        result.append(child_id)
+        result.extend(_get_department_descendants(child_id, db))
+    return result
 
 
 def _get_managed_dept_tree(manager_id: int, db: Session) -> set:

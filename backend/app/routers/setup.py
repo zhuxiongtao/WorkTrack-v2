@@ -3,13 +3,16 @@
 - 检测是否需要初始化
 - 测试数据库连接
 - 创建管理员用户并初始化默认数据
+- 支持配置安全密钥、AI密钥、存储路径等
 """
+import os
+import secrets
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select, text
 from sqlmodel import create_engine as sm_create_engine
 
-from app.database import engine, get_session
+from app.database import engine, get_session, DEFAULT_FIELD_OPTIONS, _init_default_options_in_session
 from app.models.user import User
 from app.models.field_option import FieldOption
 
@@ -33,23 +36,29 @@ class TestDbResponse(BaseModel):
 
 class InitializeRequest(BaseModel):
     username: str = Field(..., min_length=2, max_length=64)
-    password: str = Field(..., min_length=6, max_length=128)
+    password: str = Field(..., min_length=8, max_length=128)
     name: str = Field(default="管理员", max_length=128)
+    jwt_secret_key: str = Field(default="", description="JWT密钥，留空则自动生成（推荐设置）")
+    llm_api_key: str = Field(default="", description="LLM API密钥")
+    llm_base_url: str = Field(default="https://api.deepseek.com/v1", description="LLM API基础URL")
+    llm_model_name: str = Field(default="deepseek-chat", description="LLM模型名称")
+    embedding_api_key: str = Field(default="", description="Embedding API密钥，留空复用LLM密钥")
+    embedding_base_url: str = Field(default="", description="Embedding基础URL，留空复用LLM URL")
+    tavily_api_key: str = Field(default="", description="Tavily搜索API密钥")
 
 
 class InitializeResponse(BaseModel):
     ok: bool
     user: dict = {}
+    config_summary: dict = {}
 
 
 @router.get("/status", response_model=SetupStatusResponse)
 def setup_status():
     """检查是否需要初始化"""
     try:
-        # 测试数据库连接
         with Session(engine) as session:
             session.exec(text("SELECT 1"))
-            # 检查是否存在至少一个管理员用户
             admin = session.exec(select(User).where(User.is_admin == True)).first()
             if admin:
                 return SetupStatusResponse(needs_setup=False, db_ok=True, message="系统已初始化")
@@ -72,24 +81,23 @@ def test_db(req: TestDbRequest):
 
 @router.post("/initialize", response_model=InitializeResponse)
 def initialize(req: InitializeRequest):
-    """初始化系统：创建管理员用户和默认数据"""
+    """初始化系统：创建管理员用户、配置密钥、初始化默认数据"""
     import traceback
     import logging
-    logger = logging.getLogger("setup")
+    logger = logging.getLogger("worktrack")
 
     try:
-        # 检查是否已经初始化
         with Session(engine) as session:
             existing_admin = session.exec(select(User).where(User.is_admin == True)).first()
             if existing_admin:
                 raise HTTPException(status_code=400, detail="系统已初始化，请直接登录")
 
-        # 创建管理员用户
         from passlib.context import CryptContext
         pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+        config_summary = {}
+
         with Session(engine) as session:
-            # 检查用户名是否已存在
             existing_user = session.exec(select(User).where(User.username == req.username)).first()
             if existing_user:
                 raise HTTPException(status_code=400, detail=f"用户名 '{req.username}' 已存在")
@@ -104,38 +112,69 @@ def initialize(req: InitializeRequest):
             session.commit()
             session.refresh(admin)
 
-            # 初始化默认字段选项（如果不存在）
-            _init_default_options(session)
+            _init_default_options_in_session(session)
 
-            return InitializeResponse(
-                ok=True,
-                user={
-                    "id": admin.id,
-                    "username": admin.username,
-                    "name": admin.name,
-                    "is_admin": admin.is_admin,
-                },
-            )
+            config_summary["admin_created"] = True
+
+        # 配置JWT密钥：用户指定 > 环境变量 > 自动生成
+        jwt_key = req.jwt_secret_key
+        if not jwt_key:
+            jwt_key = os.getenv("JWT_SECRET_KEY", "")
+        if not jwt_key:
+            jwt_key = secrets.token_urlsafe(32)
+            config_summary["jwt_secret_key"] = "自动生成（重启后Token将失效，建议设置环境变量）"
+        else:
+            config_summary["jwt_secret_key"] = "已设置"
+            os.environ["JWT_SECRET_KEY"] = jwt_key
+        from app.config import settings
+        settings.jwt_secret_key = jwt_key
+
+        # 配置AI密钥（写入SystemPreference持久化）
+        from app.models.system_preference import SystemPreference
+        ai_configs = {}
+        if req.llm_api_key:
+            ai_configs["llm_api_key"] = req.llm_api_key
+        if req.llm_base_url and req.llm_base_url != "https://api.deepseek.com/v1":
+            ai_configs["llm_base_url"] = req.llm_base_url
+        if req.llm_model_name and req.llm_model_name != "deepseek-chat":
+            ai_configs["llm_model_name"] = req.llm_model_name
+        if req.embedding_api_key:
+            ai_configs["embedding_api_key"] = req.embedding_api_key
+        if req.embedding_base_url:
+            ai_configs["embedding_base_url"] = req.embedding_base_url
+        if req.tavily_api_key:
+            ai_configs["tavily_api_key"] = req.tavily_api_key
+
+        if ai_configs:
+            with Session(engine) as session:
+                for key, value in ai_configs.items():
+                    existing = session.exec(
+                        select(SystemPreference).where(
+                            SystemPreference.key == key,
+                            SystemPreference.user_id == None,
+                        )
+                    ).first()
+                    if existing:
+                        existing.value = value
+                    else:
+                        session.add(SystemPreference(key=key, value=value, user_id=None))
+                session.commit()
+            config_summary["ai_configured"] = True
+        else:
+            config_summary["ai_configured"] = False
+
+        return InitializeResponse(
+            ok=True,
+            user={
+                "id": admin.id,
+                "username": admin.username,
+                "name": admin.name,
+                "is_admin": admin.is_admin,
+            },
+            config_summary=config_summary,
+        )
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"初始化失败: {traceback.format_exc()}")
+        logger.error("初始化失败: %s", traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"初始化失败: {str(e)}")
-
-
-def _init_default_options(session):
-    """初始化默认字段选项（仅当不存在时）"""
-    existing = session.exec(select(FieldOption)).first()
-    if existing:
-        return
-
-    defaults = {
-        "industry": ["互联网", "金融", "教育", "医疗", "制造业", "零售", "房地产", "能源", "物流", "其他"],
-        "sales_person": ["张三", "李四", "王五"],
-        "project_status": ["进行中", "已完成", "暂停", "已取消", "待启动"],
-        "cloud": ["阿里云", "腾讯云", "华为云", "AWS", "Azure", "GCP", "私有部署", "其他"],
-    }
-    for category, values in defaults.items():
-        for i, val in enumerate(values):
-            session.add(FieldOption(category=category, value=val, sort_order=i))
-    session.commit()

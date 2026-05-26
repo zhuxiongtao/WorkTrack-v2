@@ -3,7 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.config import settings as app_settings
 from app.database import init_db
-from app.routers import daily_reports, customers, projects, meetings, scheduled_tasks, ai_agent, search, settings, logs, auth, users, dashboard, setup, files, contracts, wiki, rbac, monitor
+from app.routers import daily_reports, customers, projects, meetings, scheduled_tasks, ai_agent, search, settings, logs, auth, users, dashboard, setup, files, contracts, wiki, rbac, monitor, data_export
+from app.rate_limit import limiter
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from app.utils.time import utc_now, ensure_utc
 
 
 def create_app() -> FastAPI:
@@ -11,18 +15,20 @@ def create_app() -> FastAPI:
         title="WorkTrack",
         description="个人工作管理平台 - 日报、客户项目、会议纪要，集成 AI 与 MCP 服务",
         version="1.0.0",
-        # 生产环境可关闭文档
         docs_url="/docs" if app_settings.cors_origins == "*" else None,
         redoc_url=None,
         openapi_url="/openapi.json" if app_settings.cors_origins == "*" else None,
     )
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
     # CORS 中间件
     cors_origins = [origin.strip() for origin in app_settings.cors_origins.split(",") if origin.strip()]
+    is_wildcard = cors_origins == ["*"]
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins if cors_origins else ["*"],
-        allow_credentials=True,
+        allow_credentials=not is_wildcard,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -33,8 +39,6 @@ def create_app() -> FastAPI:
         # 公开路径（无需认证）
         public_paths = [
             "/", "/health", "/mcp", "/docs", "/openapi.json",
-            "/api/v1/meetings/audio",  # 会议录音文件（浏览器 audio 标签无法携带 auth header）
-            "/api/v1/files",           # 上传的文件（图片/附件公开访问）
             "/api/v1/setup",           # 首次运行初始化向导
             "/api/v1/settings/branding",  # 品牌配置（Logo 文件、标题等公开读取）
             "/api/v1/wiki/public",      # 公开分享的 AI 文档外链访问端点
@@ -75,6 +79,7 @@ def create_app() -> FastAPI:
     app.include_router(wiki.router)
     app.include_router(rbac.router)
     app.include_router(monitor.router)
+    app.include_router(data_export.router)
 
     # 启动时初始化数据库和调度器
     @app.on_event("startup")
@@ -93,9 +98,8 @@ def create_app() -> FastAPI:
             ).order_by(desc(LogEntry.created_at)).limit(1)
             last_log = db.exec(stmt).first()
 
-            now = datetime.now()
-            # 如果是首次启动，或者距离上一次启动日志已超过 15 分钟，则记录一条新日志
-            if not last_log or (now - last_log.created_at) > timedelta(minutes=15):
+            now = utc_now()
+            if not last_log or (now - ensure_utc(last_log.created_at)) > timedelta(minutes=15):
                 write_log("info", "system", "WorkTrack 服务已启动", details=f"版本: 1.0.0", db=db)
         from app.services.scheduler import start_scheduler
         start_scheduler()

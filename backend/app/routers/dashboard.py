@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, Query, HTTPException
@@ -13,6 +14,9 @@ from app.models.user import User
 from app.auth import get_current_user
 from app.routers.settings import DEFAULT_PROMPTS
 from app.services.ai_service import _get_active_provider, _get_client, _extract_message_text
+from app.utils.time import utc_now
+
+logger = logging.getLogger("worktrack")
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["数据看板"])
 
@@ -151,7 +155,8 @@ def get_stats(
         total_meetings = db.exec(
             select(func.count(MeetingNote.id)).where(MeetingNote.user_id == current_user.id)
         ).one() or 0
-    except Exception:
+    except Exception as e:
+        logger.error("查询会议总数失败: %s", e)
         total_meetings = len(all_meetings)
 
     # === 日报统计 ===
@@ -357,14 +362,19 @@ def get_timeline(
     return events[:limit]
 
 
-def _resolve_prompt(db: Session, period: str) -> tuple:
-    """从数据库或默认配置获取洞察提示词，返回 (system_prompt, user_prompt_template)"""
+def _resolve_prompt(db: Session, period: str, user_id: int = 0) -> tuple:
+    """从数据库或默认配置获取洞察提示词（用户自定义 > 全局 > 代码默认）"""
     task_type = f"insight_{period}"
-    # 优先使用用户自定义
-    saved = db.exec(select(AIPrompt).where(AIPrompt.task_type == task_type)).first()
-    if saved:
+    # 第1层：用户自定义
+    if user_id:
+        saved = db.exec(select(AIPrompt).where(AIPrompt.task_type == task_type, AIPrompt.user_id == user_id)).first()
+        if saved and saved.system_prompt:
+            return saved.system_prompt, saved.user_prompt_template
+    # 第2层：全局（user_id=0）
+    saved = db.exec(select(AIPrompt).where(AIPrompt.task_type == task_type, AIPrompt.user_id == 0)).first()
+    if saved and saved.system_prompt:
         return saved.system_prompt, saved.user_prompt_template
-    # 回退到默认
+    # 第3层：代码默认
     default = DEFAULT_PROMPTS.get(task_type, {})
     return default.get("system_prompt", ""), default.get("user_prompt_template", "")
 
@@ -455,14 +465,15 @@ def get_ai_insights(
     }
 
     # 获取提示词（从数据库或默认配置）
-    system_prompt, user_prompt_template = _resolve_prompt(db, period)
+    system_prompt, user_prompt_template = _resolve_prompt(db, period, current_user.id)
 
     # 尝试调用 AI
     try:
         provider_info = _get_active_provider(db, "chat", current_user.id)
     except HTTPException:
         provider_info = (None, None, None)
-    except Exception:
+    except Exception as e:
+        logger.error("获取 AI 供应商失败: %s", e)
         provider_info = (None, None, None)
 
     if not provider_info[0] or not provider_info[1]:
@@ -504,7 +515,8 @@ def get_ai_insights(
             "period": period,
             "range": {"start": range_start.isoformat(), "end": range_end.isoformat()},
             "sources": sources,
-            "updated_at": datetime.now().isoformat(),
+            "updated_at": utc_now().isoformat(),
         }
-    except Exception:
+    except Exception as e:
+        logger.error("获取 AI 洞察失败: %s", e)
         return {"insights": [], "period": period, "sources": sources, "updated_at": None}

@@ -137,6 +137,9 @@ def create_daily_report(user_id: int, content: str) -> dict:
     """创建一篇新日报"""
     db = next(get_session())
     try:
+        user = db.get(User, user_id)
+        if not user:
+            return {"error": f"用户 {user_id} 不存在"}
         report = DailyReport(
             user_id=user_id,
             report_date=date.today(),
@@ -291,15 +294,24 @@ def get_project(project_id: int) -> dict:
 
 @mcp.tool()
 def create_project(name: str, status: str = "active", customer_id: Optional[int] = None,
-                   deadline: Optional[str] = None) -> dict:
-    """创建新项目。deadline 格式 YYYY-MM-DD"""
+                   deadline: Optional[str] = None, user_id: Optional[int] = None) -> dict:
+    """创建新项目。deadline 格式 YYYY-MM-DD。user_id 为项目负责人"""
     db = next(get_session())
     try:
+        if user_id:
+            user = db.get(User, user_id)
+            if not user:
+                return {"error": f"用户 {user_id} 不存在"}
+        if customer_id:
+            customer = db.get(Customer, customer_id)
+            if not customer:
+                return {"error": f"客户 {customer_id} 不存在"}
         proj = Project(
             name=name,
             status=status,
             customer_id=customer_id,
             deadline=date.fromisoformat(deadline) if deadline else None,
+            user_id=user_id,
         )
         db.add(proj)
         db.commit()
@@ -396,12 +408,16 @@ def get_customer(customer_id: int) -> dict:
 
 
 @mcp.tool()
-def create_customer(name: str, industry: str = "", status: str = "潜在") -> dict:
-    """创建新客户"""
+def create_customer(name: str, industry: str = "", status: str = "潜在", user_id: Optional[int] = None) -> dict:
+    """创建新客户。user_id 为负责人"""
     db = next(get_session())
     try:
+        if user_id:
+            user = db.get(User, user_id)
+            if not user:
+                return {"error": f"用户 {user_id} 不存在"}
         c = Customer(
-            name=name, industry=industry, status=status,
+            name=name, industry=industry, status=status, user_id=user_id,
         )
         db.add(c)
         db.commit()
@@ -555,17 +571,17 @@ def get_overview() -> dict:
         week_start = today - timedelta(days=today.weekday())
         month_start = today.replace(day=1)
 
-        total_projects = len(db.exec(select(Project)).all())
-        active_projects = len(db.exec(select(Project).where(Project.status == "active")).all())
-        total_customers = len(db.exec(select(Customer)).all())
+        total_projects = db.exec(select(func.count()).select_from(Project)).one()
+        active_projects = db.exec(select(func.count()).select_from(Project).where(Project.status == "active")).one()
+        total_customers = db.exec(select(func.count()).select_from(Customer)).one()
 
-        week_reports = len(db.exec(
-            select(DailyReport).where(DailyReport.report_date >= week_start)
-        ).all())
+        week_reports = db.exec(
+            select(func.count()).select_from(DailyReport).where(DailyReport.report_date >= week_start)
+        ).one()
 
-        month_meetings = len(db.exec(
-            select(MeetingNote).where(MeetingNote.meeting_date >= month_start)
-        ).all())
+        month_meetings = db.exec(
+            select(func.count()).select_from(MeetingNote).where(MeetingNote.meeting_date >= month_start)
+        ).one()
 
         return {
             "total_projects": total_projects,

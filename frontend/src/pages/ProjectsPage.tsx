@@ -351,7 +351,7 @@ export default function ProjectsPage() {
             <span className="text-xs text-gray-500 bg-bg-hover px-2 py-0.5 rounded-full">{projects.length}</span>
           </div>
           {/* 管理者与老板专属：成员数据切换下拉框 */}
-          {(hasPermission('project:view_all') && memberList.length > 0) && (
+          {(memberList.length > 1) && (
             <select
               value={selectedUserId}
               onChange={e => setSelectedUserId(e.target.value)}

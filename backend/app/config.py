@@ -1,3 +1,5 @@
+import secrets
+import warnings
 from pydantic_settings import BaseSettings
 from pathlib import Path
 import os
@@ -14,14 +16,16 @@ class Settings(BaseSettings):
     embedding_api_key: str = ""
     embedding_model_name: str = "text-embedding-3-small"
 
-    # Chroma 持久化目录
-    chroma_persist_dir: str = "./data/chroma"
+    # ===== 统一存储根目录 =====
+    # 所有持久化文件（数据、上传、音频、向量、头像、品牌等）均在此目录下
+    # 生产环境建议设置 DATA_ROOT 环境变量指向持久化卷路径（如 /app/data）
+    data_root: str = ""
 
-    # 数据库连接（默认使用本地 PostgreSQL）
+    # 数据库连接（默认使用本地 PostgreSQL，生产环境务必通过 DATABASE_URL 环境变量覆盖）
     database_url: str = "postgresql://worktrack:worktrack@localhost:5432/worktrack"
 
-    # JWT
-    jwt_secret_key: str = "change-me-in-production"
+    # JWT（未设置时自动生成随机密钥并发出警告，生产环境务必设置 JWT_SECRET_KEY）
+    jwt_secret_key: str = ""
 
     # 安全配置
     allow_registration: bool = False
@@ -33,11 +37,51 @@ class Settings(BaseSettings):
     # 是否在首次启动时自动创建默认管理员（本地开发 True，Docker 生产 False）
     auto_create_admin: bool = True
 
+    # 默认管理员密码（仅 auto_create_admin=True 时使用；未设置则自动生成随机密码并打印到日志）
+    admin_password: str = ""
+
     # Tavily 搜索 API Key（兜底用，优先使用系统偏好设置）
     tavily_api_key: str = ""
 
-    # 头像存储目录（留空则自动推导为 backend/data/avatars，可通过 AVATAR_DIR 环境变量覆盖）
+    # 头像存储目录（留空则自动推导，可通过 AVATAR_DIR 环境变量覆盖）
     avatar_dir: str = ""
+
+    @property
+    def effective_data_root(self) -> str:
+        """统一存储根目录，默认为 backend/ 目录下的 data"""
+        if self.data_root:
+            return self.data_root
+        return str(Path(__file__).resolve().parent.parent / "data")
+
+    @property
+    def effective_chroma_dir(self) -> str:
+        return os.path.join(self.effective_data_root, "chroma")
+
+    @property
+    def effective_audio_dir(self) -> str:
+        return os.path.join(self.effective_data_root, "audio")
+
+    @property
+    def effective_avatar_dir(self) -> str:
+        if self.avatar_dir:
+            return self.avatar_dir
+        return os.path.join(self.effective_data_root, "avatars")
+
+    @property
+    def effective_files_dir(self) -> str:
+        return os.path.join(self.effective_data_root, "files")
+
+    @property
+    def effective_brand_dir(self) -> str:
+        return os.path.join(self.effective_data_root, "brand")
+
+    @property
+    def effective_uploads_dir(self) -> str:
+        return str(Path(__file__).resolve().parent.parent / "uploads")
+
+    @property
+    def effective_contracts_dir(self) -> str:
+        return os.path.join(self.effective_uploads_dir, "contracts")
 
     @property
     def effective_embedding_base_url(self) -> str:
@@ -47,13 +91,23 @@ class Settings(BaseSettings):
     def effective_embedding_api_key(self) -> str:
         return self.embedding_api_key or self.llm_api_key
 
-    @property
-    def effective_avatar_dir(self) -> str:
-        if self.avatar_dir:
-            return self.avatar_dir
-        return str(Path(__file__).resolve().parent.parent / "data" / "avatars")
+    def validate_security(self) -> None:
+        """启动时校验安全配置，生产环境下关键密钥未设置时发出强烈警告"""
+        if not self.jwt_secret_key or self.jwt_secret_key == "change-me-in-production":
+            self.jwt_secret_key = secrets.token_urlsafe(32)
+            warnings.warn(
+                "⚠️  JWT_SECRET_KEY 未设置，已自动生成随机密钥。重启后已有 Token 将失效！"
+                "生产环境请务必设置 JWT_SECRET_KEY 环境变量。",
+                stacklevel=2,
+            )
+        if "worktrack:worktrack" in self.database_url and os.getenv("DATABASE_URL") is None:
+            warnings.warn(
+                "⚠️  使用默认数据库凭据（worktrack:worktrack），生产环境请通过 DATABASE_URL 环境变量设置安全的连接串。",
+                stacklevel=2,
+            )
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 
 settings = Settings()
+settings.validate_security()

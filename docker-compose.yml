@@ -41,6 +41,7 @@ services:
       - AUTO_CREATE_ADMIN=false     # 生产环境通过初始化向导创建管理员
     volumes:
       - worktrack_data:/app/data       # ChromaDB 向量、音频文件持久化
+      - worktrack_uploads:/app/uploads  # 合同文件等上传文件持久化
     depends_on:
       postgres:
         condition: service_healthy
@@ -49,3 +50,4 @@ services:
 volumes:
   pgdata:
   worktrack_data:
+  worktrack_uploads:

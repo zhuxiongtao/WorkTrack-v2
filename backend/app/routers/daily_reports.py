@@ -15,8 +15,15 @@ from app.services.vector_store import index_document, delete_document
 from app.services.ai_service import summarize_daily_report, _get_prompt, _fill_template, _get_active_provider, _get_client, _extract_message_text
 from app.routers.logs import write_log
 from datetime import timedelta
+from app.utils.time import utc_now
+from app.config import settings
 
 router = APIRouter(prefix="/api/v1/reports", tags=["日报"])
+
+
+def week_range(d: date):
+    """返回该日期所在周的周一日期"""
+    return d - timedelta(days=d.weekday())
 
 
 def _background_ai_summarize(report_id: int, content: str):
@@ -29,7 +36,7 @@ def _background_ai_summarize(report_id: int, content: str):
             summary = summarize_daily_report(content, db, user_id)
             if report:
                 report.ai_summary = summary
-                report.updated_at = datetime.now()
+                report.updated_at = utc_now()
                 db.add(report)
                 db.commit()
                 write_log("info", "ai", f"后台AI总结日报#{report_id}完成", db=db)
@@ -51,14 +58,11 @@ def list_weekly_reports(
 
     # 加载已保存的周报 AI 总结（仅当前用户）
     saved_summaries = {
-        str(s.week_start): s.summary_text
+        str(s.week_start): {"text": s.summary_text, "status": s.status}
         for s in db.exec(
             select(WeeklySummary).where(WeeklySummary.user_id == current_user.id)
         ).all()
     }
-
-    def week_range(d: date):
-        return d - timedelta(days=d.weekday())
 
     tree: dict = defaultdict(lambda: defaultdict(list))
     for r in reports:
@@ -85,7 +89,8 @@ def list_weekly_reports(
                 "year": year,
                 "report_count": len(entries),
                 "reports": entries,
-                "weekly_summary": saved_summaries.get(wk_str, ""),
+                "weekly_summary": saved_summaries.get(wk_str, {}).get("text", ""),
+                "weekly_summary_status": saved_summaries.get(wk_str, {}).get("status", ""),
             })
 
     return {"weeks": weeks, "total_weeks": len(weeks)}
@@ -112,10 +117,6 @@ def list_reports_grouped(
         query = query.where(DailyReport.status == "submitted")
 
     reports = db.exec(query.order_by(DailyReport.report_date.desc())).all()
-    
-    def week_range(d: date):
-        """返回该日期所在周的周一日期"""
-        return d - timedelta(days=d.weekday())
     
     # 构建 year → month → week → reports
     tree: dict = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
@@ -200,16 +201,15 @@ def create_report(data: DailyReportCreate, background_tasks: BackgroundTasks, cu
     db.add(report)
     db.commit()
     db.refresh(report)
-    # 后台索引到向量数据库
-    background_tasks.add_task(
-        index_document,
-        collection_name="daily_reports",
-        doc_id=str(report.id),
-        text=report.content_md,
-        metadata={"report_date": str(report.report_date), "user_id": report.user_id},
-    )
-    # 后台 AI 自动总结
-    background_tasks.add_task(_background_ai_summarize, report.id, report.content_md)
+    if report.status == "submitted":
+        background_tasks.add_task(
+            index_document,
+            collection_name="daily_reports",
+            doc_id=str(report.id),
+            text=report.content_md,
+            metadata={"report_date": str(report.report_date), "user_id": report.user_id},
+        )
+        background_tasks.add_task(_background_ai_summarize, report.id, report.content_md)
     return report
 
 
@@ -218,14 +218,18 @@ def update_report(report_id: int, data: DailyReportUpdate, background_tasks: Bac
     report = db.get(DailyReport, report_id)
     if not report or report.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="日报不存在")
+    if report.status == "submitted":
+        if data.status == "draft":
+            raise HTTPException(status_code=400, detail="已提交的日报不能回退为草稿")
+        if data.content_md is not None and data.content_md != report.content_md:
+            raise HTTPException(status_code=400, detail="已提交的日报不能修改内容")
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(report, key, value)
     db.add(report)
     db.commit()
     db.refresh(report)
-    # 后台更新向量索引 + AI 自动总结
-    content_changed = data.content_md is not None
+    content_changed = data.content_md is not None and data.content_md != report.content_md and report.status == "submitted"
     if content_changed:
         background_tasks.add_task(
             index_document,
@@ -350,14 +354,14 @@ def generate_weekly_summary(data: WeeklySummaryRequest, current_user: User = Dep
         if existing:
             existing.summary_text = summary_text
             existing.week_end = week_end
-            existing.created_at = datetime.now().isoformat()
+            existing.created_at = utc_now().isoformat()
         else:
             db.add(WeeklySummary(
                 user_id=current_user.id,
                 week_start=week_start,
                 week_end=week_end,
                 summary_text=summary_text,
-                created_at=datetime.now().isoformat(),
+                created_at=utc_now().isoformat(),
             ))
         db.commit()
         return {"summary_text": summary_text, "saved": True}
@@ -416,7 +420,7 @@ async def transcribe_report_audio(file: UploadFile = File(...), current_user: Us
                                    db: Session = Depends(get_session)):
     """上传音频并转写为文字（用于日报语音录入）"""
     import uuid as _uuid
-    audio_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "audio")
+    audio_dir = settings.effective_audio_dir
     os.makedirs(audio_dir, exist_ok=True)
     
     filename = f"daily_{current_user.id}_{_uuid.uuid4().hex[:8]}.webm"
@@ -473,7 +477,7 @@ def update_weekly_summary(week_start: str, data: WeeklySummaryUpdate,
             week_end=week_start_date + timedelta(days=6),
             summary_text=data.summary_text or "",
             status=data.status or "draft",
-            created_at=datetime.now().isoformat(),
+            created_at=utc_now().isoformat(),
         ))
         db.commit()
     return {"success": True}

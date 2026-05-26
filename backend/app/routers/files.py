@@ -6,13 +6,13 @@ from fastapi.responses import FileResponse
 from sqlmodel import Session
 from app.database import get_session
 from app.models.user import User
-from app.auth import get_current_user
+from app.auth import get_current_user, has_permission
 from app.routers.logs import write_log
+from app.config import settings
 
 router = APIRouter(prefix="/api/v1/files", tags=["文件管理"])
 
-# 文件存储根目录（Docker 部署时需挂载为持久化卷）
-UPLOAD_ROOT = Path("data/files")
+UPLOAD_ROOT = Path(settings.effective_files_dir)
 UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {
@@ -89,19 +89,25 @@ async def upload_file(
 
 
 @router.get("/{user_id}/{filename:path}")
-async def serve_file(user_id: str, filename: str):
+async def serve_file(
+    user_id: str,
+    filename: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
     """
-    公开访问已上传文件（无需认证，用于 <img> 标签等场景）。
-    文件按用户隔离存储，URL 中包含 user_id 防止跨用户访问。
+    已上传文件访问（需认证）。
+    仅允许访问自己上传的文件，管理员可访问所有文件。
     """
-    # 安全检查：防止路径遍历攻击
+    if str(current_user.id) != user_id and not has_permission(current_user, "user:read", db):
+        raise HTTPException(status_code=403, detail="无权访问该文件")
+
     safe_filename = os.path.basename(filename)
     file_path = UPLOAD_ROOT / user_id / safe_filename
 
     if not file_path.exists() or not file_path.is_file():
         raise HTTPException(status_code=404, detail="文件不存在")
 
-    # 根据扩展名设置 MIME 类型
     ext = file_path.suffix.lower()
     media_types = {
         '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',

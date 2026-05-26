@@ -3,7 +3,7 @@ from app.config import settings
 import os
 
 # 确保数据目录存在（ChromaDB 等仍需要本地数据目录）
-data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+data_dir = settings.effective_data_root
 if not os.path.exists(data_dir):
     os.makedirs(data_dir, exist_ok=True)
 
@@ -11,7 +11,8 @@ engine = create_engine(settings.database_url, echo=False)
 
 
 def init_db():
-    """初始化数据库：创建所有表，添加默认数据"""
+    """初始化数据库：确保 Alembic 迁移已执行，添加默认数据"""
+    import logging
     from app.models import (  # noqa: F401 - 确保所有模型注册到 SQLModel.metadata
         User,
         Department,
@@ -31,16 +32,17 @@ def init_db():
         AIPrompt,
         WeeklySummary,
     )
-    SQLModel.metadata.create_all(engine)
-    # 动态为 wiki_space 新增密码共享与失效时间所需字段，保障向下兼容
+    logger = logging.getLogger("worktrack")
+    # 注意：表结构由 Alembic 迁移管理（entrypoint.sh 中自动执行 alembic upgrade head）
+    # 此处仅做运行时兼容性补丁和默认数据初始化
     from sqlmodel import text
     with engine.connect() as conn:
         try:
             conn.execute(text("ALTER TABLE wiki_space ADD COLUMN IF NOT EXISTS share_password VARCHAR(100) DEFAULT NULL;"))
             conn.execute(text("ALTER TABLE wiki_space ADD COLUMN IF NOT EXISTS share_expires_at TIMESTAMP WITH TIME ZONE DEFAULT NULL;"))
             conn.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("ALTER TABLE skipped: %s", e)
     # RBAC 关联表唯一约束（幂等添加）
     with engine.connect() as conn:
         for constraint_sql in [
@@ -51,7 +53,8 @@ def init_db():
             try:
                 conn.execute(text(constraint_sql))
                 conn.commit()
-            except Exception:
+            except Exception as e:
+                logger.debug("ADD CONSTRAINT skipped: %s", e)
                 conn.rollback()
     # 非生产模式自动创建默认管理员（生产使用初始化向导）
     if settings.auto_create_admin:
@@ -64,33 +67,42 @@ def init_db():
 
 def _ensure_admin_user(engine):
     """确保存在管理员用户；为旧无密码用户补充凭据"""
+    import logging
+    import secrets as _secrets
     from app.models.user import User
     from passlib.context import CryptContext
 
     pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
+    logger = logging.getLogger("worktrack")
+
+    admin_pwd = settings.admin_password or _secrets.token_urlsafe(12)
 
     with Session(engine) as session:
         from sqlmodel import select as sm_select
         users = session.exec(sm_select(User)).all()
 
         if not users:
-            # 无用户：创建默认管理员
             session.add(User(
                 id=1,
                 username="admin",
-                password_hash=pwd_ctx.hash("admin123"),
+                password_hash=pwd_ctx.hash(admin_pwd),
                 name="管理员",
                 is_admin=True,
             ))
             session.commit()
+            if not settings.admin_password:
+                logger.warning("⚠️  默认管理员已创建，随机密码: %s（请立即登录修改）", admin_pwd)
+            else:
+                logger.info("默认管理员已创建，密码使用 ADMIN_PASSWORD 配置")
             return
 
-        # 为旧用户补充 username/password
         for u in users:
             if not u.username:
                 u.username = f"user{u.id}"
             if not u.password_hash:
-                u.password_hash = pwd_ctx.hash("admin123")
+                random_pwd = _secrets.token_urlsafe(12)
+                u.password_hash = pwd_ctx.hash(random_pwd)
+                logger.warning("⚠️  用户 %s (id=%d) 密码已重置为随机值，请联系管理员重置", u.username, u.id)
             if not u.name:
                 u.name = "默认用户"
         session.commit()
@@ -102,22 +114,29 @@ def get_session():
         yield session
 
 
+DEFAULT_FIELD_OPTIONS = {
+    "industry": ["互联网", "金融", "教育", "医疗", "制造业", "零售", "房地产", "能源", "物流", "其他"],
+    "sales_person": ["张三", "李四", "王五"],
+    "project_status": ["进行中", "已完成", "暂停", "已取消", "待启动"],
+    "cloud": ["阿里云", "腾讯云", "华为云", "AWS", "Azure", "GCP", "私有部署", "其他"],
+}
+
+
+def _init_default_options_in_session(session):
+    """在已有 session 中初始化默认字段选项（仅当不存在时）"""
+    from app.models.field_option import FieldOption
+    existing = session.exec(select(FieldOption)).first()
+    if not existing:
+        for category, values in DEFAULT_FIELD_OPTIONS.items():
+            for i, val in enumerate(values):
+                session.add(FieldOption(category=category, value=val, sort_order=i))
+        session.commit()
+
+
 def _init_default_options(engine):
     """初始化默认字段选项"""
-    from app.models.field_option import FieldOption
-    defaults = {
-        "industry": ["互联网", "金融", "教育", "医疗", "制造业", "零售", "房地产", "能源", "物流", "其他"],
-        "sales_person": ["张三", "李四", "王五"],
-        "project_status": ["进行中", "已完成", "暂停", "已取消", "待启动"],
-        "cloud": ["阿里云", "腾讯云", "华为云", "AWS", "Azure", "GCP", "私有部署", "其他"],
-    }
     with Session(engine) as session:
-        existing = session.exec(select(FieldOption)).first()
-        if not existing:
-            for category, values in defaults.items():
-                for i, val in enumerate(values):
-                    session.add(FieldOption(category=category, value=val, sort_order=i))
-            session.commit()
+        _init_default_options_in_session(session)
 
 
 # ===== RBAC 预置数据 =====
@@ -146,6 +165,7 @@ PERMISSION_DEFS = [
     ("contract:edit", "编辑合同", "contract", "edit"),
     ("contract:delete", "删除合同", "contract", "delete"),
     ("contract:parse", "解析合同", "contract", "parse"),
+    ("contract:view_all", "查看全部合同", "contract", "view_all"),
     # 日报/周报
     ("report:read", "查看报告", "report", "read"),
     ("report:create", "创建报告", "report", "create"),
@@ -157,6 +177,7 @@ PERMISSION_DEFS = [
     ("meeting:create", "创建会议", "meeting", "create"),
     ("meeting:edit", "编辑会议", "meeting", "edit"),
     ("meeting:delete", "删除会议", "meeting", "delete"),
+    ("meeting:view_all", "查看全部会议", "meeting", "view_all"),
     # AI 与模型供应商
     ("ai:use", "使用AI", "ai", "use"),
     ("ai:manage_own", "管理自有供应商", "ai", "manage_own"),
@@ -181,30 +202,47 @@ PERMISSION_DEFS = [
     ("log:read", "查看日志", "log", "read"),
     # 运维监控
     ("monitor:read", "查看运维监控", "monitor", "read"),
+    # 数据管理
+    ("data:export", "导出数据", "data", "export"),
+    ("data:import", "导入数据", "data", "import"),
+    # 客户全局查看（跨部门）
+    ("customer:view_all", "查看全部客户", "customer", "view_all"),
 ]
 
 ROLE_DEFS = {
     "admin": {
         "name": "系统管理员",
-        "description": "系统运维管理员，负责用户管理、系统配置、运维监控与模型供应商管理",
+        "description": "系统管理员，拥有全部业务模块权限和系统管理权限",
         "perms": [
+            # 用户与角色管理
             "user:read", "user:create", "user:edit", "user:delete", "user:manage_roles",
+            # 全部业务模块
+            "project:read", "project:create", "project:edit", "project:delete", "project:view_all",
+            "customer:read", "customer:create", "customer:edit", "customer:delete", "customer:view_all",
+            "contract:read", "contract:create", "contract:edit", "contract:delete", "contract:parse", "contract:view_all",
+            "report:read", "report:create", "report:edit", "report:delete", "report:view_all",
+            "meeting:read", "meeting:create", "meeting:edit", "meeting:delete", "meeting:view_all",
+            "wiki:read", "wiki:create", "wiki:edit", "wiki:delete", "wiki:manage_space",
+            # AI
+            "ai:use", "ai:manage_own", "ai:manage_shared",
+            # 系统管理与运维
             "settings:read", "settings:edit",
+            "dashboard:read",
+            "task:read", "task:create", "task:edit", "task:delete",
             "log:read",
             "monitor:read",
-            "ai:use", "ai:manage_own", "ai:manage_shared",
+            "data:export", "data:import",
         ],
     },
     "dept_leader": {
         "name": "部门领导",
-        "description": "部门领导，可查看本部门数据并有部分管理权限",
+        "description": "部门领导，通过部门负责人机制自动获得本部门及子部门数据可见性，无需 view_all",
         "perms": [
-            "user:read",
             "project:read", "project:create", "project:edit",
             "customer:read", "customer:create", "customer:edit",
             "contract:read", "contract:parse",
             "report:read", "report:create", "report:edit",
-            "meeting:read",
+            "meeting:read", "meeting:create",
             "ai:use", "ai:manage_own",
             "wiki:read", "wiki:create", "wiki:edit",
             "settings:read",

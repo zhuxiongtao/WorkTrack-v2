@@ -222,7 +222,9 @@ export default function CustomersPage() {
 
   const loadContacts = (customerId: number) => {
     fetch(`/api/v1/customers/${customerId}/contacts`)
-      .then(r => r.json()).then(data => setContacts(data || [])).catch(() => setContacts([]))
+      .then(r => { if (!r.ok) return []; return r.json() })
+      .then(data => setContacts(Array.isArray(data) ? data : []))
+      .catch(() => setContacts([]))
   }
 
   const saveContact = async (customerId: number) => {
@@ -241,6 +243,9 @@ export default function CustomersPage() {
       setEditingContactId(null)
       setShowAddContact(false)
       loadContacts(customerId)
+    } else {
+      const err = await res.json().catch(() => ({}))
+      showToast(err.detail || '保存联系人失败', 'error')
     }
   }
 
@@ -299,9 +304,9 @@ export default function CustomersPage() {
     setLoading(true)
     const url = '/api/v1/customers' + (selectedUserId ? `?user_id=${selectedUserId}` : '')
     fetch(url)
-      .then((res) => res.json())
+      .then((res) => { if (!res.ok) return []; return res.json() })
       .then((data) => { setCustomers(Array.isArray(data) ? data : []); setLoading(false) })
-      .catch(() => setLoading(false))
+      .catch(() => { setCustomers([]); setLoading(false) })
   }, [selectedUserId])
 
   useEffect(() => { loadCustomers() }, [loadCustomers])
@@ -319,15 +324,22 @@ export default function CustomersPage() {
     try {
       const url = editingId ? `/api/v1/customers/${editingId}` : '/api/v1/customers'
       const method = editingId ? 'PUT' : 'POST'
-      await fetch(url, {
+      const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        showToast(err.detail || '保存失败', 'error')
+        return
+      }
       setShowForm(false)
       resetForm()
       loadCustomers()
       showToast(editingId ? '客户信息已更新' : '客户创建成功', 'success')
+    } catch {
+      showToast('保存请求失败', 'error')
     } finally { setSaving(false) }
   }
 
@@ -476,7 +488,7 @@ export default function CustomersPage() {
             <p className="text-sm text-gray-500 mt-1">{customers.length} 个客户</p>
           </div>
           {/* 管理者与老板专属：成员数据切换下拉框 */}
-          {(hasPermission('customer:read') && memberList.length > 0) && (
+          {(memberList.length > 1) && (
             <select
               value={selectedUserId}
               onChange={e => setSelectedUserId(e.target.value)}

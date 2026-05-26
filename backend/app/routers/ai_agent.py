@@ -7,10 +7,11 @@ from app.database import get_session
 from app.services.ai_agent import run_agent_chat
 from app.models.chat import ChatConversation, ChatMessage
 from app.models.user import User
-from app.auth import get_current_user
+from app.auth import get_current_user, has_permission
 from app.models.model_provider import TaskModelConfig, ModelProvider
 from app.routers.logs import write_log
 from datetime import datetime
+from app.utils.time import utc_now
 
 router = APIRouter(prefix="/api/v1/ai", tags=["AI Agent"])
 
@@ -31,8 +32,7 @@ def get_active_model(db: Session = Depends(get_session),
                      current_user: User = Depends(get_current_user)):
     """获取当前用户可用的对话模型供应商和模型名"""
     uid = current_user.id
-    is_admin = current_user.is_admin
-    use_shared = is_admin or current_user.use_shared_models
+    use_shared = has_permission(current_user, "ai:manage_shared", db) or current_user.use_shared_models
 
     # 1. 用户私有任务配置
     task_cfg = db.exec(
@@ -178,7 +178,7 @@ def chat_in_conversation(conv_id: int, request: ConversationChatRequest, current
     # 自动更新标题（用第一条用户消息作为标题）
     if not history_msgs:
         conv.title = request.message[:40]
-    conv.updated_at = datetime.now()
+    conv.updated_at = utc_now()
     db.add(conv)
 
     db.commit()

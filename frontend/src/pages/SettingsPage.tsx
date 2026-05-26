@@ -66,7 +66,7 @@ const TYPE_LABEL: Record<string, string> = { chat: '对话', embedding: '嵌入'
 
 export default function SettingsPage() {
   // ===== 标签页状态 =====
-  const { user, setUser, fetchWithAuth, hasPermission } = useAuth()
+  const { user, setUser, fetchWithAuth, hasPermission, isAdmin } = useAuth()
   const { toast: showToast, confirm: showConfirm } = useToast()
   const canAccessModels = hasPermission('ai:manage_own') || hasPermission('ai:manage_shared')
   const canManageModels = hasPermission('ai:manage_own') || hasPermission('ai:manage_shared')
@@ -376,7 +376,7 @@ export default function SettingsPage() {
   }, [])
 
   // ===== AI 提示词 =====
-  const [aiPrompts, setAiPrompts] = useState<Record<string, { label: string; desc: string; system_prompt: string; user_prompt_template: string; variables: string[]; customized: boolean }>>({})
+  const [aiPrompts, setAiPrompts] = useState<Record<string, { label: string; desc: string; system_prompt: string; user_prompt_template: string; variables: string[]; customized: boolean; source: string; global_system_prompt?: string; global_user_prompt_template?: string }>>({})
   const [editingPrompt, setEditingPrompt] = useState<string | null>(null)
   const [promptForm, setPromptForm] = useState({ system_prompt: '', user_prompt_template: '' })
   const [promptSaving, setPromptSaving] = useState(false)
@@ -402,14 +402,19 @@ export default function SettingsPage() {
   const savePrompt = async (taskType: string) => {
     setPromptSaving(true)
     try {
-      await fetchWithAuth(`/api/v1/settings/ai-prompts/${taskType}`, {
+      const scopeEl = document.getElementById(`prompt-scope-${taskType}`) as HTMLSelectElement | null
+      const scope = scopeEl?.value || 'user'
+      const url = scope === 'global' && isAdmin
+        ? `/api/v1/settings/ai-prompts/global/${taskType}`
+        : `/api/v1/settings/ai-prompts/${taskType}`
+      await fetchWithAuth(url, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(promptForm),
       })
       setEditingPrompt(null)
       setAiReq('')
       loadPrompts()
-      showToast('提示词已保存', 'success')
+      showToast(scope === 'global' ? '全局提示词已保存' : '提示词已保存', 'success')
     } finally { setPromptSaving(false) }
   }
 
@@ -840,6 +845,7 @@ export default function SettingsPage() {
       <div className="mb-10">
         <h3 className="text-base font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2"><Edit3 size={18} className="text-[#8B5CF6]" /> AI 提示词配置</h3>
         <p className="text-xs text-gray-500 mb-4 dark:text-gray-400">自定义各 AI 任务的 System Prompt 和用户消息模板，让 AI 输出更符合你的预期。使用 <code className="px-1.5 py-0.5 rounded bg-bg-input text-[10px] text-[#8B5CF6]">{'{变量名}'}</code> 表示动态内容占位。</p>
+        {isAdmin && <p className="text-xs text-indigo-500 mb-3">管理员提示：你可以编辑全局默认提示词，新用户将自动继承。普通用户可自行覆盖为个人提示词。</p>}
         {Object.keys(aiPrompts).length === 0 ? (
           <div className="p-6 rounded-xl bg-bg-card border border-dashed border-border text-center">
             <Loader2 size={20} className="mx-auto animate-spin text-gray-500 mb-2" />
@@ -849,13 +855,15 @@ export default function SettingsPage() {
           <div className="space-y-3">
             {Object.entries(aiPrompts).map(([taskType, prompt]) => {
               const isEditing = editingPrompt === taskType
+              const sourceLabel = prompt.source === 'user' ? '个人自定义' : prompt.source === 'global' ? '全局默认' : '系统默认'
+              const sourceColor = prompt.source === 'user' ? 'bg-[#8B5CF6]/10 text-[#A78BFA]' : prompt.source === 'global' ? 'bg-indigo-500/10 text-indigo-400' : 'bg-gray-500/10 text-gray-400'
               return (
                 <div key={taskType} className="p-3.5 max-md:p-3 rounded-xl bg-bg-card border border-border">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className="text-sm font-medium text-gray-900 dark:text-white max-md:text-xs">{prompt.label}</span>
-                        {prompt.customized && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#8B5CF6]/10 text-[#A78BFA]">已自定义</span>}
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${sourceColor}`}>{sourceLabel}</span>
                       </div>
                       <p className="text-xs text-gray-500 mb-1 max-md:hidden">{prompt.desc}</p>
                       <p className="text-[10px] text-gray-600">变量: {prompt.variables?.join(', ') || '无'}</p>
@@ -871,7 +879,7 @@ export default function SettingsPage() {
                         <button
                           onClick={() => resetPrompt(taskType)}
                           className="px-2.5 py-1.5 rounded-lg bg-bg-hover text-xs text-amber-400 hover:text-amber-300 border border-border transition-colors"
-                          title="恢复默认"
+                          title="恢复为全局默认"
                         >
                           <RotateCcw size={12} />
                         </button>
@@ -882,6 +890,19 @@ export default function SettingsPage() {
                   {/* 编辑面板 */}
                   {isEditing && (
                     <div className="mt-4 space-y-3 border-t border-border pt-4">
+                      {isAdmin && (
+                        <div className="flex items-center gap-2 mb-2">
+                          <label className="text-xs text-gray-400">编辑范围：</label>
+                          <select
+                            id={`prompt-scope-${taskType}`}
+                            defaultValue="user"
+                            className="px-2 py-1 rounded bg-bg-input border border-border text-xs text-gray-700 dark:text-gray-300"
+                          >
+                            <option value="user">个人提示词（仅影响自己）</option>
+                            <option value="global">全局默认（影响所有新用户）</option>
+                          </select>
+                        </div>
+                      )}
                       <div>
                         <label className="block text-xs text-gray-400 mb-1.5">System Prompt</label>
                         <textarea

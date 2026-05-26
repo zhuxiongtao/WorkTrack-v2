@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Loader2, Calendar, ChevronDown, ChevronRight, FileText, Sparkles, X, Edit3, Save } from 'lucide-react'
+import { Loader2, Calendar, ChevronDown, ChevronRight, FileText, Sparkles, X, Edit3, Save, Send } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../contexts/ToastContext'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import RichTextEditor from '../components/RichTextEditor'
 
@@ -8,7 +10,7 @@ interface ReportItem {
 }
 
 interface WeekData {
-  week_start: string; week_end: string; year: number; report_count: number; reports: ReportItem[]; weekly_summary: string
+  week_start: string; week_end: string; year: number; report_count: number; reports: ReportItem[]; weekly_summary: string; weekly_summary_status?: string
 }
 
 interface ReportDetail {
@@ -50,20 +52,20 @@ export default function WeeklyReportPage() {
     setEditText(currentText)
   }
 
-  const saveEditedSummary = async (weekStart: string, _weekEnd: string) => {
+  const saveEditedSummary = async (weekStart: string, _weekEnd: string, status: 'draft' | 'submitted' = 'draft') => {
     setSavingSummary(true)
     try {
       const res = await fetch(`/api/v1/reports/weekly-summary/${weekStart}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ summary_text: editText }),
+        body: JSON.stringify({ summary_text: editText, status }),
       })
-      if (!res.ok) { const err = await res.json(); alert(err.detail || '保存失败'); return }
+      if (!res.ok) { const err = await res.json(); showToast(err.detail || '保存失败', 'error'); return }
       setWeeks(prev => prev.map(w =>
         w.week_start === weekStart ? { ...w, weekly_summary: editText } : w
       ))
       setEditingSummary(null)
-    } catch { alert('保存请求失败') }
+    } catch { showToast('保存请求失败', 'error') }
     finally { setSavingSummary(false) }
   }
 
@@ -266,10 +268,35 @@ export default function WeeklyReportPage() {
                             </button>
                             <button
                               onClick={(e) => { e.stopPropagation(); startEditSummary(week.week_start, week.weekly_summary) }}
-                              className="px-2.5 py-1.5 mr-2 rounded-lg bg-bg-hover text-xs text-gray-400 hover:text-white border border-border flex items-center gap-1"
+                              className="px-2.5 py-1.5 mr-1 rounded-lg bg-bg-hover text-xs text-gray-400 hover:text-white border border-border flex items-center gap-1"
                             >
                               <Edit3 size={11} />编辑
                             </button>
+                            {week.weekly_summary && week.weekly_summary_status !== 'submitted' && (
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation()
+                                  const res = await fetch(`/api/v1/reports/weekly-summary/${week.week_start}`, {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ status: 'submitted' }),
+                                  })
+                                  if (res.ok) {
+                                    showToast('周报已提交', 'success')
+                                    loadWeeks()
+                                  } else {
+                                    const err = await res.json().catch(() => ({}))
+                                    showToast(err.detail || '提交失败', 'error')
+                                  }
+                                }}
+                                className="px-2.5 py-1.5 mr-2 rounded-lg bg-accent-blue text-white text-xs font-medium hover:bg-blue-600 flex items-center gap-1"
+                              >
+                                <Send size={11} />提交
+                              </button>
+                            )}
+                            {week.weekly_summary_status === 'submitted' && (
+                              <span className="px-2 py-1 mr-2 rounded-lg bg-emerald-500/10 text-emerald-500 text-[10px] font-bold border border-emerald-500/15">已提交</span>
+                            )}
                           </div>
                           {expandedSummaries.has(week.week_start) && (
                             editingSummary === week.week_start ? (
@@ -282,12 +309,20 @@ export default function WeeklyReportPage() {
                                 />
                                 <div className="flex items-center gap-2 mt-2">
                                   <button
-                                    onClick={() => saveEditedSummary(week.week_start, week.week_end)}
+                                    onClick={() => saveEditedSummary(week.week_start, week.week_end, 'draft')}
                                     disabled={savingSummary}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#8B5CF6] text-white text-xs font-medium hover:bg-purple-600 disabled:opacity-50"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-hover text-xs text-gray-400 hover:text-white border border-border disabled:opacity-50"
                                   >
                                     {savingSummary ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-                                    保存
+                                    保存草稿
+                                  </button>
+                                  <button
+                                    onClick={() => saveEditedSummary(week.week_start, week.week_end, 'submitted')}
+                                    disabled={savingSummary}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-blue text-white text-xs font-medium hover:bg-blue-600 disabled:opacity-50"
+                                  >
+                                    {savingSummary ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                                    提交上级
                                   </button>
                                   <button
                                     onClick={() => setEditingSummary(null)}

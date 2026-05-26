@@ -106,12 +106,18 @@ def update_role(role_id: int, data: RoleUpdate, db: Session = Depends(get_sessio
     role = db.get(Role, role_id)
     if not role:
         raise HTTPException(status_code=404, detail="角色不存在")
+    if role.is_system and data.code is not None and data.code != role.code:
+        raise HTTPException(status_code=400, detail="系统内置角色不能修改编码")
     if data.name is not None:
         role.name = data.name
+    if data.code is not None:
+        existing = db.exec(select(Role).where(Role.code == data.code, Role.id != role_id)).first()
+        if existing:
+            raise HTTPException(status_code=400, detail=f"角色编码 {data.code} 已被占用")
+        role.code = data.code
     if data.description is not None:
         role.description = data.description
     if data.permission_codes is not None:
-        # 清除旧权限并重新分配
         for rp in db.exec(select(RolePermission).where(RolePermission.role_id == role.id)).all():
             db.delete(rp)
         for code in data.permission_codes:
@@ -121,7 +127,19 @@ def update_role(role_id: int, data: RoleUpdate, db: Session = Depends(get_sessio
     db.add(role)
     db.commit()
     db.refresh(role)
-    return {"id": role.id, "name": role.name, "code": role.code}
+    perm_codes = [
+        r for r in
+        db.exec(
+            select(Permission.code)
+            .join(RolePermission, RolePermission.permission_id == Permission.id)
+            .where(RolePermission.role_id == role.id)
+        ).all()
+    ]
+    return {
+        "id": role.id, "name": role.name, "code": role.code,
+        "description": role.description, "is_system": role.is_system,
+        "permission_codes": perm_codes,
+    }
 
 
 @router.delete("/roles/{role_id}", status_code=204)
@@ -165,6 +183,4 @@ def get_user_permission_list(user_id: int, db: Session = Depends(get_session),
         perms.append("ai:use")
     if target.can_manage_models and "ai:manage_own" not in perms:
         perms.append("ai:manage_own")
-    if target.is_admin and "ai:manage_shared" not in perms:
-        perms.append("ai:manage_shared")
     return {"user_id": user_id, "permissions": perms}

@@ -165,6 +165,7 @@ export const MODULE_LABELS: Record<string, string> = {
   task: '定时任务',
   log: '运行日志',
   monitor: '运维监控',
+  data: '数据管理',
 }
 
-export const PERM_GROUPS = ['user', 'project', 'customer', 'contract', 'report', 'meeting', 'ai', 'wiki', 'settings', 'dashboard', 'task', 'log', 'monitor'] as const
+export const PERM_GROUPS = ['user', 'project', 'customer', 'contract', 'report', 'meeting', 'ai', 'wiki', 'settings', 'dashboard', 'task', 'log', 'monitor', 'data'] as const

@@ -4,18 +4,22 @@ from sqlmodel import Session, select
 from app.database import get_session
 from app.models.scheduled_task import ScheduledTask
 from app.services.scheduler import _register_task, unregister_task
+from app.models.user import User
+from app.auth import require_permission
 
 router = APIRouter(prefix="/api/v1/scheduled-tasks", tags=["定时任务"])
 
 
 @router.get("")
-def list_tasks(db: Session = Depends(get_session)):
+def list_tasks(current_user: User = Depends(require_permission("task:read")),
+               db: Session = Depends(get_session)):
     tasks = db.exec(select(ScheduledTask).order_by(ScheduledTask.created_at.desc())).all()
     return tasks
 
 
 @router.post("", status_code=201)
-def create_task(task: ScheduledTask, db: Session = Depends(get_session)):
+def create_task(task: ScheduledTask, current_user: User = Depends(require_permission("task:create")),
+                db: Session = Depends(get_session)):
     db.add(task)
     db.commit()
     db.refresh(task)
@@ -25,7 +29,8 @@ def create_task(task: ScheduledTask, db: Session = Depends(get_session)):
 
 
 @router.put("/{task_id}")
-def update_task(task_id: int, data: dict, db: Session = Depends(get_session)):
+def update_task(task_id: int, data: dict, current_user: User = Depends(require_permission("task:create")),
+                db: Session = Depends(get_session)):
     task = db.get(ScheduledTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
@@ -43,7 +48,8 @@ def update_task(task_id: int, data: dict, db: Session = Depends(get_session)):
 
 
 @router.delete("/{task_id}", status_code=204)
-def delete_task(task_id: int, db: Session = Depends(get_session)):
+def delete_task(task_id: int, current_user: User = Depends(require_permission("task:create")),
+                db: Session = Depends(get_session)):
     task = db.get(ScheduledTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")

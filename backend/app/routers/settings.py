@@ -8,7 +8,7 @@ from app.models.field_option import FieldOption
 from app.models.system_preference import SystemPreference
 from app.models.ai_prompt import AIPrompt
 from app.models.user import User
-from app.auth import get_current_user, get_current_admin_user, has_permission
+from app.auth import get_current_user, require_permission, has_permission
 from app.services.ai_service import _extract_message_text, _get_active_provider, _get_client
 from app.config import settings as app_settings
 
@@ -537,7 +537,7 @@ def list_field_options(category: Optional[str] = None, current_user: User = Depe
 
 @router.post("/field-options", status_code=201)
 def create_field_option(data: FieldOptionCreate, db: Session = Depends(get_session),
-                        _admin: User = Depends(get_current_admin_user)):
+                        _admin: User = Depends(require_permission("settings:edit"))):
     opt = FieldOption(**data.model_dump())
     db.add(opt)
     db.commit()
@@ -547,7 +547,7 @@ def create_field_option(data: FieldOptionCreate, db: Session = Depends(get_sessi
 
 @router.put("/field-options/{option_id}")
 def update_field_option(option_id: int, data: FieldOptionCreate, db: Session = Depends(get_session),
-                        _admin: User = Depends(get_current_admin_user)):
+                        _admin: User = Depends(require_permission("settings:edit"))):
     opt = db.get(FieldOption, option_id)
     if not opt:
         raise HTTPException(status_code=404, detail="选项不存在")
@@ -562,7 +562,7 @@ def update_field_option(option_id: int, data: FieldOptionCreate, db: Session = D
 
 @router.delete("/field-options/{option_id}", status_code=204)
 def delete_field_option(option_id: int, db: Session = Depends(get_session),
-                        _admin: User = Depends(get_current_admin_user)):
+                        _admin: User = Depends(require_permission("settings:edit"))):
     opt = db.get(FieldOption, option_id)
     if not opt:
         raise HTTPException(status_code=404, detail="选项不存在")
@@ -572,7 +572,7 @@ def delete_field_option(option_id: int, db: Session = Depends(get_session),
 
 @router.post("/field-options/batch")
 def batch_update_field_options(data: FieldOptionBatchUpdate, db: Session = Depends(get_session),
-                               _admin: User = Depends(get_current_admin_user)):
+                               _admin: User = Depends(require_permission("settings:edit"))):
     """批量更新某个分类的全部选项"""
     # 删除旧的
     old = db.exec(select(FieldOption).where(FieldOption.category == data.category)).all()
@@ -746,8 +746,12 @@ DEFAULT_PROMPTS = {
 @router.get("/ai-prompts")
 def get_ai_prompts(db: Session = Depends(get_session),
                    current_user: User = Depends(get_current_user)):
-    """获取当前用户的 AI 提示词配置（合并用户自定义和默认值）"""
-    saved = {
+    """获取当前用户的 AI 提示词配置（三层合并：用户自定义 > 全局 > 代码默认）"""
+    global_prompts = {
+        p.task_type: p
+        for p in db.exec(select(AIPrompt).where(AIPrompt.user_id == 0)).all()
+    }
+    user_prompts = {
         p.task_type: p
         for p in db.exec(select(AIPrompt).where(AIPrompt.user_id == current_user.id)).all()
     }
@@ -761,14 +765,29 @@ def get_ai_prompts(db: Session = Depends(get_session),
             "user_prompt_template": default["user_prompt_template"],
             "variables": default["variables"],
             "customized": False,
+            "source": "default",
         }
-        if key in saved:
-            sp = saved[key]
-            if sp.system_prompt:
-                entry["system_prompt"] = sp.system_prompt
-            if sp.user_prompt_template:
-                entry["user_prompt_template"] = sp.user_prompt_template
+        # 第2层：全局提示词覆盖代码默认
+        if key in global_prompts:
+            gp = global_prompts[key]
+            if gp.system_prompt:
+                entry["system_prompt"] = gp.system_prompt
+            if gp.user_prompt_template:
+                entry["user_prompt_template"] = gp.user_prompt_template
+            entry["source"] = "global"
+        # 第3层：用户自定义覆盖全局
+        if key in user_prompts:
+            up = user_prompts[key]
+            if up.system_prompt:
+                entry["system_prompt"] = up.system_prompt
+            if up.user_prompt_template:
+                entry["user_prompt_template"] = up.user_prompt_template
             entry["customized"] = True
+            entry["source"] = "user"
+        # 保存全局值供前端展示"恢复为全局默认"
+        if key in global_prompts:
+            entry["global_system_prompt"] = global_prompts[key].system_prompt
+            entry["global_user_prompt_template"] = global_prompts[key].user_prompt_template
         result[key] = entry
     return result
 
@@ -807,6 +826,53 @@ def update_ai_prompt(task_type: str, data: AIPromptUpdate, db: Session = Depends
         db.add(prompt)
     db.commit()
     return {"task_type": task_type, "saved": True}
+
+
+@router.put("/ai-prompts/global/{task_type}")
+def update_global_ai_prompt(task_type: str, data: AIPromptUpdate, db: Session = Depends(get_session),
+                             current_user: User = Depends(require_permission("settings:edit"))):
+    """管理员：更新全局默认 AI 提示词（user_id=0，新用户默认继承）"""
+    if task_type not in DEFAULT_PROMPTS:
+        raise HTTPException(status_code=404, detail=f"未知任务类型: {task_type}")
+    existing = db.exec(
+        select(AIPrompt).where(
+            AIPrompt.user_id == 0,
+            AIPrompt.task_type == task_type,
+        )
+    ).first()
+    if existing:
+        if data.system_prompt is not None:
+            existing.system_prompt = data.system_prompt
+        if data.user_prompt_template is not None:
+            existing.user_prompt_template = data.user_prompt_template
+        db.add(existing)
+    else:
+        default = DEFAULT_PROMPTS[task_type]
+        prompt = AIPrompt(
+            user_id=0,
+            task_type=task_type,
+            system_prompt=data.system_prompt if data.system_prompt is not None else default["system_prompt"],
+            user_prompt_template=data.user_prompt_template if data.user_prompt_template is not None else default["user_prompt_template"],
+        )
+        db.add(prompt)
+    db.commit()
+    return {"task_type": task_type, "saved": True, "scope": "global"}
+
+
+@router.delete("/ai-prompts/global/{task_type}")
+def reset_global_ai_prompt(task_type: str, db: Session = Depends(get_session),
+                           current_user: User = Depends(require_permission("settings:edit"))):
+    """管理员：恢复全局提示词为代码默认值"""
+    existing = db.exec(
+        select(AIPrompt).where(
+            AIPrompt.user_id == 0,
+            AIPrompt.task_type == task_type,
+        )
+    ).first()
+    if existing:
+        db.delete(existing)
+        db.commit()
+    return {"task_type": task_type, "reset": True, "scope": "global"}
 
 
 class AIPromptGenerateRequest(BaseModel):
@@ -979,8 +1045,7 @@ class IndustryCategoriesUpdate(BaseModel):
 
 
 @router.put("/industry-categories")
-def update_industry_categories(data: IndustryCategoriesUpdate, current_user: User = Depends(get_current_user),
-                               _admin: User = Depends(get_current_admin_user),
+def update_industry_categories(data: IndustryCategoriesUpdate, current_user: User = Depends(require_permission("settings:edit")),
                                db: Session = Depends(get_session)):
     """更新行业分类（管理员），data.categories 为换行分隔字符串"""
     cats = data.categories.strip()
@@ -1043,7 +1108,7 @@ def system_info(db: Session = Depends(get_session)):
         uptime_str = f"{minutes}分钟"
 
     # ChromaDB 路径
-    chroma_dir = app_settings.chroma_persist_dir
+    chroma_dir = app_settings.effective_chroma_dir
     chroma_size = "未知"
     if os.path.exists(chroma_dir):
         total_size = 0
@@ -1077,7 +1142,7 @@ import uuid
 from fastapi import UploadFile, File
 from fastapi.responses import FileResponse, Response
 
-BRAND_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "brand")
+BRAND_DIR = app_settings.effective_brand_dir
 os.makedirs(BRAND_DIR, exist_ok=True)
 ALLOWED_IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico'}
 
@@ -1110,7 +1175,7 @@ def get_branding(db: Session = Depends(get_session)):
 
 @router.put("/branding")
 def update_branding(data: BrandConfigUpdate, db: Session = Depends(get_session),
-                    _admin: User = Depends(get_current_admin_user)):
+                    _admin: User = Depends(require_permission("settings:edit"))):
     """更新品牌配置（仅管理员）"""
     for key, value in [("brand_site_title", data.site_title), ("brand_logo_url", data.logo_url)]:
         pref = db.exec(
@@ -1129,7 +1194,7 @@ def update_branding(data: BrandConfigUpdate, db: Session = Depends(get_session),
 
 @router.post("/branding/upload-logo")
 async def upload_brand_logo(file: UploadFile = File(...),
-                             _admin: User = Depends(get_current_admin_user),
+                             _admin: User = Depends(require_permission("settings:edit")),
                              db: Session = Depends(get_session)):
     """上传品牌 Logo（管理员）"""
     ext = os.path.splitext(file.filename or ".png")[1].lower()
@@ -1295,7 +1360,7 @@ def get_mcp_config(db: Session = Depends(get_session)):
 
 @router.put("/mcp-config")
 def update_mcp_config(data: MCPConfigUpdate, db: Session = Depends(get_session),
-                      _admin: User = Depends(get_current_admin_user)):
+                      _admin: User = Depends(require_permission("settings:edit"))):
     """启用/禁用 MCP 服务 + 设置公开访问地址"""
     for key, value in [("mcp_enabled", "true" if data.enabled else "false"),
                        ("mcp_public_url", data.public_url)]:
@@ -1318,7 +1383,7 @@ def update_mcp_config(data: MCPConfigUpdate, db: Session = Depends(get_session),
 
 @router.post("/mcp-config/generate-key")
 def generate_mcp_key(db: Session = Depends(get_session),
-                     _admin: User = Depends(get_current_admin_user)):
+                     _admin: User = Depends(require_permission("settings:edit"))):
     """生成新的 MCP API Key（旧 Key 立即失效）"""
     new_key = _generate_mcp_key()
     pref = db.exec(

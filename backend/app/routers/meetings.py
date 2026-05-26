@@ -12,6 +12,8 @@ from app.auth import get_current_user, require_permission
 from app.schemas import MeetingNoteCreate, MeetingNoteUpdate, MeetingNoteOut
 from app.services.vector_store import index_document, delete_document
 from app.services.ai_service import extract_meeting_minutes, transcribe_audio, organize_transcript
+from app.utils.time import utc_now
+from app.config import settings
 
 router = APIRouter(prefix="/api/v1/meetings", tags=["会议"])
 
@@ -130,14 +132,14 @@ def ai_extract_meeting(meeting_id: int, current_user: User = Depends(require_per
         except json.JSONDecodeError:
             pass
         meeting.ai_summary = summary.strip()
-        meeting.updated_at = datetime.now()
+        meeting.updated_at = utc_now()
         db.add(meeting)
         db.commit()
     return {"meeting_id": meeting_id, "extracted": extracted, "ai_summary": meeting.ai_summary}
 
 
 # ===== 音频上传 =====
-UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "audio")
+UPLOAD_DIR = settings.effective_audio_dir
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 

@@ -8,7 +8,7 @@ from sqlmodel import Session, select, func, or_
 
 from app.auth import (
     get_current_admin_user, get_current_user, hash_password, validate_password_strength,
-    bump_token_version,
+    bump_token_version, require_permission, has_permission,
 )
 from app.database import get_session
 from app.models.user import User
@@ -21,18 +21,15 @@ router = APIRouter(prefix="/api/v1/users", tags=["用户管理"])
 
 def get_dept_member_ids(current_user: User, db: Session) -> Optional[List[int]]:
     """获取当前用户所在部门及其子部门的所有成员 ID。
-    如果用户没有部门或不是部门领导，返回 None（表示不限制）。
-    如果是部门领导，返回本部门+子部门成员 ID 列表用于数据过滤。
+    返回 None 表示不限制（管理员/Boss/有 report:view_all 权限的用户）。
+    无部门普通用户返回 [current_user.id]（仅看自己）。
+    有部门普通用户返回本部门+递归子部门成员 ID 列表用于数据过滤。
     """
+    if has_permission(current_user, "report:view_all", db):
+        return None
     if not current_user.department_id:
-        return None
-    from app.auth import get_user_permissions
-    perms = get_user_permissions(current_user, db)
-    if "report:view_all" in perms or current_user.is_admin:
-        return None
-    dept_ids = [current_user.department_id]
-    child_depts = db.exec(select(Department).where(Department.parent_id == current_user.department_id)).all()
-    dept_ids.extend(d.id for d in child_depts)
+        return [current_user.id]
+    dept_ids = _get_department_descendants(current_user.department_id, db)
     members = db.exec(select(User).where(User.department_id.in_(dept_ids))).all()
     return [m.id for m in members] if members else [current_user.id]
 
@@ -202,7 +199,7 @@ def _get_department_descendants(dept_id: int, db: Session) -> List[int]:
 @router.get("")
 def list_users(
     db: Session = Depends(get_session),
-    _admin: User = Depends(get_current_admin_user),
+    _admin: User = Depends(require_permission("user:manage_roles")),
     page: int = Query(default=0, ge=0, description="页码，0=不分页返回全部"),
     page_size: int = Query(default=20, ge=1, le=100, description="每页数量"),
     search: str = Query(default="", description="模糊搜索用户名/姓名/邮箱"),
@@ -288,11 +285,12 @@ def get_users_simple(db: Session = Depends(get_session),
                       department_id: Optional[int] = Query(None)):
     """获取基础用户列表（供在线文档等协作者选择使用，任何登录用户均可访问）"""
     query = select(User).where(User.is_active == True, User.status != "resigned")
-    dept_member_ids = get_dept_member_ids(_user, db)
+    from app.auth import get_visible_user_ids
+    visible_ids = get_visible_user_ids(_user, db, module="report")
     if department_id:
         query = query.where(User.department_id == department_id)
-    elif dept_member_ids is not None:
-        query = query.where(User.id.in_(dept_member_ids))
+    elif visible_ids is not None:
+        query = query.where(User.id.in_(visible_ids))
     users = db.exec(query.order_by(User.name)).all()
     return [{"id": u.id, "username": u.username, "name": u.name, "department_id": u.department_id} for u in users]
 
@@ -322,7 +320,7 @@ def list_departments(db: Session = Depends(get_session),
 # ===== 新建部门 =====
 @router.post("/departments", status_code=201)
 def create_department(data: DepartmentCreate, db: Session = Depends(get_session),
-                      _admin: User = Depends(get_current_admin_user)):
+                       _admin: User = Depends(require_permission("user:manage_roles"))):
     """管理员创建新部门（组织架构）"""
     from app.models.department import Department
     existing = db.exec(select(Department).where(Department.name == data.name)).first()
@@ -338,18 +336,19 @@ def create_department(data: DepartmentCreate, db: Session = Depends(get_session)
 # ===== 更新部门 =====
 @router.put("/departments/{dept_id}")
 def update_department(dept_id: int, data: DepartmentUpdate, db: Session = Depends(get_session),
-                      _admin: User = Depends(get_current_admin_user)):
+                       _admin: User = Depends(require_permission("user:manage_roles"))):
     """管理员修改部门基本信息与负责人"""
     from app.models.department import Department
     dept = db.get(Department, dept_id)
     if not dept:
         raise HTTPException(status_code=404, detail="部门不存在")
-    if data.name is not None:
+    update_fields = data.model_dump(exclude_unset=True)
+    if "name" in update_fields:
         dept.name = data.name
-    if data.manager_id is not None:
-        dept.manager_id = data.manager_id if data.manager_id != 0 else None
-    if data.parent_id is not None:
-        dept.parent_id = data.parent_id if data.parent_id != 0 else None
+    if "manager_id" in update_fields:
+        dept.manager_id = data.manager_id if data.manager_id not in (None, 0) else None
+    if "parent_id" in update_fields:
+        dept.parent_id = data.parent_id if data.parent_id not in (None, 0) else None
     db.add(dept)
     db.commit()
     db.refresh(dept)
@@ -359,7 +358,7 @@ def update_department(dept_id: int, data: DepartmentUpdate, db: Session = Depend
 # ===== 删除部门 =====
 @router.delete("/departments/{dept_id}", status_code=204)
 def delete_department(dept_id: int, db: Session = Depends(get_session),
-                      _admin: User = Depends(get_current_admin_user)):
+                       _admin: User = Depends(require_permission("user:manage_roles"))):
     """管理员删除部门"""
     from app.models.department import Department
     dept = db.get(Department, dept_id)
@@ -385,21 +384,20 @@ def get_department_tree(db: Session = Depends(get_session),
                         _user: User = Depends(get_current_user)):
     """获取完整部门树结构，含每个部门的用户数和负责人信息"""
     from app.models.department import Department
+    from app.auth import has_permission
     
-    # 一次查询所有部门和用户
+    can_see_details = has_permission(_user, "user:manage_roles", db)
+    
     depts = db.exec(select(Department)).all()
     users = db.exec(select(User)).all()
     
-    # 构建映射：user_id -> user 名字
     user_map: dict[int, str] = {u.id: u.name or u.username for u in users}
     
-    # 统计每个部门的直接用户数
     dept_user_count: dict[int, int] = {}
     for u in users:
         if u.department_id is not None:
             dept_user_count[u.department_id] = dept_user_count.get(u.department_id, 0) + 1
     
-    # 按 parent_id 分组
     children_map: dict[int, list[dict]] = {}
     all_nodes: dict[int, dict] = {}
     
@@ -407,17 +405,16 @@ def get_department_tree(db: Session = Depends(get_session),
         node = {
             "id": d.id,
             "name": d.name,
-            "manager_id": d.manager_id,
-            "manager_name": user_map.get(d.manager_id) if d.manager_id else None,
+            "manager_id": d.manager_id if can_see_details else None,
+            "manager_name": user_map.get(d.manager_id) if (can_see_details and d.manager_id) else None,
             "parent_id": d.parent_id,
-            "user_count": dept_user_count.get(d.id, 0),
+            "user_count": dept_user_count.get(d.id, 0) if can_see_details else 0,
             "children": [],
         }
         all_nodes[d.id] = node
         parent = d.parent_id if d.parent_id is not None else 0
         children_map.setdefault(parent, []).append(node)
     
-    # 递归组装树并累加子树用户数
     def build_tree(node: dict) -> dict:
         node["children"] = children_map.get(node["id"], [])
         for child in node["children"]:
@@ -451,7 +448,7 @@ def get_department_roles(dept_id: int, db: Session = Depends(get_session),
 
 @router.put("/departments/{dept_id}/roles")
 def set_department_roles(dept_id: int, data: DepartmentRoleSet, db: Session = Depends(get_session),
-                        _admin: User = Depends(get_current_admin_user)):
+                        _admin: User = Depends(require_permission("user:manage_roles"))):
     """设置部门角色（覆盖式更新）"""
     from app.models.department import Department
     dept = db.get(Department, dept_id)
@@ -508,7 +505,7 @@ def get_user_report_chain(user_id: int, db: Session = Depends(get_session),
 # ===== 创建用户 =====
 @router.post("", status_code=201)
 def create_user(data: UserCreate, db: Session = Depends(get_session),
-                _admin: User = Depends(get_current_admin_user)):
+                _admin: User = Depends(require_permission("user:create"))):
     """管理员创建新用户"""
     if not data.email or not data.email.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="邮箱为必填项")
@@ -552,7 +549,7 @@ def create_user(data: UserCreate, db: Session = Depends(get_session),
 # ===== 编辑用户 =====
 @router.put("/{user_id}")
 def update_user(user_id: int, data: UserUpdate, db: Session = Depends(get_session),
-                _admin: User = Depends(get_current_admin_user)):
+                _admin: User = Depends(require_permission("user:manage_roles"))):
     """管理员编辑用户信息"""
     user = db.get(User, user_id)
     if not user:
@@ -578,8 +575,10 @@ def update_user(user_id: int, data: UserUpdate, db: Session = Depends(get_sessio
         user.use_shared_models = data.use_shared_models
     if data.can_manage_models is not None:
         user.can_manage_models = data.can_manage_models
-    if data.department_id is not None:
-        user.department_id = data.department_id if data.department_id != 0 else None
+    update_fields = data.model_dump(exclude_unset=True)
+    if "department_id" in update_fields:
+        raw_dept_id = data.department_id
+        user.department_id = raw_dept_id if raw_dept_id is not None and raw_dept_id != 0 else None
         from app.models.department import Department
         if user.department_id:
             dept = db.get(Department, user.department_id)
@@ -589,10 +588,10 @@ def update_user(user_id: int, data: UserUpdate, db: Session = Depends(get_sessio
                 user.leader_id = None
         else:
             user.leader_id = None
-    elif data.leader_id is not None:
+    elif "leader_id" in update_fields:
         user.leader_id = data.leader_id if data.leader_id != 0 else None
-    if data.job_title is not None:
-        user.job_title = data.job_title if data.job_title.strip() else None
+    if "job_title" in update_fields:
+        user.job_title = data.job_title if data.job_title and data.job_title.strip() else None
 
     db.add(user)
     db.flush()
@@ -604,7 +603,7 @@ def update_user(user_id: int, data: UserUpdate, db: Session = Depends(get_sessio
 # ===== 启用/禁用用户 =====
 @router.put("/{user_id}/toggle-active")
 def toggle_user_active(user_id: int, db: Session = Depends(get_session),
-                       _admin: User = Depends(get_current_admin_user)):
+                       _admin: User = Depends(require_permission("user:manage_roles"))):
     """管理员启用或禁用用户"""
     user = db.get(User, user_id)
     if not user:
@@ -636,7 +635,7 @@ def toggle_user_active(user_id: int, db: Session = Depends(get_session),
 @router.put("/{user_id}/status")
 def set_user_status(user_id: int, data: UserStatusSet,
                     db: Session = Depends(get_session),
-                    _admin: User = Depends(get_current_admin_user)):
+                    _admin: User = Depends(require_permission("user:manage_roles"))):
     """管理员设置用户账号状态: active / disabled / resigned"""
     user = db.get(User, user_id)
     if not user:
@@ -672,7 +671,7 @@ def set_user_status(user_id: int, data: UserStatusSet,
 @router.post("/{user_id}/reset-password")
 def reset_user_password(user_id: int, data: ResetPasswordRequest,
                         db: Session = Depends(get_session),
-                        _admin: User = Depends(get_current_admin_user)):
+                        _admin: User = Depends(require_permission("user:manage_roles"))):
     """管理员重置用户密码"""
     user = db.get(User, user_id)
     if not user:
@@ -693,7 +692,7 @@ def reset_user_password(user_id: int, data: ResetPasswordRequest,
 # ===== 删除用户 =====
 @router.delete("/{user_id}", status_code=204)
 def delete_user(user_id: int, db: Session = Depends(get_session),
-                _admin: User = Depends(get_current_admin_user)):
+                _admin: User = Depends(require_permission("user:manage_roles"))):
     """管理员删除用户"""
     from app.models.rbac import UserRole
     from app.models.wiki import UserGroupMember

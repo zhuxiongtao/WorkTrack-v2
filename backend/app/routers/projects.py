@@ -9,6 +9,7 @@ from app.auth import get_current_user, require_permission
 from app.schemas import ProjectCreate, ProjectUpdate, ProjectOut, MeetingNoteOut
 from app.services.vector_store import index_document, delete_document
 from app.services.ai_service import generate_project_analysis
+from app.utils.time import utc_now
 
 router = APIRouter(prefix="/api/v1/projects", tags=["项目"])
 
@@ -82,12 +83,11 @@ def update_project(project_id: int, data: ProjectUpdate, background_tasks: Backg
     project = db.get(Project, project_id)
     if not project or project.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="项目不存在")
-    from datetime import datetime
     meeting_ids = data.meeting_ids
     update_data = data.model_dump(exclude_unset=True, exclude={"meeting_ids"})
     for key, value in update_data.items():
         setattr(project, key, value)
-    project.updated_at = datetime.now()
+    project.updated_at = utc_now()
     db.add(project)
     db.commit()
     db.refresh(project)
@@ -131,8 +131,7 @@ def ai_analyze_project(project_id: int, current_user: User = Depends(require_per
         raise HTTPException(status_code=404, detail="项目不存在")
     analysis = generate_project_analysis(project_id, db, current_user.id)
     project.analysis = analysis
-    from datetime import datetime
-    project.updated_at = datetime.now()
+    project.updated_at = utc_now()
     db.add(project)
     db.commit()
     return {"project_id": project_id, "analysis": analysis}

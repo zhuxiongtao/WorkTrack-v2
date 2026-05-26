@@ -18,6 +18,8 @@ from app.services.contract_parser import extract_text, extract_text_with_vision_
 from app.services.vector_store import index_document
 from app.routers.logs import write_log
 
+logger = logging.getLogger("worktrack")
+
 router = APIRouter(prefix="/api/v1/contracts", tags=["合同"])
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -170,16 +172,16 @@ def _auto_parse_contract(contract_id: int, user_id: int, db: Session):
                     f"{contract.title} {contract.contract_no} {contract.party_b} {contract.summary or ''}",
                     {"user_id": user_id, "customer_id": contract.customer_id, "type": "contract"},
                     db)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error("后台索引合同向量失败: %s", e)
         db.add(contract)
         db.commit()
         write_log("info", "contract", f"后台解析合同 #{contract_id} 完成", db=db)
     except Exception as e:
         try:
             write_log("warning", "contract", f"后台解析合同失败: {str(e)[:200]}", db=db)
-        except Exception:
-            pass
+        except Exception as e2:
+            logger.error("写入日志失败: %s", e2)
 
 
 @router.get("/{contract_id}", response_model=ContractOut)
@@ -211,8 +213,8 @@ def delete_contract(contract_id: int, current_user: User = Depends(require_permi
     if contract.file_path and os.path.exists(contract.file_path):
         try:
             os.remove(contract.file_path)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error("删除合同文件失败: %s", e)
     db.delete(contract)
     db.commit()
 
@@ -262,8 +264,8 @@ def parse_contract_content(contract_id: int, current_user: User = Depends(requir
         raw_text = extract_text_with_vision_fallback(contract.file_path, contract.file_type, db, current_user.id)
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception:
-        raise HTTPException(status_code=400, detail="合同文件解析失败，请确认文件格式正确")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"合同文件解析失败: {str(e)[:200]}")
 
     try:
         if not raw_text:
@@ -290,8 +292,8 @@ def parse_contract_content(contract_id: int, current_user: User = Depends(requir
                     f"{contract.title} {contract.contract_no} {contract.party_b} {contract.summary or ''}",
                     {"user_id": current_user.id, "customer_id": contract.customer_id, "type": "contract"},
                     db)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error("索引合同向量失败: %s", e)
         else:
             write_log("warning", "contract", f"合同AI解析失败: {result['error']}", db=db)
     except HTTPException:

@@ -51,6 +51,7 @@ services:
       - AUTO_CREATE_ADMIN=false
     volumes:
       - ./worktrack_data:/app/data
+      - ./worktrack_uploads:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy

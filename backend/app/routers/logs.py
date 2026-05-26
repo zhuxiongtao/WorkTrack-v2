@@ -5,6 +5,8 @@ from sqlmodel import Session, select, func
 from sqlalchemy import delete as sa_delete
 from app.database import get_session
 from app.models.log_entry import LogEntry
+from app.models.user import User
+from app.auth import require_permission
 
 router = APIRouter(prefix="/api/v1/logs", tags=["日志"])
 
@@ -39,6 +41,7 @@ def list_logs(
     category: Optional[str] = Query(None),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    current_user: User = Depends(require_permission("log:read")),
     db: Session = Depends(get_session),
 ):
     """查询日志列表，支持按级别/分类筛选"""
@@ -67,7 +70,8 @@ def list_logs(
 
 
 @router.delete("/clear")
-def clear_logs(db: Session = Depends(get_session)):
+def clear_logs(current_user: User = Depends(require_permission("log:read")),
+               db: Session = Depends(get_session)):
     """清空所有日志"""
     db.exec(sa_delete(LogEntry))
     db.commit()

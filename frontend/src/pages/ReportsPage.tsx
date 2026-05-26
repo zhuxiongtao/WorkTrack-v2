@@ -224,21 +224,29 @@ export default function ReportsPage() {
     try {
       const today = new Date().toISOString().slice(0, 10)
       const base = { content_md: formContent, report_date: formDate || undefined, files_json: formFiles || undefined, status: statusVal }
+      let res: Response
       if (editingReport) {
-        await fetch(`/api/v1/reports/${editingReport.id}`, {
+        res = await fetch(`/api/v1/reports/${editingReport.id}`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(base),
         })
       } else {
-        await fetch('/api/v1/reports', {
+        res = await fetch('/api/v1/reports', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...base, status: statusVal, report_date: formDate || today }),
         })
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        showToast(err.detail || '保存失败', 'error')
+        return
       }
       setShowForm(false)
       loadReports()
       if (modalDetail) openDetail(modalDetail.id)
       showToast(statusVal === 'submitted' ? '日报已提交发布给上级领导' : '日报草稿已保存', 'success')
+    } catch {
+      showToast('保存请求失败，请检查网络', 'error')
     } finally { setSaving(false) }
   }
 
@@ -277,7 +285,7 @@ export default function ReportsPage() {
             <p className="text-sm text-gray-500 mt-1">{total} 条记录</p>
           </div>
           {/* 管理者与老板专属：成员数据切换下拉框 */}
-          {(hasPermission('report:view_all') && memberList.length > 0) && (
+          {(memberList.length > 1) && (
             <select
               value={selectedUserId}
               onChange={e => setSelectedUserId(e.target.value)}
@@ -396,10 +404,15 @@ export default function ReportsPage() {
                   <button
                     onClick={async () => {
                       if (!await showConfirm('确认将该篇日报提交发布给上级领导吗？')) return
-                      await fetch(`/api/v1/reports/${modalDetail.id}`, {
+                      const res = await fetch(`/api/v1/reports/${modalDetail.id}`, {
                         method: 'PUT', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ status: 'submitted' }),
                       })
+                      if (!res.ok) {
+                        const err = await res.json().catch(() => ({}))
+                        showToast(err.detail || '提交失败', 'error')
+                        return
+                      }
                       showToast('日报已成功提交给主管审查！', 'success')
                       closeDetail()
                       loadReports()

@@ -500,7 +500,7 @@ export default function MeetingsPage() {
             <p className="text-sm text-gray-500 mt-1">{meetings.length} 条记录</p>
           </div>
           {/* 管理者与老板专属：成员数据切换下拉框 */}
-          {(hasPermission('meeting:read') && memberList.length > 0) && (
+          {(memberList.length > 1) && (
             <select
               value={selectedUserId}
               onChange={e => setSelectedUserId(e.target.value)}

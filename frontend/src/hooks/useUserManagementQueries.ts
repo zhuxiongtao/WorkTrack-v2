@@ -103,20 +103,18 @@ export function useToggleUserActiveMutation() {
       
       queryClient.setQueriesData({ queryKey: ['users'] }, (old: unknown) => {
         if (!old) return old
-        // 处理分页响应
         if (typeof old === 'object' && old !== null && 'items' in old) {
           const paginated = old as PaginatedResponse<UserData>
           return {
             ...paginated,
             items: paginated.items.map((u: UserData) =>
-              u.id === id ? { ...u, is_active: !u.is_active } : u
+              u.id === id ? { ...u, is_active: !u.is_active, status: !u.is_active ? 'active' : 'disabled' } : u
             ),
           }
         }
-        // 处理扁平数组
         if (Array.isArray(old)) {
           return old.map((u: UserData) =>
-            u.id === id ? { ...u, is_active: !u.is_active } : u
+            u.id === id ? { ...u, is_active: !u.is_active, status: !u.is_active ? 'active' : 'disabled' } : u
           )
         }
         return old
