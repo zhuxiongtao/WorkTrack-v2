@@ -16,6 +16,7 @@ from app.models.weekly_summary import WeeklySummary
 from app.models.wiki import UserGroup, UserGroupMember, WikiSpace, WikiPage, WikiPermission, WikiPageVersion
 from app.models.rbac import Permission, Role, RolePermission, UserRole, GroupRole, DepartmentRole
 from app.models.department import Department
+from app.models.data_share import DataShare, DataShareComment
 
 __all__ = [
     "User",
@@ -49,4 +50,6 @@ __all__ = [
     "UserRole",
     "GroupRole",
     "DepartmentRole",
+    "DataShare",
+    "DataShareComment",
 ]

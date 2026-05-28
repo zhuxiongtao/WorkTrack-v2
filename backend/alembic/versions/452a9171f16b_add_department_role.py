@@ -25,7 +25,8 @@ def upgrade() -> None:
         sa.Column('role_id', sa.Integer(), nullable=False),
         sa.ForeignKeyConstraint(['department_id'], ['department.id'], ),
         sa.ForeignKeyConstraint(['role_id'], ['rbac_role.id'], ),
-        sa.PrimaryKeyConstraint('id')
+        sa.PrimaryKeyConstraint('id'),
+        sa.UniqueConstraint('department_id', 'role_id', name='uq_dept_role'),
     )
     op.create_index(op.f('ix_rbac_department_role_department_id'), 'rbac_department_role', ['department_id'], unique=False)
     op.create_index(op.f('ix_rbac_department_role_role_id'), 'rbac_department_role', ['role_id'], unique=False)

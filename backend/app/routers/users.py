@@ -282,15 +282,21 @@ def list_users(
 @router.get("/simple")
 def get_users_simple(db: Session = Depends(get_session),
                       _user: User = Depends(get_current_user),
-                      department_id: Optional[int] = Query(None)):
-    """获取基础用户列表（供在线文档等协作者选择使用，任何登录用户均可访问）"""
+                      department_id: Optional[int] = Query(None),
+                      search: Optional[str] = Query(None, description="按姓名/用户名搜索"),
+                      scope: Optional[str] = Query(None, description="all=返回全部活跃用户，留空=仅返回可见范围用户")):
+    """获取基础用户列表（供协作者选择使用）"""
     query = select(User).where(User.is_active == True, User.status != "resigned")
-    from app.auth import get_visible_user_ids
-    visible_ids = get_visible_user_ids(_user, db, module="report")
     if department_id:
         query = query.where(User.department_id == department_id)
-    elif visible_ids is not None:
-        query = query.where(User.id.in_(visible_ids))
+    elif scope != "all":
+        from app.auth import get_visible_user_ids
+        visible_ids = get_visible_user_ids(_user, db)
+        if visible_ids is not None:
+            query = query.where(User.id.in_(visible_ids))
+    if search:
+        pattern = f"%{search}%"
+        query = query.where((User.name.ilike(pattern)) | (User.username.ilike(pattern)))
     users = db.exec(query.order_by(User.name)).all()
     return [{"id": u.id, "username": u.username, "name": u.name, "department_id": u.department_id} for u in users]
 
@@ -707,6 +713,7 @@ def delete_user(user_id: int, db: Session = Depends(get_session),
     from app.models.model_provider import ModelProvider, TaskModelConfig
     from app.models.ai_prompt import AIPrompt
     from app.models.wiki import WikiSpace, WikiPage, WikiPageVersion, WikiPermission, UserGroup, UserGroupMember
+    from app.models.data_share import DataShare, DataShareComment
 
     user = db.get(User, user_id)
     if not user:
@@ -788,6 +795,19 @@ def delete_user(user_id: int, db: Session = Depends(get_session),
         db.delete(mc)
     for ap in db.exec(select(AIPrompt).where(AIPrompt.user_id == user_id)).all():
         db.delete(ap)
+    # 数据分享：删除该用户发出的评论
+    for dc in db.exec(select(DataShareComment).where(DataShareComment.user_id == user_id)).all():
+        db.delete(dc)
+    # 数据分享：删除该用户创建的所有分享记录及其评论
+    for ds in db.exec(select(DataShare).where(DataShare.shared_by == user_id)).all():
+        for dc in db.exec(select(DataShareComment).where(DataShareComment.share_id == ds.id)).all():
+            db.delete(dc)
+        db.delete(ds)
+    # 数据分享：删除发送给该用户的所有分享记录及其评论
+    for ds in db.exec(select(DataShare).where(DataShare.shared_to == user_id)).all():
+        for dc in db.exec(select(DataShareComment).where(DataShareComment.share_id == ds.id)).all():
+            db.delete(dc)
+        db.delete(ds)
 
     db.delete(user)
     db.commit()

@@ -81,6 +81,7 @@ function AppContent() {
               '/ai': 'ai:use', '/customers': 'customer:read', '/contracts': 'contract:read',
               '/dashboard': 'dashboard:read', '/wiki': 'wiki:read', '/tasks': 'task:read',
               '/users': 'user:read', '/monitor': 'monitor:read', '/logs': 'log:read',
+              '/console': 'management:console', '/shared': 'share:read',
             }
             const requiredPerm = permMap[d.home_page]
             if (!requiredPerm || hasPermission(requiredPerm)) {
@@ -102,6 +103,7 @@ function AppContent() {
       ['/monitor', 'monitor:read'], ['/users', 'user:read'], ['/settings', ''],
       ['/reports', 'report:read'], ['/projects', 'project:read'], ['/meetings', 'meeting:read'],
       ['/dashboard', 'dashboard:read'], ['/ai', 'ai:use'], ['/wiki', 'wiki:read'],
+      ['/console', 'management:console'], ['/shared', 'share:read'],
     ]
     for (const [path, perm] of pages) {
       if (!perm || hasPermission(perm)) return path

@@ -30,18 +30,31 @@ def _can_access_customer(customer: Customer, current_user: User, db: Session) ->
 @router.get("", response_model=list[CustomerOut])
 def list_customers(
     user_id: Optional[int] = Query(None),
+    user_ids: Optional[str] = Query(None, description="逗号分隔的用户ID列表，用于团队视图筛选"),
     status: Optional[str] = Query(None),
     current_user: User = Depends(require_permission("customer:read")),
     db: Session = Depends(get_session),
 ):
     from app.auth import get_visible_user_ids
     visible_ids = get_visible_user_ids(current_user, db, module="customer")
-    if visible_ids is None:
-        query = select(Customer).order_by(Customer.created_at.desc())
+    if user_ids:
+        uid_list = [int(x) for x in user_ids.split(",") if x.strip().isdigit()]
+        if visible_ids is not None:
+            uid_list = [uid for uid in uid_list if uid in visible_ids]
+        if uid_list:
+            query = select(Customer).where(Customer.user_id.in_(uid_list)).order_by(Customer.created_at.desc())
+        else:
+            query = select(Customer).where(False).order_by(Customer.created_at.desc())
+    elif user_id:
+        if visible_ids is not None and user_id not in visible_ids:
+            query = select(Customer).where(False).order_by(Customer.created_at.desc())
+        else:
+            query = select(Customer).where(Customer.user_id == user_id).order_by(Customer.created_at.desc())
     else:
-        query = select(Customer).where(Customer.user_id.in_(visible_ids)).order_by(Customer.created_at.desc())
-    if user_id:
-        query = query.where(Customer.user_id == user_id)
+        if visible_ids is None:
+            query = select(Customer).order_by(Customer.created_at.desc())
+        else:
+            query = select(Customer).where(Customer.user_id.in_(visible_ids)).order_by(Customer.created_at.desc())
     if status:
         query = query.where(Customer.status == status)
     return db.exec(query).all()
@@ -139,8 +152,16 @@ def delete_preview(customer_id: int, current_user: User = Depends(require_permis
 @router.get("/{customer_id}/overview")
 def get_customer_overview(customer_id: int, current_user: User = Depends(require_permission("customer:read")), db: Session = Depends(get_session)):
     customer = db.get(Customer, customer_id)
-    if not customer or not _can_access_customer(customer, current_user, db):
+    if not customer:
         raise HTTPException(status_code=404, detail="客户不存在")
+    
+    # 统一角色权限核验
+    from app.auth import check_share_access
+    if not _can_access_customer(customer, current_user, db):
+        # DataShare fallback
+        if not check_share_access("customer", customer_id, current_user, db):
+            raise HTTPException(status_code=403, detail="无权查看该客户")
+    
     projects = db.exec(
         select(Project).where(Project.customer_id == customer_id, Project.user_id == current_user.id)
     ).all()

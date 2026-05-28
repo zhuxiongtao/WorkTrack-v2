@@ -208,6 +208,12 @@ PERMISSION_DEFS = [
     ("data:import", "导入数据", "data", "import"),
     # 客户全局查看（跨部门）
     ("customer:view_all", "查看全部客户", "customer", "view_all"),
+    # 管理总览
+    ("management:console", "管理总览", "management", "console"),
+    # 数据分享
+    ("share:create", "创建分享", "share", "create"),
+    ("share:read", "查看分享", "share", "read"),
+    ("share:comment", "评论分享", "share", "comment"),
 ]
 
 ROLE_DEFS = {
@@ -233,6 +239,9 @@ ROLE_DEFS = {
             "log:read",
             "monitor:read",
             "data:export", "data:import",
+            # 管理总览与分享
+            "management:console",
+            "share:create", "share:read", "share:comment",
         ],
     },
     "dept_leader": {
@@ -250,6 +259,9 @@ ROLE_DEFS = {
             "dashboard:read",
             "task:read", "task:create",
             "log:read",
+            # 管理总览与分享
+            "management:console",
+            "share:create", "share:read", "share:comment",
         ],
     },
     "sales": {
@@ -263,6 +275,8 @@ ROLE_DEFS = {
             "ai:use",
             "wiki:read",
             "dashboard:read",
+            # 分享
+            "share:create", "share:read", "share:comment",
         ],
     },
     "tech": {
@@ -275,6 +289,8 @@ ROLE_DEFS = {
             "ai:use", "ai:manage_own",
             "report:read", "report:create", "report:submit",
             "dashboard:read",
+            # 分享
+            "share:create", "share:read", "share:comment",
         ],
     },
     "operations": {
@@ -288,6 +304,7 @@ ROLE_DEFS = {
             "wiki:read",
             "ai:use",
             "dashboard:read",
+            "share:create", "share:read", "share:comment",
         ],
     },
     "business": {
@@ -300,6 +317,7 @@ ROLE_DEFS = {
             "report:read", "report:submit",
             "ai:use",
             "dashboard:read",
+            "share:create", "share:read", "share:comment",
         ],
     },
     "boss": {
@@ -308,16 +326,18 @@ ROLE_DEFS = {
         "perms": [
             "user:read",
             "project:read", "project:view_all",
-            "customer:read",
-            "contract:read",
+            "customer:read", "customer:view_all",
+            "contract:read", "contract:view_all",
             "report:read", "report:view_all",
-            "meeting:read",
+            "meeting:read", "meeting:view_all",
             "ai:use",
             "wiki:read",
             "settings:read",
             "dashboard:read",
             "task:read",
             "log:read",
+            "management:console",
+            "share:read", "share:comment",
         ],
     },
     "user": {
@@ -330,6 +350,7 @@ ROLE_DEFS = {
             "ai:use",
             "wiki:read",
             "dashboard:read",
+            "share:read", "share:comment",
         ],
     },
 }
@@ -421,6 +442,9 @@ def _init_rbac_data(engine):
                 role_obj.is_system = True
                 session.add(role_obj)
         session.commit()
+
+        # 重新查询角色列表（首次部署时 existing_roles 为空，但角色已创建）
+        existing_roles = session.exec(select(Role)).all()
 
         # 确保 is_admin 用户拥有 admin 角色
         admin_role = next((r for r in existing_roles if r.code == "admin"), None)

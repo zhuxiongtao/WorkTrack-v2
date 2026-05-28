@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Search, Plus, X, Loader2, Trash2, FileText, Download, Sparkles, DollarSign, ChevronDown, ChevronRight, Pencil, Eye } from 'lucide-react'
+import { Search, Plus, X, Loader2, Trash2, FileText, Download, Sparkles, ChevronDown, ChevronRight, Pencil, Eye } from 'lucide-react'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
+import TeamViewSwitcher from '../components/TeamViewSwitcher'
 
 interface ContractRecord {
   id: number
@@ -65,7 +66,8 @@ export default function ContractsPage() {
   
   // 成员数据联动选择
   const [memberList, setMemberList] = useState<any[]>([])
-  const [selectedUserId, setSelectedUserId] = useState<number | string>('')
+  const [viewMode, setViewMode] = useState<'personal' | 'team'>('personal')
+  const [selectedUserIds, setSelectedUserIds] = useState<number[]>([])
   const [keyword, setKeyword] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -93,10 +95,14 @@ export default function ContractsPage() {
     const params = new URLSearchParams()
     if (statusFilter) params.set('status', statusFilter)
     if (keyword) params.set('keyword', keyword)
-    if (selectedUserId) params.set('user_id', String(selectedUserId))
+    if (viewMode === 'team' && selectedUserIds.length > 0) {
+      params.set('user_ids', selectedUserIds.join(','))
+    } else if (viewMode === 'team') {
+      params.set('user_ids', memberList.map((m: any) => m.id).join(','))
+    }
     fetch(`/api/v1/contracts?${params.toString()}`)
       .then(r => r.json()).then(data => { setContracts(data || []); setLoading(false) }).catch(() => setLoading(false))
-  }, [statusFilter, keyword, selectedUserId])
+  }, [statusFilter, keyword, viewMode, selectedUserIds, memberList])
 
   useEffect(() => { loadContracts() }, [loadContracts])
 
@@ -108,14 +114,12 @@ export default function ContractsPage() {
   }, [])
 
   useEffect(() => {
-    const urlCust = '/api/v1/customers' + (selectedUserId ? `?user_id=${selectedUserId}` : '')
-    fetch(urlCust)
+    fetch('/api/v1/customers')
       .then(r => r.json()).then(data => setCustomers(data || [])).catch(() => {})
 
-    const urlProj = '/api/v1/projects' + (selectedUserId ? `?user_id=${selectedUserId}` : '')
-    fetch(urlProj)
+    fetch('/api/v1/projects')
       .then(r => r.json()).then(data => setProjects(data || [])).catch(() => {})
-  }, [selectedUserId])
+  }, [])
 
   const resetForm = () => {
     setForm({ title: '', contract_no: '', customer_id: 0, project_id: 0, sign_date: '', start_date: '', end_date: '', party_a: '', party_b: '', contract_amount: '', currency: 'CNY', payment_terms: '', remarks: '' })
@@ -288,7 +292,6 @@ export default function ContractsPage() {
   }
 
   const getCustomerName = (id: number) => customers.find(c => c.id === id)?.name || ''
-  const getProjectName = (id: number | null) => id ? projects.find(p => p.id === id)?.name || '' : ''
   const customersProjects = projects.filter(p => p.customer_id === form.customer_id)
 
   return (
@@ -299,19 +302,14 @@ export default function ContractsPage() {
             <h2 className="text-xl font-bold text-white">合同管理</h2>
             <span className="text-xs text-gray-500 bg-bg-hover px-2 py-0.5 rounded-full">{contracts.length}</span>
           </div>
-          {/* 管理者与老板专属：成员数据切换下拉框 */}
-          {(memberList.length > 1) && (
-            <select
-              value={selectedUserId}
-              onChange={e => setSelectedUserId(e.target.value)}
-              className="px-3 py-1.5 rounded-xl bg-bg-card border border-border text-xs text-gray-300 outline-none focus:border-[#3B82F6] cursor-pointer font-bold"
-            >
-              <option value="">全部下属成员</option>
-              {memberList.map(m => (
-                <option key={m.id} value={m.id}>{m.name || m.username}</option>
-              ))}
-            </select>
-          )}
+          {/* 视图切换 */}
+          <TeamViewSwitcher
+            memberList={memberList}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            selectedUserIds={selectedUserIds}
+            onSelectedUserIdsChange={setSelectedUserIds}
+          />
         </div>
         {hasPermission('contract:create') && (
           <button onClick={() => { setShowForm(true); resetForm() }}

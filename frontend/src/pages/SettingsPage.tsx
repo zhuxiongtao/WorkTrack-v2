@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Plus, X, Save, Trash2, Loader2, Key, Globe, Cpu, Settings2, ListChecks, Sparkles, Brain, Eye, EyeOff, Mic, MessageSquare, Search, ChevronDown, Home, RotateCcw, Edit3, Server, User, Package, MapPin, Activity, Cloud, Palette, Upload, Copy, Terminal, Zap, Building2 } from 'lucide-react'
+import { Plus, X, Save, Trash2, Loader2, Key, Globe, Cpu, Settings2, ListChecks, Sparkles, Brain, Eye, EyeOff, Mic, MessageSquare, Search, ChevronDown, Home, RotateCcw, Edit3, Server, User, Package, MapPin, Activity, Cloud, Palette, Upload, Copy, Terminal, Zap, Building2, Pencil, AlertTriangle } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useSearchParams } from 'react-router-dom'
@@ -64,15 +64,25 @@ const TYPE_COLORS: Record<string, string> = {
 }
 const TYPE_LABEL: Record<string, string> = { chat: '对话', embedding: '嵌入', speech_to_text: 'ASR', vision: '视觉', web_search: '搜索' }
 
+// Task type -> allowed model types (for filtering in task config)
+const TASK_COMPATIBLE_TYPES: Record<string, string[]> = {
+  chat: ['chat', 'vision'],       // vision models also support chat
+  embedding: ['embedding'],
+  vision: ['vision'],
+  speech_to_text: ['speech_to_text'],
+}
+
 export default function SettingsPage() {
   // ===== 标签页状态 =====
   const { user, setUser, fetchWithAuth, hasPermission, isAdmin } = useAuth()
   const { toast: showToast, confirm: showConfirm } = useToast()
-  const canAccessModels = hasPermission('ai:manage_own') || hasPermission('ai:manage_shared')
+  const canAccessModels = hasPermission('ai:manage_own') || hasPermission('ai:manage_shared') || hasPermission('ai:use')
   const canManageModels = hasPermission('ai:manage_own') || hasPermission('ai:manage_shared')
   const canEditSettings = hasPermission('settings:edit')
   const canManageShared = hasPermission('ai:manage_shared')
   const canUseAI = hasPermission('ai:use')
+  // 判断当前用户是否可以编辑指定供应商（编辑/删除/启停/管理模型）
+  const canEditProvider = (p: Provider) => canManageShared || (hasPermission('ai:manage_own') && p.user_id === user?.id)
   const [searchParams, setSearchParams] = useSearchParams()
   const accessibleTabs = [
     ...(canAccessModels ? ['models' as const] : []),
@@ -130,6 +140,7 @@ export default function SettingsPage() {
   const [providerModels, setProviderModels] = useState<Record<number, ProviderModelItem[]>>({})
   const [expandedDropdown, setExpandedDropdown] = useState<number | null>(null)
   const [modelSearch, setModelSearch] = useState('')
+  const [addModelType, setAddModelType] = useState('auto')
 
   // 品牌自定义
   const [branding, setBranding] = useState({ logo_url: '', site_title: 'WorkTrack' })
@@ -259,15 +270,20 @@ export default function SettingsPage() {
     finally { setFetchingModels(null) }
   }
 
-  const addModel = async (providerId: number, modelName: string) => {
+  const addModel = async (providerId: number, modelName: string, modelType?: string) => {
     try {
+      const body: Record<string, string> = { model_name: modelName }
+      if (modelType && modelType !== 'auto') {
+        body.model_type = modelType
+      }
       const res = await fetch(`/api/v1/settings/providers/${providerId}/models`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model_name: modelName }),
+        body: JSON.stringify(body),
       })
       if (!res.ok) { const e = await res.json(); showToast(e.detail || '添加失败', 'error'); return }
       loadProviderModels(providerId)
       showToast('模型已添加', 'success')
+      setAddModelType('auto')
     } catch { showToast('添加请求失败', 'error') }
   }
 
@@ -607,10 +623,10 @@ export default function SettingsPage() {
                         <div className="flex items-center gap-3 mb-1.5 flex-wrap">
                           <span className="text-sm font-semibold text-gray-900 dark:text-white truncate max-w-[300px]">{p.name}</span>
                           <button
-                            onClick={() => canManageModels && (canManageShared || p.user_id === user?.id) && handleToggleActive(p)}
+                            onClick={() => canEditProvider(p) && handleToggleActive(p)}
                             className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${
                               p.is_active ? 'bg-green-500/10 text-green-400' : 'bg-gray-500/10 text-gray-500'
-                            } ${canManageModels && (canManageShared || p.user_id === user?.id) ? 'cursor-pointer' : 'cursor-default'}`}
+                            } ${canEditProvider(p) ? 'cursor-pointer' : 'cursor-default'}`}
                           >
                             {p.is_active ? '已启用' : '已停用'}
                           </button>
@@ -631,10 +647,10 @@ export default function SettingsPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        {canManageModels && (canManageShared || p.user_id === user?.id) && (
+                        {canEditProvider(p) && (
                           <button onClick={() => openEdit(p)} className="px-2.5 py-1.5 rounded-lg bg-bg-hover text-xs text-gray-400 hover:text-white border border-border">编辑</button>
                         )}
-                        {canManageModels && (canManageShared || p.user_id === user?.id) && (
+                        {canEditProvider(p) && (
                           <button onClick={() => handleDelete(p.id)} className="px-2 py-1.5 rounded-lg bg-bg-hover text-xs text-red-400 hover:text-red-300 border border-border"><Trash2 size={12} /></button>
                         )}
                       </div>
@@ -653,13 +669,22 @@ export default function SettingsPage() {
                           return (
                             <div key={m.id} className="group flex items-center gap-1.5 px-3 py-2 rounded-lg bg-bg-input">
                               <span className="text-xs text-gray-700 dark:text-gray-300 font-mono truncate flex-1 min-w-0">{m.model_name}</span>
-                              {/* 类型标签 */}
-                              <div className="relative shrink-0 w-[52px] flex justify-center" ref={editingTypeModelId === m.id ? typeDropdownRef : undefined}>
-                                <button onClick={() => setEditingTypeModelId(editingTypeModelId === m.id ? null : m.id)}
-                                  className={`text-[9px] px-1.5 py-0.5 rounded-full cursor-pointer hover:ring-1 hover:ring-white/20 transition-all ${TYPE_COLORS[m.model_type] || TYPE_COLORS.chat}`}>
-                                  {TYPE_LABEL[m.model_type] || m.model_type}
-                                </button>
-                                {editingTypeModelId === m.id && (
+                              {/* 类型标签 - 可点击修改（需要编辑权限） */}
+                              <div className="relative shrink-0 min-w-[56px] flex justify-center" ref={editingTypeModelId === m.id ? typeDropdownRef : undefined}>
+                                {canEditProvider(p) ? (
+                                  <button
+                                    title="点击修改模型类型"
+                                    onClick={() => setEditingTypeModelId(editingTypeModelId === m.id ? null : m.id)}
+                                    className={`text-[10px] px-2 py-0.5 rounded-full cursor-pointer hover:ring-1 hover:ring-white/20 hover:brightness-125 transition-all flex items-center gap-0.5 ${TYPE_COLORS[m.model_type] || TYPE_COLORS.chat}`}>
+                                    {TYPE_LABEL[m.model_type] || m.model_type}
+                                    <Pencil size={8} className="opacity-0 group-hover:opacity-60 transition-opacity" />
+                                  </button>
+                                ) : (
+                                  <span className={`text-[10px] px-2 py-0.5 rounded-full flex items-center gap-0.5 ${TYPE_COLORS[m.model_type] || TYPE_COLORS.chat}`}>
+                                    {TYPE_LABEL[m.model_type] || m.model_type}
+                                  </span>
+                                )}
+                                {canEditProvider(p) && editingTypeModelId === m.id && (
                                   <div className="absolute top-full left-0 mt-1 z-40 rounded-lg bg-bg-hover border border-[#3B82F6]/50 shadow-xl overflow-hidden min-w-[72px]">
                                     {MODEL_TYPE_OPTIONS.map((opt) => (
                                       <button key={opt.key} onClick={() => updateModelType(p.id, m.id, opt.key)}
@@ -671,7 +696,7 @@ export default function SettingsPage() {
                                 )}
                               </div>
                               {/* 测试按钮 + 删除 */}
-                              <div className="flex items-center gap-1 shrink-0 w-[108px] justify-end">
+                              <div className={`flex items-center gap-1 shrink-0 ${canEditProvider(p) ? 'w-[108px]' : 'w-auto'} justify-end`}>
                                 {tr && (
                                   <span className={`text-[10px] truncate max-w-[90px] flex items-center gap-0.5 ${tr.success ? 'text-green-400' : 'text-red-400'}`} title={`${tr.message || ''} | 延时: ${tr.elapsed}ms`}>
                                     {tr.success ? (
@@ -682,12 +707,16 @@ export default function SettingsPage() {
                                     {tr.success && <span className="text-[9px] text-gray-500 opacity-60">{tr.elapsed}ms</span>}
                                   </span>
                                 )}
-                                <button onClick={() => testModel(p.id, m.id)} disabled={testingModelId === m.id}
-                                  className="opacity-0 group-hover:opacity-100 px-2 py-0.5 rounded text-[10px] text-gray-500 hover:text-[#10B981] border border-border disabled:opacity-50 shrink-0">
-                                  {testingModelId === m.id ? <Loader2 size={10} className="animate-spin" /> : '测试'}
-                                </button>
-                                <button onClick={() => removeModel(p.id, m.id)}
-                                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-600 hover:text-red-400 shrink-0"><Trash2 size={10} /></button>
+                                {canEditProvider(p) && (
+                                  <>
+                                    <button onClick={() => testModel(p.id, m.id)} disabled={testingModelId === m.id}
+                                      className="opacity-0 group-hover:opacity-100 px-2 py-0.5 rounded text-[10px] text-gray-500 hover:text-[#10B981] border border-border disabled:opacity-50 shrink-0">
+                                      {testingModelId === m.id ? <Loader2 size={10} className="animate-spin" /> : '测试'}
+                                    </button>
+                                    <button onClick={() => removeModel(p.id, m.id)}
+                                      className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-600 hover:text-red-400 shrink-0"><Trash2 size={10} /></button>
+                                  </>
+                                )}
                               </div>
                             </div>
                           )
@@ -696,11 +725,11 @@ export default function SettingsPage() {
                     )}
 
                     {/* 添加模型 */}
-                    {canManageModels && (canManageShared || p.user_id === user?.id) && (
+                    {canEditProvider(p) && (
                     <div className="relative">
                       <button onClick={() => {
                         const isOpen = expandedDropdown === p.id
-                        setExpandedDropdown(isOpen ? null : p.id); setModelSearch('')
+                        setExpandedDropdown(isOpen ? null : p.id); setModelSearch(''); setAddModelType('auto')
                         // 首次展开时自动拉取模型列表
                         if (!isOpen && availableModels.length === 0 && p.api_key) {
                           handleFetchModels(p.id)
@@ -711,7 +740,7 @@ export default function SettingsPage() {
                       </button>
                       {expandedDropdown === p.id && (
                         <div ref={addModelDropdownRef} className="absolute z-30 left-0 mt-1 min-w-[340px] max-w-[480px] w-auto max-h-[420px] rounded-lg bg-bg-card border border-border shadow-xl overflow-hidden">
-                          <div className="p-2.5 border-b border-border">
+                          <div className="p-2.5 border-b border-border space-y-2">
                             <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-bg-input border border-border">
                               {fetchingModels === p.id ? (
                                 <Loader2 size={12} className="animate-spin text-gray-500 shrink-0" />
@@ -724,9 +753,20 @@ export default function SettingsPage() {
                                 disabled={fetchingModels === p.id}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter' && modelSearch.trim()) {
-                                    addModel(p.id, modelSearch.trim()); setModelSearch(''); setExpandedDropdown(null)
+                                    addModel(p.id, modelSearch.trim(), addModelType); setModelSearch(''); setExpandedDropdown(null); setAddModelType('auto')
                                   }
                                 }} />
+                            </div>
+                            {/* 类型选择器 */}
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] text-gray-500 shrink-0">添加类型:</span>
+                              <select value={addModelType} onChange={(e) => setAddModelType(e.target.value)}
+                                className="flex-1 px-2 py-1 rounded bg-bg-input border border-border text-[10px] text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6]">
+                                <option value="auto">自动推断</option>
+                                {MODEL_TYPE_OPTIONS.map((opt) => (
+                                  <option key={opt.key} value={opt.key}>{opt.label}</option>
+                                ))}
+                              </select>
                             </div>
                           </div>
                           <div className="overflow-y-auto max-h-52">
@@ -740,10 +780,15 @@ export default function SettingsPage() {
                               </p>
                             ) : (
                               filteredUnconfigured.slice(0, 50).map((m) => (
-                                <button key={m.id} onClick={() => { addModel(p.id, m.id); setModelSearch(''); setExpandedDropdown(null) }}
+                                <button key={m.id} onClick={() => { addModel(p.id, m.id, addModelType); setModelSearch(''); setExpandedDropdown(null); setAddModelType('auto') }}
                                   className="w-full text-left px-4 py-2.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-bg-hover flex items-center gap-2.5 border-b border-border/30 last:border-b-0">
                                   <span className="text-[11px] text-[#3B82F6] font-medium shrink-0">+</span>
-                                  <span className="font-mono text-[11px] truncate">{m.id}</span>
+                                  <span className="font-mono text-[11px] truncate flex-1 min-w-0">{m.id}</span>
+                                  {addModelType !== 'auto' && (
+                                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full shrink-0 ${TYPE_COLORS[addModelType] || TYPE_COLORS.chat}`}>
+                                      {TYPE_LABEL[addModelType] || addModelType}
+                                    </span>
+                                  )}
                                 </button>
                               ))
                             )}
@@ -776,7 +821,16 @@ export default function SettingsPage() {
               const cfg = taskConfigs[task.key]
               const spId = cfg?.provider_id
               const sp = spId ? providers.find((p) => p.id === spId) : null
-              const models = (providerModels[spId || 0] || []).map((m) => m.model_name)
+              // 按任务类型过滤模型
+              const allModels = providerModels[spId || 0] || []
+              const compatibleTypes = TASK_COMPATIBLE_TYPES[task.key] || []
+              const filteredModels = compatibleTypes.length > 0
+                ? allModels.filter((m) => compatibleTypes.includes(m.model_type))
+                : allModels
+              const showFallback = filteredModels.length === 0 && allModels.length > 0
+              // 检查当前选中模型的类型是否匹配
+              const selectedModel = cfg?.model_name ? allModels.find((m) => m.model_name === cfg.model_name) : null
+              const typeMismatch = selectedModel && compatibleTypes.length > 0 && !compatibleTypes.includes(selectedModel.model_type)
               return (
                 <div key={task.key} className="p-3.5 max-md:p-3 rounded-xl bg-bg-card border border-border">
                   <div className="flex items-start gap-2.5 max-md:gap-2">
@@ -789,14 +843,36 @@ export default function SettingsPage() {
                           <option value="">选择供应商</option>
                           {getActiveProviders().map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </select>
-                        {sp && models.length > 0 && (
+                        {sp && allModels.length > 0 && (
                           <select value={cfg?.model_name || ''} onChange={(e) => saveTaskConfig(task.key, spId, e.target.value)}
                             className="px-3 py-1.5 rounded-lg bg-bg-input border border-border text-xs text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6] sm:min-w-[200px]">
                             <option value="">选择模型</option>
-                            {models.map((m) => <option key={m} value={m}>{m}</option>)}
+                            {filteredModels.map((m) => (
+                              <option key={m.model_name} value={m.model_name}>
+                                {m.model_name} ({TYPE_LABEL[m.model_type] || m.model_type})
+                              </option>
+                            ))}
+                            {showFallback && (
+                              <optgroup label="-- 无匹配类型，全部模型 --">
+                                {allModels.map((m) => (
+                                  <option key={m.model_name} value={m.model_name}>
+                                    {m.model_name} ({TYPE_LABEL[m.model_type] || m.model_type})
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
                           </select>
                         )}
-                        {cfg?.model_name && <span className="text-xs text-[#10B981]">{cfg.provider_name ? `${cfg.provider_name} / ` : ''}{cfg.model_name}</span>}
+                        {cfg?.model_name && (
+                          typeMismatch ? (
+                            <span className="text-xs text-amber-400 flex items-center gap-1">
+                              <AlertTriangle size={12} className="shrink-0" />
+                              <span>{cfg.provider_name ? `${cfg.provider_name} / ` : ''}{cfg.model_name} (类型: {TYPE_LABEL[selectedModel?.model_type || ''] || selectedModel?.model_type}，可能不适用)</span>
+                            </span>
+                          ) : (
+                            <span className="text-xs text-[#10B981]">{cfg.provider_name ? `${cfg.provider_name} / ` : ''}{cfg.model_name}</span>
+                          )
+                        )}
                         {taskSaving === task.key && <Loader2 size={14} className="animate-spin text-gray-400" />}
                       </div>
                     </div>

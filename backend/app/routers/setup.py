@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session, select, text
 from sqlmodel import create_engine as sm_create_engine
 
-from app.database import engine, get_session, DEFAULT_FIELD_OPTIONS, _init_default_options_in_session
+from app.database import engine, get_session, DEFAULT_FIELD_OPTIONS, _init_default_options_in_session, _init_rbac_data, _init_rbac_data, _init_rbac_data, _init_rbac_data
 from app.models.user import User
 from app.models.field_option import FieldOption
 from app.rate_limit import limiter
@@ -115,6 +115,7 @@ def initialize(request: Request, req: InitializeRequest):
             session.refresh(admin)
 
             _init_default_options_in_session(session)
+            _init_rbac_data(engine)
 
             config_summary["admin_created"] = True
 

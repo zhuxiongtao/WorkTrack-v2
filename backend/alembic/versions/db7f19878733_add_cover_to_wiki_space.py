@@ -21,8 +21,12 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.add_column('wiki_space', sa.Column('cover_type', sa.String(length=50), nullable=False, server_default='gradient-1'))
     op.add_column('wiki_space', sa.Column('cover_url', sa.String(length=500), nullable=False, server_default=''))
+    op.add_column('wiki_space', sa.Column('share_password', sa.String(length=100), nullable=True))
+    op.add_column('wiki_space', sa.Column('share_expires_at', sa.DateTime(), nullable=True))
 
 
 def downgrade() -> None:
+    op.drop_column('wiki_space', 'share_expires_at')
+    op.drop_column('wiki_space', 'share_password')
     op.drop_column('wiki_space', 'cover_url')
     op.drop_column('wiki_space', 'cover_type')

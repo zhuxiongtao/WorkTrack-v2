@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Search, Plus, X, Loader2, Trash2, Sparkles, Globe, Building2, Users, FileText, TrendingUp, Pencil, Image, RefreshCw, Filter } from 'lucide-react'
+import { Search, Plus, X, Loader2, Trash2, Sparkles, Globe, Building2, Users, FileText, TrendingUp, Pencil, Image, RefreshCw, Filter, ChevronDown } from 'lucide-react'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
 import RichTextEditor from '../components/RichTextEditor'
@@ -41,8 +41,6 @@ interface CustomerContact {
 
 // CompanyLogo 组件：多源加载logo + localStorage 缓存，失败则显示公司首字
 const LOGO_CACHE_PREFIX = 'wt_logo_'
-
-type LogoCache = { url: string } | { fallback: true }
 
 function getLogoCacheKey(logoUrl: string | null): string {
   if (!logoUrl) return ''
@@ -487,19 +485,22 @@ export default function CustomersPage() {
             <h2 className="text-2xl font-bold text-white">客户管理</h2>
             <p className="text-sm text-gray-500 mt-1">{customers.length} 个客户</p>
           </div>
-          {/* 管理者与老板专属：成员数据切换下拉框 */}
-          {(memberList.length > 1) && (
-            <select
-              value={selectedUserId}
-              onChange={e => setSelectedUserId(e.target.value)}
-              style={{ colorScheme: 'dark' }}
-              className="px-3 py-1.5 rounded-xl bg-bg-card border border-border text-xs text-gray-300 outline-none focus:border-[#3B82F6] cursor-pointer font-bold"
-            >
-              <option value="">全部下属成员</option>
-              {memberList.map(m => (
-                <option key={m.id} value={m.id}>{m.name || m.username}</option>
-              ))}
-            </select>
+          {/* 成员筛选 */}
+          {memberList.length > 1 && (
+            <div className="relative">
+              <select
+                value={selectedUserId}
+                onChange={e => setSelectedUserId(e.target.value)}
+                style={{ colorScheme: 'dark' }}
+                className="appearance-none pl-3 pr-7 py-1.5 rounded-lg bg-bg-card border border-border text-xs text-gray-300 outline-none focus:border-[#3B82F6]/50 cursor-pointer transition-colors hover:border-gray-500"
+              >
+                <option value="">全部成员</option>
+                {memberList.map(m => (
+                  <option key={m.id} value={m.id}>{m.name || m.username}</option>
+                ))}
+              </select>
+              <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500" />
+            </div>
           )}
         </div>
         <div className="flex items-center gap-3">

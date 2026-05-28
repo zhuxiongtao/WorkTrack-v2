@@ -21,6 +21,7 @@ router = APIRouter(prefix="/api/v1/meetings", tags=["会议"])
 @router.get("", response_model=list[MeetingNoteOut])
 def list_meetings(
     user_id: Optional[int] = Query(None),
+    user_ids: Optional[str] = Query(None, description="逗号分隔的用户ID列表"),
     customer_id: Optional[int] = Query(None),
     project_id: Optional[int] = Query(None),
     start_date: Optional[datetime] = Query(None),
@@ -28,14 +29,51 @@ def list_meetings(
     current_user: User = Depends(require_permission("meeting:read")),
     db: Session = Depends(get_session),
 ):
+    from app.auth import check_data_access, get_visible_user_ids
+
+    # 多用户模式（团队视图）
+    if user_ids:
+        try:
+            requested_ids = [int(x.strip()) for x in user_ids.split(",") if x.strip()]
+        except ValueError:
+            raise HTTPException(status_code=400, detail="user_ids 格式错误")
+        
+        visible = get_visible_user_ids(current_user, db, module="meeting")
+        if visible is None:
+            validated_ids = requested_ids
+        else:
+            validated_ids = [uid for uid in requested_ids if uid in visible]
+        
+        if not validated_ids:
+            return []
+        
+        query = select(MeetingNote).where(MeetingNote.user_id.in_(validated_ids)).order_by(MeetingNote.meeting_date.desc())
+        if customer_id:
+            query = query.where(MeetingNote.customer_id == customer_id)
+        if project_id:
+            query = query.where(MeetingNote.project_id == project_id)
+        if start_date:
+            query = query.where(MeetingNote.meeting_date >= start_date)
+        if end_date:
+            query = query.where(MeetingNote.meeting_date <= end_date)
+        return db.exec(query).all()
+
+    # 单用户模式：返回自己的会议 + 被授权的会议
     target_uid = user_id if user_id is not None else current_user.id
-    
-    # 统一级数据权限核验（部门负责人、老板、自己）
-    from app.auth import check_data_access
-    if not check_data_access(target_uid, current_user, db):
+    if user_id is not None and not check_data_access(target_uid, current_user, db):
         raise HTTPException(status_code=403, detail="无权查看该用户的会议纪要列表")
 
-    query = select(MeetingNote).where(MeetingNote.user_id == target_uid).order_by(MeetingNote.meeting_date.desc())
+    if user_id is not None:
+        query = select(MeetingNote).where(MeetingNote.user_id == target_uid)
+        shared_meeting_ids = set()
+    else:
+        shared_meeting_ids = set(db.exec(
+            select(MeetingPermission.meeting_id).where(MeetingPermission.user_id == current_user.id)
+        ).all())
+        query = select(MeetingNote).where(
+            (MeetingNote.user_id == current_user.id) | (MeetingNote.id.in_(list(shared_meeting_ids)))
+        )
+    query = query.order_by(MeetingNote.meeting_date.desc())
     if customer_id:
         query = query.where(MeetingNote.customer_id == customer_id)
     if project_id:
@@ -44,7 +82,25 @@ def list_meetings(
         query = query.where(MeetingNote.meeting_date >= start_date)
     if end_date:
         query = query.where(MeetingNote.meeting_date <= end_date)
-    return db.exec(query).all()
+    meetings = db.exec(query).all()
+
+    result = []
+    for m in meetings:
+        data = m.model_dump()
+        is_shared = m.id in shared_meeting_ids
+        data["is_shared"] = is_shared
+        if is_shared:
+            perm = db.exec(
+                select(MeetingPermission.permission).where(
+                    MeetingPermission.meeting_id == m.id,
+                    MeetingPermission.user_id == current_user.id,
+                )
+            ).first()
+            data["shared_permission"] = perm
+            owner = db.get(User, m.user_id)
+            data["owner_name"] = owner.name or owner.username if owner else None
+        result.append(data)
+    return result
 
 
 @router.post("", response_model=MeetingNoteOut, status_code=201)
@@ -68,8 +124,11 @@ def create_meeting(data: MeetingNoteCreate, background_tasks: BackgroundTasks, c
 @router.put("/{meeting_id}", response_model=MeetingNoteOut)
 def update_meeting(meeting_id: int, data: MeetingNoteUpdate, background_tasks: BackgroundTasks, current_user: User = Depends(require_permission("meeting:edit")), db: Session = Depends(get_session)):
     meeting = db.get(MeetingNote, meeting_id)
-    if not meeting or meeting.user_id != current_user.id:
+    if not meeting:
         raise HTTPException(status_code=404, detail="会议不存在")
+    perm = _get_meeting_perm(meeting_id, current_user.id, db)
+    if perm not in ("owner", "admin", "editor"):
+        raise HTTPException(status_code=403, detail="无权限编辑此会议")
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(meeting, key, value)
@@ -89,8 +148,11 @@ def update_meeting(meeting_id: int, data: MeetingNoteUpdate, background_tasks: B
 @router.delete("/{meeting_id}", status_code=204)
 def delete_meeting(meeting_id: int, background_tasks: BackgroundTasks, current_user: User = Depends(require_permission("meeting:delete")), db: Session = Depends(get_session)):
     meeting = db.get(MeetingNote, meeting_id)
-    if not meeting or meeting.user_id != current_user.id:
+    if not meeting:
         raise HTTPException(status_code=404, detail="会议不存在")
+    perm = _get_meeting_perm(meeting_id, current_user.id, db)
+    if perm not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="仅会议创建者或管理员可删除")
     db.delete(meeting)
     db.commit()
     background_tasks.add_task(delete_document, "meeting_notes", str(meeting_id))
@@ -219,3 +281,165 @@ def serve_audio(filename: str, current_user: User = Depends(get_current_user)):
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="文件不存在")
     return FileResponse(filepath, media_type="audio/webm")
+
+
+# ===== 会议协作 API =====
+
+from app.models.meeting_collab import MeetingPermission, MeetingComment
+from pydantic import BaseModel
+
+
+class MeetingPermCreate(BaseModel):
+    user_id: int
+    permission: str  # "viewer" / "editor"
+
+
+class MeetingCommentCreate(BaseModel):
+    content: str
+
+
+def _get_meeting_perm(meeting_id: int, user_id: int, db: Session) -> Optional[str]:
+    """获取用户对某会议的权限级别，返回 None 表示无权限"""
+    meeting = db.get(MeetingNote, meeting_id)
+    if not meeting:
+        return None
+    if meeting.user_id == user_id:
+        return "owner"
+    user = db.get(User, user_id)
+    if user and user.is_admin:
+        return "admin"
+    perm = db.exec(
+        select(MeetingPermission.permission).where(
+            MeetingPermission.meeting_id == meeting_id,
+            MeetingPermission.user_id == user_id,
+        )
+    ).first()
+    return perm
+
+
+@router.get("/{meeting_id}/permissions")
+def list_meeting_permissions(meeting_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+    perm = _get_meeting_perm(meeting_id, current_user.id, db)
+    if not perm:
+        raise HTTPException(status_code=403, detail="无权限查看协作者")
+    perms = db.exec(
+        select(MeetingPermission).where(MeetingPermission.meeting_id == meeting_id)
+    ).all()
+    result = []
+    for p in perms:
+        u = db.get(User, p.user_id)
+        result.append({
+            "id": p.id,
+            "user_id": p.user_id,
+            "user_name": u.name or u.username if u else "",
+            "permission": p.permission,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+        })
+    return result
+
+
+@router.post("/{meeting_id}/permissions")
+def add_meeting_permission(meeting_id: int, data: MeetingPermCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+    perm = _get_meeting_perm(meeting_id, current_user.id, db)
+    if perm not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="仅会议创建者或管理员可添加协作者")
+    if data.permission not in ("viewer", "editor"):
+        raise HTTPException(status_code=400, detail="权限类型无效，可选: viewer/editor")
+    meeting = db.get(MeetingNote, meeting_id)
+    if not meeting:
+        raise HTTPException(status_code=404, detail="会议不存在")
+    if data.user_id == meeting.user_id:
+        raise HTTPException(status_code=400, detail="不能给会议创建者添加权限")
+    existing = db.exec(
+        select(MeetingPermission).where(
+            MeetingPermission.meeting_id == meeting_id,
+            MeetingPermission.user_id == data.user_id,
+        )
+    ).first()
+    if existing:
+        existing.permission = data.permission
+        db.add(existing)
+    else:
+        db.add(MeetingPermission(meeting_id=meeting_id, user_id=data.user_id, permission=data.permission))
+    db.commit()
+    return {"success": True}
+
+
+@router.delete("/permissions/{perm_id}")
+def remove_meeting_permission(perm_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+    p = db.get(MeetingPermission, perm_id)
+    if not p:
+        raise HTTPException(status_code=404, detail="权限记录不存在")
+    perm = _get_meeting_perm(p.meeting_id, current_user.id, db)
+    if perm not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="仅会议创建者或管理员可移除协作者")
+    db.delete(p)
+    db.commit()
+    return {"success": True}
+
+
+@router.get("/{meeting_id}/comments")
+def list_meeting_comments(meeting_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+    perm = _get_meeting_perm(meeting_id, current_user.id, db)
+    if not perm:
+        raise HTTPException(status_code=403, detail="无权限查看评论")
+    comments = db.exec(
+        select(MeetingComment).where(MeetingComment.meeting_id == meeting_id).order_by(MeetingComment.created_at)
+    ).all()
+    result = []
+    for c in comments:
+        u = db.get(User, c.user_id)
+        result.append({
+            "id": c.id,
+            "user_id": c.user_id,
+            "user_name": u.name or u.username if u else "",
+            "user_avatar": u.avatar if u else None,
+            "content": c.content,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+            "can_edit": c.user_id == current_user.id or perm in ("owner", "admin"),
+        })
+    return result
+
+
+@router.post("/{meeting_id}/comments")
+def add_meeting_comment(meeting_id: int, data: MeetingCommentCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+    perm = _get_meeting_perm(meeting_id, current_user.id, db)
+    if not perm:
+        raise HTTPException(status_code=403, detail="无权限评论")
+    if not data.content.strip():
+        raise HTTPException(status_code=400, detail="评论内容不能为空")
+    comment = MeetingComment(meeting_id=meeting_id, user_id=current_user.id, content=data.content.strip())
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+    return {"id": comment.id, "content": comment.content, "created_at": comment.created_at.isoformat()}
+
+
+@router.put("/comments/{comment_id}")
+def update_meeting_comment(comment_id: int, data: MeetingCommentCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+    comment = db.get(MeetingComment, comment_id)
+    if not comment:
+        raise HTTPException(status_code=404, detail="评论不存在")
+    perm = _get_meeting_perm(comment.meeting_id, current_user.id, db)
+    if comment.user_id != current_user.id and perm not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="无权限编辑此评论")
+    if not data.content.strip():
+        raise HTTPException(status_code=400, detail="评论内容不能为空")
+    comment.content = data.content.strip()
+    comment.updated_at = utc_now()
+    db.add(comment)
+    db.commit()
+    return {"success": True}
+
+
+@router.delete("/comments/{comment_id}")
+def delete_meeting_comment(comment_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+    comment = db.get(MeetingComment, comment_id)
+    if not comment:
+        raise HTTPException(status_code=404, detail="评论不存在")
+    perm = _get_meeting_perm(comment.meeting_id, current_user.id, db)
+    if comment.user_id != current_user.id and perm not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="无权限删除此评论")
+    db.delete(comment)
+    db.commit()
+    return {"success": True}

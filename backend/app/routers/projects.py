@@ -17,15 +17,40 @@ router = APIRouter(prefix="/api/v1/projects", tags=["项目"])
 @router.get("", response_model=list[ProjectOut])
 def list_projects(
     user_id: Optional[int] = Query(None),
+    user_ids: Optional[str] = Query(None, description="逗号分隔的用户ID列表，如 1,2,3"),
     customer_id: Optional[int] = Query(None),
     status: Optional[str] = Query(None),
     current_user: User = Depends(require_permission("project:read")),
     db: Session = Depends(get_session),
 ):
-    target_uid = user_id if user_id is not None else current_user.id
+    from app.auth import check_data_access, get_visible_user_ids
+
+    # 多用户模式（团队视图）
+    if user_ids:
+        try:
+            requested_ids = [int(x.strip()) for x in user_ids.split(",") if x.strip()]
+        except ValueError:
+            raise HTTPException(status_code=400, detail="user_ids 格式错误，请用逗号分隔的数字")
+        
+        # 获取可见范围并取交集
+        visible = get_visible_user_ids(current_user, db, module="project")
+        if visible is None:
+            validated_ids = requested_ids
+        else:
+            validated_ids = [uid for uid in requested_ids if uid in visible]
+        
+        if not validated_ids:
+            return []
+        
+        query = select(Project).where(Project.user_id.in_(validated_ids)).order_by(Project.created_at.desc())
+        if customer_id:
+            query = query.where(Project.customer_id == customer_id)
+        if status:
+            query = query.where(Project.status == status)
+        return db.exec(query).all()
     
-    # 统一数据行级访问权限核验（主管、老板、自己）
-    from app.auth import check_data_access
+    # 单用户模式（保持向后兼容）
+    target_uid = user_id if user_id is not None else current_user.id
     if not check_data_access(target_uid, current_user, db):
         raise HTTPException(status_code=403, detail="无权查看该用户的项目列表")
 
@@ -71,9 +96,11 @@ def get_project(project_id: int, current_user: User = Depends(require_permission
         raise HTTPException(status_code=404, detail="项目不存在")
         
     # 统一角色权限核验（部门负责人、老板、创作者）
-    from app.auth import check_data_access
+    from app.auth import check_data_access, check_share_access
     if not check_data_access(project.user_id, current_user, db):
-        raise HTTPException(status_code=403, detail="无权查看该项目")
+        # DataShare fallback
+        if not check_share_access("project", project_id, current_user, db):
+            raise HTTPException(status_code=403, detail="无权查看该项目")
 
     return project
 

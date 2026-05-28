@@ -15,6 +15,8 @@ import WikiPage from '../../pages/WikiPage'
 import PublicWikiPage from '../../pages/PublicWikiPage'
 import MonitorPage from '../../pages/MonitorPage'
 import DataExportPage from '../../pages/DataExportPage'
+import ConsolePage from '../../pages/ConsolePage'
+import SharedWithMePage from '../../pages/SharedWithMePage'
 
 interface AppRoutesProps {
   homePage: string
@@ -42,6 +44,8 @@ function AppRoutes({ homePage }: AppRoutesProps) {
       <Route path="/wiki" element={hasPermission('wiki:read') ? <WikiPage /> : <Navigate to={homePage} replace />} />
       <Route path="/wiki/:spaceId" element={hasPermission('wiki:read') ? <WikiPage /> : <Navigate to={homePage} replace />} />
       <Route path="/wiki/public/:spaceId/:pageId" element={<PublicWikiPage />} />
+      <Route path="/console" element={hasPermission('management:console') ? <ConsolePage /> : <Navigate to={homePage} replace />} />
+      <Route path="/shared" element={hasPermission('share:read') ? <SharedWithMePage /> : <Navigate to={homePage} replace />} />
     </Routes>
   )
 }

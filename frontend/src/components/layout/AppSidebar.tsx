@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Briefcase, Calendar, Sparkles, Settings, Sun, Moon, Clock, BookOpen, FileText, Users, LogOut, Shield, LayoutDashboard, Activity, Database } from 'lucide-react'
+import { Briefcase, Calendar, Sparkles, Settings, Sun, Moon, Clock, BookOpen, FileText, Users, LogOut, Shield, LayoutDashboard, Activity, Database, Share2, BarChart3 } from 'lucide-react'
 import { SidebarIcon } from '../GradientIcon'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -113,6 +113,40 @@ function AppSidebar({ sidebarOpen, onCloseSidebar, brandLogo, brandTitle, isInsi
           >
             <SidebarIcon icon={LayoutDashboard} gradientFrom="#3B82F6" gradientTo="#06B6D4" isActive={false} />
             <span>数据看板</span>
+          </NavLink>
+          )}
+
+          {hasPermission('management:console') && (
+          <NavLink
+            to="/console"
+            onClick={() => onCloseSidebar()}
+            className={({ isActive }) =>
+              `group flex items-center gap-3 px-3 py-1.5 rounded-xl text-sm transition-all ${
+                isActive
+                  ? 'text-gray-900 dark:text-white bg-gradient-to-r from-orange-500/15 to-amber-500/10 font-medium ring-1 ring-orange-500/30 shadow-lg shadow-orange-500/10'
+                  : 'text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-bg-hover-secondary'
+              }`
+            }
+          >
+            <SidebarIcon icon={BarChart3} gradientFrom="#F97316" gradientTo="#FBBF24" isActive={false} />
+            <span>管理总览</span>
+          </NavLink>
+          )}
+
+          {hasPermission('share:read') && (
+          <NavLink
+            to="/shared"
+            onClick={() => onCloseSidebar()}
+            className={({ isActive }) =>
+              `group flex items-center gap-3 px-3 py-1.5 rounded-xl text-sm transition-all ${
+                isActive
+                  ? 'text-gray-900 dark:text-white bg-gradient-to-r from-indigo-500/15 to-violet-500/10 font-medium ring-1 ring-indigo-500/30 shadow-lg shadow-indigo-500/10'
+                  : 'text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-bg-hover-secondary'
+              }`
+            }
+          >
+            <SidebarIcon icon={Share2} gradientFrom="#6366F1" gradientTo="#8B5CF6" isActive={false} />
+            <span>我的分享</span>
           </NavLink>
           )}
 

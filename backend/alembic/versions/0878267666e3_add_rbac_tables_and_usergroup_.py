@@ -41,7 +41,7 @@ def upgrade() -> None:
         sa.Column('description', sa.String(length=200), nullable=False),
         sa.Column('created_at', sa.DateTime(), nullable=False),
         sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('code'),
+        sa.UniqueConstraint('code', name='rbac_permission_code_key'),
     )
     op.create_index(op.f('ix_rbac_permission_code'), 'rbac_permission', ['code'], unique=True)
     op.create_index(op.f('ix_rbac_permission_module'), 'rbac_permission', ['module'], unique=False)
@@ -57,7 +57,7 @@ def upgrade() -> None:
         sa.Column('created_at', sa.DateTime(), nullable=False),
         sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
         sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('code'),
+        sa.UniqueConstraint('code', name='rbac_role_code_key'),
     )
     op.create_index(op.f('ix_rbac_role_code'), 'rbac_role', ['code'], unique=True)
 
@@ -69,6 +69,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(['permission_id'], ['rbac_permission.id'], ),
         sa.ForeignKeyConstraint(['role_id'], ['rbac_role.id'], ),
         sa.PrimaryKeyConstraint('id'),
+        sa.UniqueConstraint('role_id', 'permission_id', name='uq_role_perm'),
     )
     op.create_index(op.f('ix_rbac_role_permission_permission_id'), 'rbac_role_permission', ['permission_id'], unique=False)
     op.create_index(op.f('ix_rbac_role_permission_role_id'), 'rbac_role_permission', ['role_id'], unique=False)
@@ -81,6 +82,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(['role_id'], ['rbac_role.id'], ),
         sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
         sa.PrimaryKeyConstraint('id'),
+        sa.UniqueConstraint('user_id', 'role_id', name='uq_user_role'),
     )
     op.create_index(op.f('ix_rbac_user_role_role_id'), 'rbac_user_role', ['role_id'], unique=False)
     op.create_index(op.f('ix_rbac_user_role_user_id'), 'rbac_user_role', ['user_id'], unique=False)

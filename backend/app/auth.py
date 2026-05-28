@@ -223,11 +223,19 @@ def _get_all_role_ids(user_id: int, db: Session) -> list[int]:
 def has_permission(user: User, permission_code: str, db: Session) -> bool:
     """
     检查用户是否拥有指定权限。
-    两条路径（任一满足即通过）：
+    三条路径（任一满足即通过）：
+    0. is_admin 兜底 → 放行（防止 RBAC 数据异常导致管理员丧失权限）
     1. 旧 boolean 字段向后兼容
     2. RBAC 查询（用户角色 + 部门角色 + 用户组角色）
     结果缓存 60 秒以减少数据库查询。
     """
+    if user.is_admin:
+        return True
+
+    if permission_code in _LEGACY_PERM_MAP:
+        if _LEGACY_PERM_MAP[permission_code](user):
+            return True
+
     if permission_code in _LEGACY_PERM_MAP:
         if _LEGACY_PERM_MAP[permission_code](user):
             return True
@@ -272,8 +280,12 @@ def _check_rbac(user_id: int, permission_code: str, db: Session) -> bool:
 
 
 def get_user_permissions(user: User, db: Session) -> list[str]:
-    """获取用户所有有效权限 code 列表（通过直接分配角色、部门角色与用户组角色合并计算）"""
+    """获取用户所有有效权限 code 列表（通过直接分配角色、部门角色与用户组角色合并计算）
+    is_admin 用户始终返回全部权限"""
     from app.models.rbac import RolePermission, Permission
+
+    if user.is_admin:
+        return list(db.exec(select(Permission.code)).all())
 
     all_role_ids = _get_all_role_ids(user.id, db)
     if not all_role_ids:
@@ -410,6 +422,36 @@ def get_visible_user_ids(current_user: User, db: Session, module: str = "") -> O
     member_ids = list(set(member_ids + leader_subordinate_ids))
 
     return member_ids
+
+
+def check_share_access(target_type: str, target_id: int, current_user: User, db: Session) -> bool:
+    """
+    检查当前用户是否被分享了对应的数据（DataShare fallback）。
+    在 check_data_access() 返回 False 后调用，作为额外放行条件。
+    """
+    from app.models.data_share import DataShare
+    from datetime import datetime, timezone
+    
+    share = db.exec(
+        select(DataShare).where(
+            DataShare.target_type == target_type,
+            DataShare.target_id == target_id,
+            DataShare.shared_to == current_user.id,
+        )
+    ).first()
+    
+    if not share:
+        return False
+    
+    # 检查是否过期
+    if share.expires_at is not None:
+        expires = share.expires_at
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        if expires < datetime.now(timezone.utc):
+            return False
+    
+    return True
 
 
 def _get_department_descendants(dept_id: int, db: Session) -> list[int]:

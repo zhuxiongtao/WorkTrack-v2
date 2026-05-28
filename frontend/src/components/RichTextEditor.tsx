@@ -173,7 +173,7 @@ export default function RichTextEditor({
         class: 'min-h-[200px] focus:outline-none text-gray-900 dark:text-gray-300 leading-relaxed px-4 py-3',
       },
       // ★ ProseMirror 级粘贴拦截：在默认行为之前检查 Markdown 并转为 HTML
-      handlePaste: (view, event) => {
+      handlePaste: (_view, event) => {
         const editor = editorRef.current
         if (!editor) return false
 

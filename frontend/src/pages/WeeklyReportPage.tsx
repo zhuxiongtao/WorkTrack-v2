@@ -1,9 +1,10 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Loader2, Calendar, ChevronDown, ChevronRight, FileText, Sparkles, X, Edit3, Save, Send } from 'lucide-react'
-import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
+import { useAuth } from '../contexts/AuthContext'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import RichTextEditor from '../components/RichTextEditor'
+import TeamViewSwitcher from '../components/TeamViewSwitcher'
 
 interface ReportItem {
   id: number; date: string; title: string; snippet: string; ai_summary: string; has_summary: boolean
@@ -31,9 +32,24 @@ function formatWeekRange(start: string, end: string): string {
 }
 
 export default function WeeklyReportPage() {
+  const { toast: showToast } = useToast()
+  const { hasPermission, user: currentUser } = useAuth()
   const [weeks, setWeeks] = useState<WeekData[]>([])
   const [totalWeeks, setTotalWeeks] = useState(0)
   const [loading, setLoading] = useState(true)
+
+  // 团队视图
+  const [memberList, setMemberList] = useState<any[]>([])
+  const [viewMode, setViewMode] = useState<'personal' | 'team'>('personal')
+  const [selectedUserIds, setSelectedUserIds] = useState<number[]>([])
+
+  // 加载成员列表
+  useEffect(() => {
+    fetch('/api/v1/users/simple')
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setMemberList(d) })
+      .catch(() => {})
+  }, [])
 
   const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set())
   const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set())
@@ -50,6 +66,7 @@ export default function WeeklyReportPage() {
   const startEditSummary = (weekStart: string, currentText: string) => {
     setEditingSummary(weekStart)
     setEditText(currentText)
+    setExpandedSummaries(prev => { const n = new Set(prev); n.add(weekStart); return n })
   }
 
   const saveEditedSummary = async (weekStart: string, _weekEnd: string, status: 'draft' | 'submitted' = 'draft') => {
@@ -69,9 +86,15 @@ export default function WeeklyReportPage() {
     finally { setSavingSummary(false) }
   }
 
-  const loadWeeks = () => {
+  const loadWeeks = useCallback(() => {
     setLoading(true)
-    fetch('/api/v1/reports/weekly')
+    let url = '/api/v1/reports/weekly'
+    if (viewMode === 'team' && selectedUserIds.length > 0) {
+      url += `?user_ids=${selectedUserIds.join(',')}`
+    } else if (viewMode === 'team') {
+      url += '?user_ids=' + memberList.map((m: any) => m.id).join(',')
+    }
+    fetch(url)
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
         return r.json()
@@ -82,9 +105,9 @@ export default function WeeklyReportPage() {
       })
       .catch((e) => { console.error('加载周报失败:', e) })
       .finally(() => setLoading(false))
-  }
+  }, [viewMode, selectedUserIds, memberList])
 
-  useEffect(() => { loadWeeks() }, [])
+  useEffect(() => { loadWeeks() }, [loadWeeks])
 
   // 加载完成后自动展开当前年份
   useEffect(() => {
@@ -166,9 +189,18 @@ export default function WeeklyReportPage() {
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
-        <div>
-          <h2 className="text-2xl font-bold text-white">周报</h2>
-          <p className="text-sm text-gray-500 mt-1">{totalWeeks} 周记录</p>
+        <div className="flex items-center gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-white">周报</h2>
+            <p className="text-sm text-gray-500 mt-1">{totalWeeks} 周记录</p>
+          </div>
+          <TeamViewSwitcher
+            memberList={memberList}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            selectedUserIds={selectedUserIds}
+            onSelectedUserIdsChange={setSelectedUserIds}
+          />
         </div>
       </div>
 
@@ -225,6 +257,14 @@ export default function WeeklyReportPage() {
                       </div>
                     </div>
                   </button>
+                  {!hasSummary && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); startEditSummary(week.week_start, week.weekly_summary || '') }}
+                      className="flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-lg bg-bg-hover text-gray-400 hover:text-white hover:bg-border transition-colors border border-border flex-shrink-0"
+                    >
+                      <Edit3 size={10} />写周报
+                    </button>
+                  )}
                   <button
                     onClick={(e) => { e.stopPropagation(); handleAiWeeklySummary(week.week_start, week.week_end) }}
                     disabled={isSummarizing}
@@ -266,12 +306,14 @@ export default function WeeklyReportPage() {
                                 : <ChevronRight size={14} className="text-gray-500" />
                               }
                             </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); startEditSummary(week.week_start, week.weekly_summary) }}
-                              className="px-2.5 py-1.5 mr-1 rounded-lg bg-bg-hover text-xs text-gray-400 hover:text-white border border-border flex items-center gap-1"
-                            >
-                              <Edit3 size={11} />编辑
-                            </button>
+                            {(week.weekly_summary_status !== 'submitted' || currentUser?.is_admin) && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); startEditSummary(week.week_start, week.weekly_summary) }}
+                                className="px-2.5 py-1.5 mr-1 rounded-lg bg-bg-hover text-xs text-gray-400 hover:text-white border border-border flex items-center gap-1"
+                              >
+                                <Edit3 size={11} />编辑
+                              </button>
+                            )}
                             {week.weekly_summary && week.weekly_summary_status !== 'submitted' && (
                               <button
                                 onClick={async (e) => {
@@ -338,6 +380,50 @@ export default function WeeklyReportPage() {
                               </div>
                             )
                           )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 手动编写周报（无 AI 摘要时） */}
+                    {!hasSummary && editingSummary === week.week_start && (
+                      <div className="px-5 pt-4 pb-2">
+                        <div className="rounded-xl bg-[#8B5CF6]/5 border border-[#8B5CF6]/20 overflow-hidden">
+                          <div className="flex items-center px-4 py-2 border-b border-[#8B5CF6]/10">
+                            <Edit3 size={13} className="text-[#8B5CF6] mr-2" />
+                            <span className="text-xs font-medium text-[#A78BFA]">编写周报</span>
+                          </div>
+                          <div className="px-4 py-3">
+                            <RichTextEditor
+                              value={editText}
+                              onChange={setEditText}
+                              placeholder="编写周报总结…"
+                              className="min-h-[200px]"
+                            />
+                            <div className="flex items-center gap-2 mt-2">
+                              <button
+                                onClick={() => saveEditedSummary(week.week_start, week.week_end, 'draft')}
+                                disabled={savingSummary}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-hover text-xs text-gray-400 hover:text-white border border-border disabled:opacity-50"
+                              >
+                                {savingSummary ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                                保存草稿
+                              </button>
+                              <button
+                                onClick={() => saveEditedSummary(week.week_start, week.week_end, 'submitted')}
+                                disabled={savingSummary}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-blue text-white text-xs font-medium hover:bg-blue-600 disabled:opacity-50"
+                              >
+                                {savingSummary ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                                提交上级
+                              </button>
+                              <button
+                                onClick={() => setEditingSummary(null)}
+                                className="px-3 py-1.5 rounded-lg bg-bg-hover text-xs text-gray-400 hover:text-white border border-border"
+                              >
+                                取消
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     )}

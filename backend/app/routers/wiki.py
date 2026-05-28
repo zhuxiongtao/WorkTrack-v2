@@ -1,5 +1,7 @@
 """Wiki 模块路由：空间管理、页面 CRUD、权限管理、版本历史"""
 
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlmodel import Session, select
 from app.database import get_session

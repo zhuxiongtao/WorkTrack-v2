@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Plus, X, Trash2, Loader2, Briefcase, Edit3, Save, Calendar, User, Building2, Activity, Search, Link2, ExternalLink, Pin, Cloud, Sparkles, RefreshCw, Tag, Filter, ChevronDown, FileText, Target, CheckCircle2 } from 'lucide-react'
 import SearchableSelect from '../components/SearchableSelect'
 import FileUpload from '../components/FileUpload'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import RichTextEditor from '../components/RichTextEditor'
+import TeamViewSwitcher from '../components/TeamViewSwitcher'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -36,9 +37,10 @@ export default function ProjectsPage() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   
-  // 成员筛选（供主管、老板一键跨用户审查，支持零延迟切换数据）
+  // 成员筛选（供主管、老板一键跨用户审查，支持零延迟切换数据）+ 团队视图
   const [memberList, setMemberList] = useState<any[]>([])
-  const [selectedUserId, setSelectedUserId] = useState<number | string>('')
+  const [viewMode, setViewMode] = useState<'personal' | 'team'>('personal')
+  const [selectedUserIds, setSelectedUserIds] = useState<number[]>([])
   const [options, setOptions] = useState<Record<string, string[]>>({})
   const [searchText, setSearchText] = useState('')
   const [selectedProduct, setSelectedProduct] = useState<string>('')
@@ -70,11 +72,16 @@ export default function ProjectsPage() {
 
   const loadProjects = useCallback(() => {
     setLoading(true)
-    const url = '/api/v1/projects' + (selectedUserId ? `?user_id=${selectedUserId}` : '')
+    let url = '/api/v1/projects'
+    if (viewMode === 'team' && selectedUserIds.length > 0) {
+      url += `?user_ids=${selectedUserIds.join(',')}`
+    } else if (viewMode === 'team') {
+      url += '?user_ids=' + memberList.map((m: any) => m.id).join(',')
+    }
     fetch(url)
       .then((res) => res.json()).then((data) => { setProjects(Array.isArray(data) ? data : []); setLoading(false) })
       .catch(() => setLoading(false))
-  }, [selectedUserId])
+  }, [selectedUserIds, viewMode, memberList])
 
   const loadOptions = () => {
     fetch('/api/v1/settings/field-options')
@@ -90,22 +97,22 @@ export default function ProjectsPage() {
 
   const loadMeetings = useCallback(async () => {
     try {
-      const url = '/api/v1/meetings' + (selectedUserId ? `?user_id=${selectedUserId}` : '')
+      const url = '/api/v1/meetings' + (selectedUserIds.length > 0 ? `?user_ids=${selectedUserIds.join(',')}` : '')
       const res = await fetch(url)
       const data = await res.json()
       setAllMeetings((data || []).map((m: { id: number; title: string; meeting_date: string }) => ({
         id: m.id, title: m.title, meeting_date: m.meeting_date
       })))
     } catch { /* ignore */ }
-  }, [selectedUserId])
+  }, [selectedUserIds])
 
   const loadCustomers = useCallback(() => {
-    const url = '/api/v1/customers' + (selectedUserId ? `?user_id=${selectedUserId}` : '')
+    const url = '/api/v1/customers' + (selectedUserIds.length > 0 ? `?user_ids=${selectedUserIds.join(',')}` : '')
     fetch(url)
       .then((res) => res.json())
       .then((data) => setCustomers(Array.isArray(data) ? data.map((c: any) => ({ id: c.id, name: c.name })) : []))
       .catch(() => {})
-  }, [selectedUserId])
+  }, [selectedUserIds])
 
   const loadLinkedMeetings = async (pid: number) => {
     try {
@@ -251,29 +258,44 @@ export default function ProjectsPage() {
       if (!body.deadline) delete body.deadline
       body.meeting_ids = Array.from(selectedMeetingIds)
       if (editingId) {
-        await fetch(`/api/v1/projects/${editingId}`, {
+        const res = await fetch(`/api/v1/projects/${editingId}`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
         })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          showToast(err.detail || `更新失败 (${res.status})`, 'error')
+          return
+        }
+        setShowForm(false)
+        loadProjects()
+        showToast('项目已更新', 'success')
       } else {
         const res = await fetch('/api/v1/projects', {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
         })
-        const created = await res.json()
+        const data = await res.json()
+        if (!res.ok) {
+          showToast(data.detail || `创建失败 (${res.status})`, 'error')
+          return
+        }
         setShowForm(false)
         loadProjects()
         showToast('项目创建成功', 'success')
-        if (created.id) analyzeProject(created.id)
-        return // 提前返回，避免重复 setShowForm
+        if (data.id) analyzeProject(data.id)
       }
-      setShowForm(false)
-      loadProjects()
-      showToast('项目已更新', 'success')
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : '操作失败，请检查网络', 'error')
     } finally { setSaving(false) }
   }
 
   const handleDelete = async (id: number) => {
     if (!await showConfirm('确定删除此项目？')) return
-    await fetch(`/api/v1/projects/${id}`, { method: 'DELETE' })
+    const res = await fetch(`/api/v1/projects/${id}`, { method: 'DELETE' })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      showToast(err.detail || `删除失败 (${res.status})`, 'error')
+      return
+    }
     if (modalProject?.id === id) setModalProject(null)
     loadProjects()
     showToast('项目已删除', 'success')
@@ -350,19 +372,13 @@ export default function ProjectsPage() {
             <h2 className="text-xl font-bold text-white">项目管理</h2>
             <span className="text-xs text-gray-500 bg-bg-hover px-2 py-0.5 rounded-full">{projects.length}</span>
           </div>
-          {/* 管理者与老板专属：成员数据切换下拉框 */}
-          {(memberList.length > 1) && (
-            <select
-              value={selectedUserId}
-              onChange={e => setSelectedUserId(e.target.value)}
-              className="px-3 py-1.5 rounded-xl bg-bg-card border border-border text-xs text-gray-300 outline-none focus:border-[#3B82F6] cursor-pointer font-bold"
-            >
-              <option value="">全部下属成员</option>
-              {memberList.map(m => (
-                <option key={m.id} value={m.id}>{m.name || m.username}</option>
-              ))}
-            </select>
-          )}
+          <TeamViewSwitcher
+            memberList={memberList}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            selectedUserIds={selectedUserIds}
+            onSelectedUserIdsChange={setSelectedUserIds}
+          />
         </div>
         {hasPermission('project:create') && (
           <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#3B82F6] text-white text-sm font-medium hover:bg-blue-600 transition-all shadow-lg shadow-blue-500/20">

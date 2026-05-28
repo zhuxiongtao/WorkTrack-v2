@@ -5,6 +5,7 @@ import { useToast } from '../contexts/ToastContext'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import FileUpload from '../components/FileUpload'
 import RichTextEditor from '../components/RichTextEditor'
+import TeamViewSwitcher from '../components/TeamViewSwitcher'
 
 interface ReportCard {
   id: number; date: string; title: string; snippet: string; ai_summary: string; has_summary: boolean; status?: string
@@ -39,9 +40,10 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   
-  // 成员筛选（主管、Boss审查下属汇报）
+  // 成员筛选（主管、Boss审查下属汇报）+ 团队视图
   const [memberList, setMemberList] = useState<any[]>([])
-  const [selectedUserId, setSelectedUserId] = useState<number | string>('')
+  const [viewMode, setViewMode] = useState<'personal' | 'team'>('personal')
+  const [selectedUserIds, setSelectedUserIds] = useState<number[]>([])
   const [editingReport, setEditingReport] = useState<ReportDetail | null>(null)
   const [formContent, setFormContent] = useState('')
   const [formDate, setFormDate] = useState('')
@@ -162,7 +164,12 @@ export default function ReportsPage() {
 
   const loadReports = useCallback(() => {
     setLoading(true)
-    const url = '/api/v1/reports/grouped' + (selectedUserId ? `?user_id=${selectedUserId}` : '')
+    let url = '/api/v1/reports/grouped'
+    if (viewMode === 'team' && selectedUserIds.length > 0) {
+      url += `?user_ids=${selectedUserIds.join(',')}`
+    } else if (viewMode === 'team') {
+      url += '?user_ids=' + memberList.map((m: any) => m.id).join(',')
+    }
     fetch(url)
       .then((res) => res.json())
       .then((data) => {
@@ -178,7 +185,7 @@ export default function ReportsPage() {
         }
       })
       .catch(() => setLoading(false))
-  }, [selectedUserId])
+  }, [selectedUserIds, viewMode, memberList])
 
   useEffect(() => { loadReports() }, [loadReports])
 
@@ -284,20 +291,13 @@ export default function ReportsPage() {
             <h2 className="text-2xl font-bold text-white">日报</h2>
             <p className="text-sm text-gray-500 mt-1">{total} 条记录</p>
           </div>
-          {/* 管理者与老板专属：成员数据切换下拉框 */}
-          {(memberList.length > 1) && (
-            <select
-              value={selectedUserId}
-              onChange={e => setSelectedUserId(e.target.value)}
-              style={{ colorScheme: 'dark' }}
-              className="px-3 py-1.5 rounded-xl bg-bg-card border border-border text-xs text-gray-300 outline-none focus:border-[#3B82F6] cursor-pointer font-bold"
-            >
-              <option value="">全部下属成员</option>
-              {memberList.map(m => (
-                <option key={m.id} value={m.id}>{m.name || m.username}</option>
-              ))}
-            </select>
-          )}
+          <TeamViewSwitcher
+            memberList={memberList}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            selectedUserIds={selectedUserIds}
+            onSelectedUserIdsChange={setSelectedUserIds}
+          />
         </div>
         {hasPermission('report:create') && (
           <button onClick={openCreate} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent-blue text-white text-sm font-medium hover:bg-accent-blue/85 transition-all shadow-lg shadow-accent-blue/20 shrink-0">
@@ -426,13 +426,27 @@ export default function ReportsPage() {
                   className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-gray-300 hover:text-[#8B5CF6] hover:bg-border transition-colors disabled:opacity-50 border border-border">
                   {aiLoading === modalDetail.id ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}AI 整理
                 </button>
-                {(hasPermission('report:submit') || hasPermission('report:edit')) && (
-                  <button onClick={() => { closeDetail(); openEdit(modalDetail) }}
-                    className="text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-gray-300 hover:text-white transition-colors border border-border">编辑</button>
-                )}
-                {(hasPermission('report:submit') || hasPermission('report:delete')) && (
-                  <button onClick={() => handleDelete(modalDetail.id)}
-                    className="text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors border border-border"><Trash2 size={13} /></button>
+                {/* 已提交的日报仅管理员可编辑/删除；草稿状态本人或有权限的用户可操作 */}
+                {modalDetail.status === 'submitted' ? (
+                  currentUser?.is_admin && (
+                    <>
+                      <button onClick={() => { closeDetail(); openEdit(modalDetail) }}
+                        className="text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-gray-300 hover:text-white transition-colors border border-border">编辑</button>
+                      <button onClick={() => handleDelete(modalDetail.id)}
+                        className="text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors border border-border"><Trash2 size={13} /></button>
+                    </>
+                  )
+                ) : (
+                  <>
+                    {(modalDetail.user_id === currentUser?.id || hasPermission('report:edit')) && (
+                      <button onClick={() => { closeDetail(); openEdit(modalDetail) }}
+                        className="text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-gray-300 hover:text-white transition-colors border border-border">编辑</button>
+                    )}
+                    {(modalDetail.user_id === currentUser?.id || hasPermission('report:delete')) && (
+                      <button onClick={() => handleDelete(modalDetail.id)}
+                        className="text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors border border-border"><Trash2 size={13} /></button>
+                    )}
+                  </>
                 )}
                 <button onClick={closeDetail} className="ml-2 p-2 rounded-lg hover:bg-bg-hover text-gray-500 hover:text-white transition-colors"><X size={18} /></button>
               </div>

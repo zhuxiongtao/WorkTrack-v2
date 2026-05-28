@@ -24,12 +24,18 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 def _build_user_response(user: User, db: Session) -> dict:
     from app.auth import get_user_permissions
+    perms = get_user_permissions(user, db)
+    # 补充旧 boolean 字段对应的权限码（与 has_permission 的 _LEGACY_PERM_MAP 保持一致）
+    if user.use_shared_models and "ai:use" not in perms:
+        perms.append("ai:use")
+    if user.can_manage_models and "ai:manage_own" not in perms:
+        perms.append("ai:manage_own")
     return {
         "id": user.id, "username": user.username, "name": user.name, "is_admin": user.is_admin,
         "email": user.email, "is_active": user.is_active, "avatar": user.avatar,
         "last_login_at": user.last_login_at.isoformat() if user.last_login_at else None,
         "can_manage_models": user.can_manage_models, "use_shared_models": user.use_shared_models,
-        "permissions": get_user_permissions(user, db),
+        "permissions": perms,
     }
 
 
@@ -173,6 +179,12 @@ def me(current_user: User = Depends(get_current_user), db: Session = Depends(get
     from app.models.rbac import Role
     all_role_ids = _get_all_role_ids(current_user.id, db)
     role_codes = list(db.exec(select(Role.code).where(Role.id.in_(all_role_ids))).all()) if all_role_ids else []
+    perms = get_user_permissions(current_user, db)
+    # 补充旧 boolean 字段对应的权限码（与 has_permission 的 _LEGACY_PERM_MAP 保持一致）
+    if current_user.use_shared_models and "ai:use" not in perms:
+        perms.append("ai:use")
+    if current_user.can_manage_models and "ai:manage_own" not in perms:
+        perms.append("ai:manage_own")
     return {
         "id": current_user.id,
         "username": current_user.username,
@@ -184,7 +196,7 @@ def me(current_user: User = Depends(get_current_user), db: Session = Depends(get
         "use_shared_models": current_user.use_shared_models,
         "avatar": current_user.avatar,
         "last_login_at": current_user.last_login_at.isoformat() if current_user.last_login_at else None,
-        "permissions": get_user_permissions(current_user, db),
+        "permissions": perms,
         "roles": role_codes,
     }
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Plus, Sparkles, X, Trash2, Loader2, Calendar, Mic, Square, Play, Pause, FileText, FileAudio, Link2, Search, Building2, ExternalLink, Edit3, Maximize2, Minimize2 } from 'lucide-react'
+import { Plus, Sparkles, X, Trash2, Loader2, Calendar, Mic, Square, Play, Pause, FileText, FileAudio, Link2, Search, Building2, ExternalLink, Edit3, Maximize2, Minimize2, Share2, MessageSquare, Send } from 'lucide-react'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import SearchableSelect from '../components/SearchableSelect'
 import FileUpload from '../components/FileUpload'
@@ -9,9 +9,12 @@ import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
 
 interface Meeting {
-  id: number; title: string; meeting_date: string; content_md: string; audio_url: string | null; customer_id: number | null; project_id: number | null
+  id: number; title: string; meeting_date: string; content_md: string; audio_url: string | null; customer_id: number | null; project_id: number | null; user_id: number
   files_json?: string | null
   ai_summary?: string | null
+  is_shared?: boolean
+  shared_permission?: string | null
+  owner_name?: string | null
 }
 
 interface ProjectBrief {
@@ -19,7 +22,7 @@ interface ProjectBrief {
 }
 
 export default function MeetingsPage() {
-  const { hasPermission } = useAuth()
+  const { hasPermission, user: currentUser } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const { toast: showToast, confirm: showConfirm } = useToast()
   const [meetings, setMeetings] = useState<Meeting[]>([])
@@ -27,9 +30,7 @@ export default function MeetingsPage() {
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   
-  // 成员筛选（主管、Boss审查）
   const [memberList, setMemberList] = useState<any[]>([])
-  const [selectedUserId, setSelectedUserId] = useState<number | string>('')
   const [isMaximized, setIsMaximized] = useState(false)
   const [inputMode, setInputMode] = useState<'text' | 'voice'>('text')
   const [form, setForm] = useState({ title: '', content_md: '', project_id: 0, customer_id: 0, meeting_date: new Date().toISOString().slice(0, 16), files_json: null as string | null })
@@ -44,6 +45,19 @@ export default function MeetingsPage() {
   // 弹窗详情
   const [modalMeeting, setModalMeeting] = useState<Meeting | null>(null)
   const [linkedProject, setLinkedProject] = useState<ProjectBrief | null>(null)
+
+  // 分享弹窗
+  const [showShareModal, setShowShareModal] = useState(false)
+  const [sharePermissions, setSharePermissions] = useState<any[]>([])
+  const [shareUserId, setShareUserId] = useState<number>(0)
+  const [shareLevel, setShareLevel] = useState<string>('viewer')
+  const [shareLoading, setShareLoading] = useState(false)
+  const [allUsers, setAllUsers] = useState<any[]>([])
+
+  // 评论
+  const [comments, setComments] = useState<any[]>([])
+  const [newComment, setNewComment] = useState('')
+  const [commentLoading, setCommentLoading] = useState(false)
 
   // 卡片悬停提示
   const [hoveredProjectId, setHoveredProjectId] = useState<number | null>(null)
@@ -66,30 +80,27 @@ export default function MeetingsPage() {
 
   const loadMeetings = useCallback(() => {
     setLoading(true)
-    const url = '/api/v1/meetings' + (selectedUserId ? `?user_id=${selectedUserId}` : '')
-    fetch(url)
+    fetch('/api/v1/meetings')
       .then((res) => res.json())
       .then((data) => { setMeetings(Array.isArray(data) ? data : []); setLoading(false) })
       .catch(() => setLoading(false))
-  }, [selectedUserId])
+  }, [])
 
   const loadProjects = useCallback(() => {
-    const url = '/api/v1/projects' + (selectedUserId ? `?user_id=${selectedUserId}` : '')
-    fetch(url)
+    fetch('/api/v1/projects')
       .then((res) => res.json())
       .then((data) => setProjects((data || []).map((p: { id: number; name: string; customer_name: string; status: string }) => ({
         id: p.id, name: p.name, customer_name: p.customer_name, status: p.status
       }))))
       .catch(() => {})
-  }, [selectedUserId])
+  }, [])
 
   const loadCustomers = useCallback(() => {
-    const url = '/api/v1/customers' + (selectedUserId ? `?user_id=${selectedUserId}` : '')
-    fetch(url)
+    fetch('/api/v1/customers')
       .then((res) => res.json())
       .then((data) => setCustomers(Array.isArray(data) ? data.map((c: any) => ({ id: c.id, name: c.name })) : []))
       .catch(() => {})
-  }, [selectedUserId])
+  }, [])
 
   // 1. 装载拉取成员
   useEffect(() => {
@@ -399,14 +410,94 @@ export default function MeetingsPage() {
     showToast('会议已删除', 'success')
   }
 
+  const loadComments = async (meetingId: number) => {
+    try {
+      const res = await fetch(`/api/v1/meetings/${meetingId}/comments`)
+      if (res.ok) {
+        const data = await res.json()
+        setComments(Array.isArray(data) ? data : [])
+      }
+    } catch { setComments([]) }
+  }
+
+  const handleAddComment = async () => {
+    if (!newComment.trim() || !modalMeeting) return
+    setCommentLoading(true)
+    try {
+      const res = await fetch(`/api/v1/meetings/${modalMeeting.id}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: newComment.trim() }),
+      })
+      if (res.ok) {
+        setNewComment('')
+        await loadComments(modalMeeting.id)
+      } else {
+        showToast('评论发送失败', 'error')
+      }
+    } catch { showToast('评论发送失败', 'error') }
+    finally { setCommentLoading(false) }
+  }
+
+  const loadSharePermissions = async (meetingId: number) => {
+    try {
+      const res = await fetch(`/api/v1/meetings/${meetingId}/permissions`)
+      if (res.ok) {
+        const data = await res.json()
+        setSharePermissions(Array.isArray(data) ? data : [])
+      }
+    } catch { setSharePermissions([]) }
+    fetch('/api/v1/users/simple?scope=all')
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setAllUsers(d) })
+      .catch(() => {})
+  }
+
+  const handleAddShare = async () => {
+    if (!shareUserId || !modalMeeting) return
+    setShareLoading(true)
+    try {
+      const res = await fetch(`/api/v1/meetings/${modalMeeting.id}/permissions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: shareUserId, permission: shareLevel }),
+      })
+      if (res.ok) {
+        setShareUserId(0)
+        setShareLevel('viewer')
+        await loadSharePermissions(modalMeeting.id)
+        showToast('协作者已添加', 'success')
+      } else {
+        const errData = await res.json().catch(() => ({}))
+        showToast(`添加失败: ${errData.detail || res.statusText}`, 'error')
+      }
+    } catch { showToast('添加失败', 'error') }
+    finally { setShareLoading(false) }
+  }
+
+  const handleRemoveShare = async (permId: number) => {
+    if (!modalMeeting) return
+    try {
+      const res = await fetch(`/api/v1/meetings/permissions/${permId}`, { method: 'DELETE' })
+      if (res.ok) {
+        await loadSharePermissions(modalMeeting.id)
+        showToast('协作者已移除', 'success')
+      } else { showToast('移除失败', 'error') }
+    } catch { showToast('移除失败', 'error') }
+  }
+
   const openDetail = (m: Meeting) => {
     setModalMeeting(m)
     loadLinkedProject(m.project_id)
+    loadComments(m.id)
   }
 
   const closeDetail = () => {
     setModalMeeting(null)
     setLinkedProject(null)
+    setComments([])
+    setNewComment('')
+    setShowShareModal(false)
   }
 
   const handleAiExtract = async (id: number) => {
@@ -499,20 +590,7 @@ export default function MeetingsPage() {
             <h2 className="text-2xl font-bold text-white">会议纪要</h2>
             <p className="text-sm text-gray-500 mt-1">{meetings.length} 条记录</p>
           </div>
-          {/* 管理者与老板专属：成员数据切换下拉框 */}
-          {(memberList.length > 1) && (
-            <select
-              value={selectedUserId}
-              onChange={e => setSelectedUserId(e.target.value)}
-              style={{ colorScheme: 'dark' }}
-              className="px-3 py-1.5 rounded-xl bg-bg-card border border-border text-xs text-gray-300 outline-none focus:border-[#3B82F6] cursor-pointer font-bold"
-            >
-              <option value="">全部下属成员</option>
-              {memberList.map(m => (
-                <option key={m.id} value={m.id}>{m.name || m.username}</option>
-              ))}
-            </select>
-          )}
+
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-bg-card border border-border focus-within:border-[#3B82F6] transition-colors">
@@ -546,8 +624,22 @@ export default function MeetingsPage() {
               <button
                 key={m.id}
                 onClick={() => openDetail(m)}
-                className="w-full text-left break-inside-avoid mb-3 p-4 rounded-xl bg-bg-card border border-border hover:border-[#3B82F6]/60 hover:bg-bg-hover-secondary transition-all group/card"
+                className={`w-full text-left break-inside-avoid mb-3 p-4 rounded-xl bg-bg-card border hover:bg-bg-hover-secondary transition-all group/card ${
+                  m.is_shared ? 'border-[#8B5CF6]/40 hover:border-[#8B5CF6]/60' : 'border-border hover:border-[#3B82F6]/60'
+                }`}
               >
+                {m.is_shared && (
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <Share2 size={10} className="text-[#8B5CF6]" />
+                    <span className="text-[10px] text-[#8B5CF6] font-medium">{m.owner_name} 分享</span>
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${
+                      m.shared_permission === 'editor' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                      'bg-gray-500/10 text-gray-400 border-gray-500/20'
+                    }`}>
+                      {m.shared_permission === 'editor' ? '可编辑' : '只读'}
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-sm font-bold text-white truncate flex-1">{m.title}</h4>
                   <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
@@ -633,11 +725,15 @@ export default function MeetingsPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {hasPermission('meeting:edit') && (
+                {(modalMeeting.user_id === currentUser?.id || currentUser?.is_admin) && (
+                  <button onClick={() => { setShowShareModal(true); loadSharePermissions(modalMeeting.id) }}
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-gray-300 hover:text-white transition-colors border border-border"><Share2 size={12} />分享</button>
+                )}
+                {(modalMeeting.user_id === currentUser?.id || currentUser?.is_admin || modalMeeting.shared_permission === 'editor') && (
                   <button onClick={() => { closeDetail(); openEdit(modalMeeting) }}
                     className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-gray-300 hover:text-white transition-colors border border-border"><Edit3 size={12} />编辑</button>
                 )}
-                {hasPermission('meeting:delete') && (
+                {(modalMeeting.user_id === currentUser?.id || currentUser?.is_admin) && (
                   <button onClick={() => handleDelete(modalMeeting.id)}
                     className="text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors border border-border"><Trash2 size={13} /></button>
                 )}
@@ -709,6 +805,104 @@ export default function MeetingsPage() {
                   className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-bg-hover text-gray-300 hover:text-[#8B5CF6] disabled:opacity-50 transition-colors border border-border">
                   {aiLoading === modalMeeting.id ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}AI 会议整理
                 </button>
+              </div>
+
+              {/* 评论区 */}
+              <div className="mt-6 pt-4 border-t border-border">
+                <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-1.5">
+                  <MessageSquare size={14} />评论{comments.length > 0 && <span className="text-xs text-gray-500 font-normal">({comments.length})</span>}
+                </h4>
+                <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
+                  {comments.length === 0 && <p className="text-xs text-gray-600">暂无评论</p>}
+                  {comments.map((c: any) => (
+                    <div key={c.id} className="flex gap-2.5">
+                      <div className="w-7 h-7 rounded-full bg-bg-hover flex items-center justify-center text-xs text-gray-400 font-medium shrink-0">
+                        {c.user_name ? c.user_name.charAt(0).toUpperCase() : '?'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-xs font-medium text-gray-300">{c.user_name || '未知用户'}</span>
+                          <span className="text-[10px] text-gray-600">{c.created_at ? new Date(c.created_at).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}</span>
+                        </div>
+                        <p className="text-xs text-gray-400 leading-relaxed">{c.content}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddComment() } }}
+                    placeholder="写评论..."
+                    className="flex-1 px-3 py-2 rounded-lg bg-bg-input border border-border text-xs text-gray-300 outline-none focus:border-[#3B82F6] transition-colors placeholder-gray-600"
+                  />
+                  <button onClick={handleAddComment} disabled={commentLoading || !newComment.trim()}
+                    className="flex items-center gap-1 px-3 py-2 rounded-lg bg-[#3B82F6] text-white text-xs font-medium hover:bg-blue-600 disabled:opacity-50 transition-all">
+                    {commentLoading ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 分享弹窗 */}
+      {showShareModal && modalMeeting && (
+        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center" onClick={() => setShowShareModal(false)}>
+          <div className="w-full max-w-md mx-4 rounded-2xl bg-bg-card border border-border shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <h3 className="text-base font-bold text-white">分享会议</h3>
+              <button onClick={() => setShowShareModal(false)} className="p-1.5 rounded-lg hover:bg-bg-hover text-gray-500 hover:text-white transition-colors"><X size={16} /></button>
+            </div>
+            <div className="p-5 space-y-5">
+              <div>
+                <h4 className="text-xs font-bold text-gray-400 mb-2">添加协作者</h4>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <SearchableSelect
+                      options={allUsers.filter((u: any) => u.id !== currentUser?.id).map((u: any) => ({ id: u.id, label: u.name || u.username }))}
+                      value={shareUserId}
+                      onChange={(val) => setShareUserId(val as number)}
+                      placeholder="选择用户..."
+                      searchPlaceholder="搜索用户..."
+                      emptyText="无匹配用户"
+                    />
+                  </div>
+                  <select
+                    value={shareLevel}
+                    onChange={(e) => setShareLevel(e.target.value)}
+                    className="px-2 py-2 rounded-lg bg-bg-input border border-border text-xs text-gray-300 outline-none focus:border-[#3B82F6] transition-colors"
+                  >
+                    <option value="viewer">只读</option>
+                    <option value="editor">可编辑</option>
+                  </select>
+                  <button onClick={handleAddShare} disabled={shareLoading || !shareUserId}
+                    className="px-3 py-2 rounded-lg bg-[#3B82F6] text-white text-xs font-medium hover:bg-blue-600 disabled:opacity-50 transition-all">
+                    {shareLoading ? <Loader2 size={12} className="animate-spin" /> : '添加'}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-gray-400 mb-2">当前协作者</h4>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {sharePermissions.length === 0 && <p className="text-xs text-gray-600">暂无协作者</p>}
+                  {sharePermissions.map((p: any) => (
+                    <div key={p.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-bg-input border border-border">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-bg-hover flex items-center justify-center text-[10px] text-gray-400 font-medium">
+                          {p.user_name ? p.user_name.charAt(0).toUpperCase() : '?'}
+                        </div>
+                        <span className="text-xs text-gray-300">{p.user_name || '未知用户'}</span>
+                        <span className="text-[10px] text-gray-500 bg-bg-hover px-1.5 py-0.5 rounded">
+                          {p.permission === 'viewer' ? '只读' : '可编辑'}
+                        </span>
+                      </div>
+                      <button onClick={() => handleRemoveShare(p.id)} className="text-gray-500 hover:text-red-400 transition-colors"><Trash2 size={12} /></button>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>

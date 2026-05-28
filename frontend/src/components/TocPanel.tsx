@@ -110,7 +110,6 @@ export default function TocPanel({ html, className = '', embedded = false, inlin
           }
         }
         // 如果没有标题在视口内，找最后一个在上方的标题
-        const scrollTop = scrollContainer.scrollTop
         let closest: string | null = null
         let closestDist = Infinity
         for (const h of headings) {

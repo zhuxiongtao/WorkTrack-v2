@@ -46,29 +46,113 @@ def _background_ai_summarize(report_id: int, content: str):
 
 @router.get("/weekly")
 def list_weekly_reports(
+    user_id: Optional[int] = Query(None, description="查看指定用户的周报（可选，默认当前用户）"),
+    user_ids: Optional[str] = Query(None, description="逗号分隔的用户ID列表（团队视图）"),
     current_user: User = Depends(require_permission("report:read")),
     db: Session = Depends(get_session),
 ):
     """按周聚合日报，返回每周汇总及日报列表（含已保存的 AI 周报总结）"""
+    from app.auth import check_data_access, get_visible_user_ids
+
+    # 多用户模式（团队视图）
+    if user_ids:
+        try:
+            requested_ids = [int(x.strip()) for x in user_ids.split(",") if x.strip()]
+        except ValueError:
+            raise HTTPException(status_code=400, detail="user_ids 格式错误")
+        visible = get_visible_user_ids(current_user, db, module="report")
+        if visible is None:
+            validated_ids = requested_ids
+        else:
+            validated_ids = [uid for uid in requested_ids if uid in visible]
+        if not validated_ids:
+            return {"weeks": [], "total_weeks": 0}
+
+        reports = db.exec(
+            select(DailyReport)
+            .where(DailyReport.user_id.in_(validated_ids), DailyReport.status == "submitted")
+            .order_by(DailyReport.report_date.desc())
+        ).all()
+        # 加载所有相关用户的周报总结
+        saved_summaries = {}
+        for s in db.exec(select(WeeklySummary).where(WeeklySummary.user_id.in_(validated_ids))).all():
+            key = f"{s.user_id}:{s.week_start}"
+            saved_summaries[key] = {"text": s.summary_text, "status": s.status}
+
+        # 构建用户 ID → 姓名映射
+        from app.models.user import User as UserModel
+        user_map = {u.id: (u.name or u.username) for u in db.exec(
+            select(UserModel).where(UserModel.id.in_(validated_ids))
+        ).all()}
+
+        tree: dict = defaultdict(lambda: defaultdict(list))
+        user_name_tree: dict = defaultdict(lambda: defaultdict(set))
+        for r in reports:
+            wk = week_range(r.report_date)
+            tree[r.report_date.year][str(wk)].append({
+                "id": r.id,
+                "date": str(r.report_date),
+                "title": r.content_md.split("\n")[0][:60] if r.content_md else "无标题",
+                "snippet": (r.ai_summary or r.content_md)[:120].replace("\n", " "),
+                "ai_summary": r.ai_summary or "",
+                "has_summary": bool(r.ai_summary),
+                "user_id": r.user_id,
+                "user_name": user_map.get(r.user_id, ""),
+            })
+            user_name_tree[r.report_date.year][str(wk)].add(user_map.get(r.user_id, ""))
+
+        weeks = []
+        for year in sorted(tree.keys(), reverse=True):
+            for wk_str in sorted(tree[year].keys(), reverse=True):
+                wk_date = date.fromisoformat(wk_str)
+                week_end = wk_date + timedelta(days=6)
+                entries = tree[year][wk_str]
+                # 多用户模式下取第一个有总结的
+                summary_text = ""
+                summary_status = ""
+                for uid in validated_ids:
+                    key = f"{uid}:{wk_str}"
+                    if key in saved_summaries and saved_summaries[key]["text"]:
+                        summary_text = saved_summaries[key]["text"]
+                        summary_status = saved_summaries[key]["status"]
+                        break
+                weeks.append({
+                    "week_start": wk_str,
+                    "week_end": str(week_end),
+                    "year": year,
+                    "report_count": len(entries),
+                    "reports": entries,
+                    "weekly_summary": summary_text,
+                    "weekly_summary_status": summary_status,
+                    "member_names": list(user_name_tree[year][wk_str]),
+                })
+        return {"weeks": weeks, "total_weeks": len(weeks)}
+
+    # 单用户模式
+    target_uid = user_id if user_id is not None else current_user.id
+    
+    if target_uid != current_user.id:
+        if not check_data_access(target_uid, current_user, db):
+            raise HTTPException(status_code=403, detail="无权查看该用户的周报")
+
     reports = db.exec(
         select(DailyReport)
-        .where(DailyReport.user_id == current_user.id)
+        .where(DailyReport.user_id == target_uid)
         .order_by(DailyReport.report_date.desc())
     ).all()
 
-    # 加载已保存的周报 AI 总结（仅当前用户）
+    # 加载已保存的周报 AI 总结
     saved_summaries = {
         str(s.week_start): {"text": s.summary_text, "status": s.status}
         for s in db.exec(
-            select(WeeklySummary).where(WeeklySummary.user_id == current_user.id)
+            select(WeeklySummary).where(WeeklySummary.user_id == target_uid)
         ).all()
     }
 
-    tree: dict = defaultdict(lambda: defaultdict(list))
+    tree_single: dict = defaultdict(lambda: defaultdict(list))
     for r in reports:
         wk = week_range(r.report_date)
-        week_end = wk + timedelta(days=6)
-        tree[r.report_date.year][str(wk)].append({
+        tree_single[r.report_date.year][str(wk)].append({
             "id": r.id,
             "date": str(r.report_date),
             "title": r.content_md.split("\n")[0][:60] if r.content_md else "无标题",
@@ -78,11 +162,11 @@ def list_weekly_reports(
         })
 
     weeks = []
-    for year in sorted(tree.keys(), reverse=True):
-        for wk_str in sorted(tree[year].keys(), reverse=True):
+    for year in sorted(tree_single.keys(), reverse=True):
+        for wk_str in sorted(tree_single[year].keys(), reverse=True):
             wk_date = date.fromisoformat(wk_str)
             week_end = wk_date + timedelta(days=6)
-            entries = tree[year][wk_str]
+            entries = tree_single[year][wk_str]
             weeks.append({
                 "week_start": wk_str,
                 "week_end": str(week_end),
@@ -99,24 +183,45 @@ def list_weekly_reports(
 @router.get("/grouped")
 def list_reports_grouped(
     user_id: Optional[int] = Query(None),
+    user_ids: Optional[str] = Query(None, description="逗号分隔的用户ID列表"),
     current_user: User = Depends(require_permission("report:read")),
     db: Session = Depends(get_session),
 ):
     """按年份→月份→工作周归类的日报列表，仅返回摘要（支持分级负责人权限与草稿隐藏过滤）"""
-    target_uid = user_id if user_id is not None else current_user.id
+    from app.auth import check_data_access, get_visible_user_ids
     
-    # 统一数据行级权限校验（下属、老板、自己）
-    from app.auth import check_data_access
-    if not check_data_access(target_uid, current_user, db):
-        raise HTTPException(status_code=403, detail="无权查看该用户的日报列表")
+    # 多用户模式（团队视图）
+    if user_ids:
+        try:
+            requested_ids = [int(x.strip()) for x in user_ids.split(",") if x.strip()]
+        except ValueError:
+            raise HTTPException(status_code=400, detail="user_ids 格式错误")
+        
+        visible = get_visible_user_ids(current_user, db, module="report")
+        if visible is None:
+            validated_ids = requested_ids
+        else:
+            validated_ids = [uid for uid in requested_ids if uid in visible]
+        
+        if not validated_ids:
+            return {"grouped": [], "total": 0}
+        
+        # 多用户模式下强制只显示已提交
+        query = select(DailyReport).where(
+            DailyReport.user_id.in_(validated_ids),
+            DailyReport.status == "submitted",
+        )
+        reports = db.exec(query.order_by(DailyReport.report_date.desc())).all()
+    else:
+        # 单用户模式
+        target_uid = user_id if user_id is not None else current_user.id
+        if not check_data_access(target_uid, current_user, db):
+            raise HTTPException(status_code=403, detail="无权查看该用户的日报列表")
 
-    query = select(DailyReport).where(DailyReport.user_id == target_uid)
-    
-    # 提交机制过滤：如果是查看他人的日报，过滤掉未提交的草稿
-    if target_uid != current_user.id:
-        query = query.where(DailyReport.status == "submitted")
-
-    reports = db.exec(query.order_by(DailyReport.report_date.desc())).all()
+        query = select(DailyReport).where(DailyReport.user_id == target_uid)
+        if target_uid != current_user.id:
+            query = query.where(DailyReport.status == "submitted")
+        reports = db.exec(query.order_by(DailyReport.report_date.desc())).all()
     
     # 构建 year → month → week → reports
     tree: dict = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
@@ -149,15 +254,40 @@ def list_reports_grouped(
 @router.get("", response_model=list[DailyReportOut])
 def list_reports(
     user_id: Optional[int] = Query(None),
+    user_ids: Optional[str] = Query(None, description="逗号分隔的用户ID列表"),
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
     current_user: User = Depends(require_permission("report:read")),
     db: Session = Depends(get_session),
 ):
     target_uid = user_id if user_id is not None else current_user.id
-    
+    from app.auth import check_data_access, get_visible_user_ids
+
+    # 多用户模式（团队视图）
+    if user_ids:
+        try:
+            requested_ids = [int(x.strip()) for x in user_ids.split(",") if x.strip()]
+        except ValueError:
+            raise HTTPException(status_code=400, detail="user_ids 格式错误")
+        visible = get_visible_user_ids(current_user, db, module="report")
+        if visible is None:
+            validated_ids = requested_ids
+        else:
+            validated_ids = [uid for uid in requested_ids if uid in visible]
+        if not validated_ids:
+            return []
+        query = select(DailyReport).where(
+            DailyReport.user_id.in_(validated_ids),
+            DailyReport.status == "submitted",
+        )
+        if start_date:
+            query = query.where(DailyReport.report_date >= start_date)
+        if end_date:
+            query = query.where(DailyReport.report_date <= end_date)
+        return db.exec(query.order_by(DailyReport.report_date.desc())).all()
+
+    # 单用户模式
     # 统一级数据行级访问权限核验（员工、主管、老板）
-    from app.auth import check_data_access
     if not check_data_access(target_uid, current_user, db):
         raise HTTPException(status_code=403, detail="无权查看该用户的日报列表")
 
@@ -186,9 +316,11 @@ def get_report(report_id: int, current_user: User = Depends(require_permission("
         raise HTTPException(status_code=403, detail="该日报尚未提交，无权查看")
 
     # 2. 统一角色权限核验（部门负责人、老板、创作者）
-    from app.auth import check_data_access
+    from app.auth import check_data_access, check_share_access
     if not check_data_access(report.user_id, current_user, db):
-        raise HTTPException(status_code=403, detail="无权查看该日报")
+        # 2.5 DataShare fallback：检查是否通过分享授权
+        if not check_share_access("report", report_id, current_user, db):
+            raise HTTPException(status_code=403, detail="无权查看该日报")
 
     return report
 
@@ -224,6 +356,8 @@ def update_report(report_id: int, data: DailyReportUpdate, background_tasks: Bac
         raise HTTPException(status_code=403, detail="权限不足：修改他人日报需要 report:edit")
     content_changing = data.content_md is not None and data.content_md != report.content_md
     if report.status == "submitted":
+        if not current_user.is_admin:
+            raise HTTPException(status_code=403, detail="已提交的日报仅管理员可修改")
         if data.status == "draft":
             raise HTTPException(status_code=400, detail="已提交的日报不能回退为草稿")
         if content_changing:
@@ -255,6 +389,8 @@ def delete_report(report_id: int, background_tasks: BackgroundTasks, current_use
     from app.auth import has_permission
     if report.user_id != current_user.id and not has_permission(current_user, "report:delete", db):
         raise HTTPException(status_code=403, detail="权限不足：删除他人日报需要 report:delete")
+    if report.status == "submitted" and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="已提交的日报仅管理员可删除")
     db.delete(report)
     db.commit()
     # 后台删除向量索引
@@ -471,6 +607,8 @@ def update_weekly_summary(week_start: str, data: WeeklySummaryUpdate,
         )
     ).first()
     if existing:
+        if existing.status == "submitted" and not current_user.is_admin:
+            raise HTTPException(status_code=403, detail="已提交的周报仅管理员可修改")
         if data.summary_text is not None:
             existing.summary_text = data.summary_text
         if data.status is not None:

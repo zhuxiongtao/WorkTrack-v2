@@ -37,3 +37,6 @@ class MeetingNoteOut(BaseModel):
     files_json: Optional[str] = None
     meeting_date: datetime
     created_at: datetime
+    is_shared: Optional[bool] = None
+    shared_permission: Optional[str] = None
+    owner_name: Optional[str] = None

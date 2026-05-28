@@ -49,6 +49,12 @@ from app.schemas.wiki import (
     WikiUserGroupOut,
     WikiUserGroupMemberAdd,
 )
+from app.schemas.data_share import (
+    DataShareCreate,
+    DataShareOut,
+    DataShareCommentCreate,
+    DataShareCommentOut,
+)
 
 __all__ = [
     "UserOut",
@@ -88,4 +94,8 @@ __all__ = [
     "WikiUserGroupCreate",
     "WikiUserGroupOut",
     "WikiUserGroupMemberAdd",
+    "DataShareCreate",
+    "DataShareOut",
+    "DataShareCommentCreate",
+    "DataShareCommentOut",
 ]

@@ -36,13 +36,21 @@ def list_contracts(
     project_id: Optional[int] = Query(None),
     status: Optional[str] = Query(None),
     keyword: Optional[str] = Query(None),
+    user_ids: Optional[str] = Query(None, description="逗号分隔的用户ID列表，用于团队视图筛选"),
     current_user: User = Depends(require_permission("contract:read")),
     db: Session = Depends(get_session),
 ):
     query = select(Contract).order_by(Contract.created_at.desc())
     visible_ids = get_visible_user_ids(current_user, db, module="contract")
-    if visible_ids is not None:
-        query = query.where(Contract.user_id.in_(visible_ids))
+    if user_ids:
+        uid_list = [int(x) for x in user_ids.split(",") if x.strip().isdigit()]
+        if visible_ids is not None:
+            uid_list = [uid for uid in uid_list if uid in visible_ids]
+        if uid_list:
+            query = query.where(Contract.user_id.in_(uid_list))
+    else:
+        if visible_ids is not None:
+            query = query.where(Contract.user_id.in_(visible_ids))
     if customer_id:
         query = query.where(Contract.customer_id == customer_id)
     if project_id:
@@ -191,8 +199,16 @@ def _auto_parse_contract(contract_id: int, user_id: int, db: Session):
 @router.get("/{contract_id}", response_model=ContractOut)
 def get_contract(contract_id: int, current_user: User = Depends(require_permission("contract:read")), db: Session = Depends(get_session)):
     contract = db.get(Contract, contract_id)
-    if not contract or not check_data_access(contract.user_id, current_user, db):
+    if not contract:
         raise HTTPException(status_code=404, detail="合同不存在")
+    
+    # 统一角色权限核验
+    from app.auth import check_data_access, check_share_access
+    if not check_data_access(contract.user_id, current_user, db):
+        # DataShare fallback
+        if not check_share_access("contract", contract_id, current_user, db):
+            raise HTTPException(status_code=403, detail="无权查看该合同")
+    
     return contract
 
 

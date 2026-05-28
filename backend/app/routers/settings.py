@@ -155,18 +155,25 @@ class ModelAdd(BaseModel):
 
 
 def _guess_model_type(name: str) -> str:
-    """智能推断模型类型"""
+    """根据模型名称智能推断类型（支持多模态模型族识别）"""
     low = name.lower()
-    if any(k in low for k in ["asr", "speech", "transcribe", "whisper", "transcriber", "parakeet", "sensevoice"]):
+    if any(k in low for k in ["asr", "speech", "transcribe", "whisper",
+                               "transcriber", "parakeet", "sensevoice"]):
         return "speech_to_text"
     if any(k in low for k in ["embed", "bge-", "bce-"]):
         return "embedding"
-    if any(k in low for k in ["vision", "vl-", "image", "ocr", "video", "kolors", "wan-"]):
-        return "vision"
-    if any(k in low for k in ["search", "tavily", "bing", "google", "serp", "crawl"]):
+    if any(k in low for k in ["search", "tavily", "serp", "crawl"]):
         return "web_search"
-    if any(k in low for k in ["gemini"]):
-        return "chat"  # Gemini 默认 chat，部分支持 vision
+    if any(k in low for k in [
+        "vision", "vl-", "image", "ocr", "video", "kolors", "wan-",
+        # Known multimodal model families (natively support vision)
+        "gemini-2.5", "gemini-2.0", "gemini-1.5",
+        "gpt-4o", "gpt-4-turbo", "gpt-4-vision",
+        "claude-3", "claude-4",
+        "qwen-vl", "qwen2-vl", "qwen3",
+        "glm-4v", "internvl", "minicpm-v",
+    ]):
+        return "vision"
     return "chat"
 
 
@@ -273,12 +280,14 @@ def update_provider_model(provider_id: int, model_id: int, data: ModelUpdate, db
 @router.post("/providers/{provider_id}/models/{model_id}/test")
 def test_provider_model(provider_id: int, model_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
     """测试单个模型连通性（按 model_type 调用相应 API）"""
-    model = db.get(ProviderModel, model_id)
-    if not model or model.provider_id != provider_id:
-        raise HTTPException(status_code=404, detail="模型不存在")
     provider = db.get(ModelProvider, provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="供应商不存在")
+    if not _check_provider_access(provider, current_user, db):
+        raise HTTPException(status_code=403, detail="无权限操作此供应商")
+    model = db.get(ProviderModel, model_id)
+    if not model or model.provider_id != provider_id:
+        raise HTTPException(status_code=404, detail="模型不存在")
     try:
         from app.services.ai_service import _get_client, _is_vertex_ai
         client = _get_client(provider.base_url, provider.api_key, provider)
