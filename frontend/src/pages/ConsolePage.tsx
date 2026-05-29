@@ -185,14 +185,14 @@ export default function ConsolePage() {
 
   // 统计卡片
   const StatCard = ({ icon: Icon, label, value, color }: { icon: any; label: string; value: number; color: string }) => (
-    <div className="bg-bg-card border border-border rounded-xl p-4">
-      <div className="flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${color}`}>
-          <Icon size={20} className="text-white" />
+    <div className="bg-bg-card border border-border rounded-xl p-4 max-md:p-3">
+      <div className="flex items-center gap-3 max-md:gap-2">
+        <div className={`w-10 h-10 max-md:w-8 max-md:h-8 rounded-lg flex items-center justify-center ${color}`}>
+          <Icon size={20} className="text-white max-md:size-4" />
         </div>
         <div>
-          <div className="text-2xl font-bold text-white">{value}</div>
-          <div className="text-xs text-gray-500">{label}</div>
+          <div className="text-2xl max-md:text-xl font-bold text-white">{value}</div>
+          <div className="text-xs max-md:text-[10px] text-gray-500">{label}</div>
         </div>
       </div>
     </div>
@@ -215,8 +215,8 @@ export default function ConsolePage() {
         <div className="text-sm text-white truncate">{member.name}</div>
         <div className="text-[10px] text-gray-500 truncate">{member.department_name}</div>
       </div>
-      <div className="flex items-center gap-6 text-xs shrink-0">
-        <div className="flex items-center gap-1.5" title="本周日报">
+      <div className="flex items-center gap-6 max-md:gap-3 text-xs shrink-0">
+        <div className="flex items-center gap-1.5 max-md:hidden" title="本周日报">
           <FileText size={12} className="text-green-500" />
           <span className={member.reports_this_week > 0 ? 'text-green-400' : 'text-gray-600'}>{member.reports_this_week}</span>
         </div>
@@ -253,9 +253,9 @@ export default function ConsolePage() {
   }
 
   return (
-    <div className="h-full flex bg-bg-page">
+    <div className="h-full flex flex-col md:flex-row bg-bg-page">
       {/* 左侧面板：部门树 */}
-      <div className="w-64 shrink-0 bg-bg-card border-r border-border flex flex-col">
+      <div className="w-64 max-md:hidden shrink-0 bg-bg-card border-r border-border flex flex-col">
         <div className="p-4 border-b border-border">
           <h2 className="text-sm font-medium text-white flex items-center gap-2">
             <LayoutGrid size={16} className="text-rose-500" />
@@ -310,8 +310,8 @@ export default function ConsolePage() {
       {/* 右侧主区域 */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* 顶部统计卡片 */}
-        <div className="p-6 border-b border-border">
-          <div className="grid grid-cols-4 gap-4">
+        <div className="p-6 max-md:p-4 border-b border-border">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-md:gap-3">
             <StatCard icon={FileText} label="本周日报" value={overview?.stats.reports_this_week || 0} color="bg-green-500" />
             <StatCard icon={Briefcase} label="活跃项目" value={overview?.stats.active_projects || 0} color="bg-blue-500" />
             <StatCard icon={Calendar} label="近期会议" value={overview?.stats.recent_meetings || 0} color="bg-purple-500" />
@@ -325,7 +325,7 @@ export default function ConsolePage() {
         </div>
 
         {/* 成员列表 */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-6 max-md:p-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-medium text-white flex items-center gap-2">
               {selectedDeptId && deptMembers ? (
@@ -365,7 +365,7 @@ export default function ConsolePage() {
 
       {/* 成员详情侧滑面板 */}
       {selectedMemberId && (
-        <div className="w-80 shrink-0 bg-bg-card border-l border-border flex flex-col">
+        <div className="w-80 max-md:fixed max-md:inset-0 max-md:w-full max-md:z-50 max-md:bg-bg-card shrink-0 bg-bg-card border-l border-border max-md:border-l-0 flex flex-col">
           <div className="p-4 border-b border-border flex items-center justify-between">
             <h3 className="text-sm font-medium text-white">成员详情</h3>
             <button

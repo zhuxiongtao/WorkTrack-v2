@@ -1,5 +1,8 @@
+const API_BASE = import.meta.env.VITE_API_BASE || ''
+
 export async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, options)
+  const fullUrl = url.startsWith('http') ? url : `${API_BASE}${url}`
+  const res = await fetch(fullUrl, options)
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: '请求失败' }))
     throw new Error(err.detail || `请求失败 (${res.status})`)

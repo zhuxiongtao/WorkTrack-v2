@@ -390,10 +390,10 @@ export default function ReportsPage() {
 
       {/* 全屏详情弹窗 */}
       {modalDetail && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-start justify-center pt-[10vh] pb-10 overflow-y-auto" onClick={closeDetail}>
-          <div className="w-full max-w-3xl mx-4 rounded-2xl bg-bg-card border border-border shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-start justify-center md:pt-[10vh] md:pb-10 overflow-y-auto" onClick={closeDetail}>
+          <div className="w-full max-w-3xl md:mx-4 md:rounded-2xl bg-bg-card border border-border shadow-2xl min-h-screen md:min-h-0" onClick={(e) => e.stopPropagation()}>
             {/* 头部 */}
-            <div className="flex flex-wrap items-center justify-between gap-2 px-6 py-4 border-b border-border bg-bg-card/95 backdrop-blur-sm rounded-t-2xl">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 md:px-6 py-3 md:py-4 border-b border-border bg-bg-card/95 backdrop-blur-sm md:rounded-t-2xl">
               <div>
                 <h3 className="text-lg font-bold text-white">
                   {new Date(modalDetail.report_date).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
@@ -453,7 +453,7 @@ export default function ReportsPage() {
             </div>
 
             {/* 内容 */}
-            <div className="p-6">
+            <div className="p-4 md:p-6">
               {modalLoading ? (
                 <div className="text-center py-12"><Loader2 size={20} className="mx-auto animate-spin text-gray-500" /></div>
               ) : (
@@ -494,11 +494,11 @@ export default function ReportsPage() {
 
       {/* 创建/编辑弹窗 */}
       {showForm && (
-        <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm ${isMaximized ? 'items-start pt-4 pb-4' : ''}`} onClick={() => { setShowForm(false); setIsMaximized(false) }}>
-          <div className={`mx-4 p-6 rounded-2xl bg-bg-card border border-border shadow-2xl flex flex-col ${
+        <div className={`fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm`} onClick={() => { setShowForm(false); setIsMaximized(false) }}>
+          <div className={`w-full md:mx-4 p-4 md:p-6 md:rounded-2xl bg-bg-card border border-border shadow-2xl flex flex-col rounded-t-2xl md:rounded-t-2xl ${
             isMaximized 
-              ? 'w-full max-w-5xl h-[calc(100vh-2rem)] max-h-[900px]' 
-              : 'w-full max-w-2xl max-h-[90vh]'
+              ? 'md:max-w-5xl md:h-[calc(100vh-2rem)] md:max-h-[900px] h-[95dvh]' 
+              : 'md:max-w-2xl md:max-h-[90vh] max-h-[85dvh]'
           }`} onClick={(e) => e.stopPropagation()}>
             {/* 头部 */}
             <div className="flex items-center justify-between mb-4 shrink-0">
@@ -545,8 +545,8 @@ export default function ReportsPage() {
             </div>
 
             {/* 底部操作栏 */}
-            <div className="flex items-center justify-between mt-4 pt-3 border-t border-border shrink-0">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 mt-4 pt-3 border-t border-border shrink-0">
+              <div className="flex flex-wrap items-center gap-2">
                 <input type="file" ref={fileInputRef} className="hidden" accept=".txt,.md,.markdown,.docx" onChange={handleFileUpload} />
                 <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-hover text-xs text-gray-400 hover:text-white border border-border disabled:opacity-50">
@@ -576,7 +576,7 @@ export default function ReportsPage() {
                   {recording ? '停止录音' : '语音录入'}
                 </button>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button onClick={() => handleSave('draft')} disabled={saving || !formContent.trim()}
                   className="px-4 py-2.5 rounded-xl bg-bg-hover hover:bg-gray-200 text-xs text-gray-500 hover:text-gray-850 dark:text-gray-400 dark:hover:text-gray-200 border border-gray-200 dark:border-border/30 transition-colors cursor-pointer font-semibold shadow-sm">
                   {saving ? <Loader2 size={13} className="animate-spin" /> : '💾 保存草稿'}

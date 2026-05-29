@@ -235,3 +235,33 @@ body {
   margin: 0 !important; padding-left: 8px !important; border-left-width: 2px !important;
 }
 .markdown-preview-card hr { margin: 4px 0 !important; }
+
+/* ===== 移动端全局优化 ===== */
+@media (max-width: 768px) {
+  body {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  input, select, textarea, button {
+    font-size: 16px !important;
+  }
+  .grid {
+    gap: 0.5rem !important;
+  }
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .fixed.inset-0 {
+    padding: 0 !important;
+    align-items: stretch !important;
+  }
+  .fixed.inset-0 > div {
+    max-height: 100vh !important;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+}

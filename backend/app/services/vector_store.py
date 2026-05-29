@@ -1,6 +1,5 @@
 import logging
-import chromadb
-from chromadb.config import Settings
+import os
 from openai import OpenAI
 from sqlmodel import Session, select
 from app.config import settings
@@ -9,14 +8,24 @@ from app.exceptions import VectorStoreError
 
 logger = logging.getLogger("worktrack")
 
-# 初始化 ChromaDB 持久化客户端
-import os
-os.makedirs(settings.effective_chroma_dir, exist_ok=True)
+# 延迟初始化 ChromaDB，仅在首次使用时初始化
+chroma_client = None
 
-chroma_client = chromadb.PersistentClient(
-    path=settings.effective_chroma_dir,
-    settings=Settings(anonymized_telemetry=False),
-)
+def _ensure_chroma():
+    global chroma_client
+    if chroma_client is not None:
+        return
+    try:
+        import chromadb
+        from chromadb.config import Settings
+        os.makedirs(settings.effective_chroma_dir, exist_ok=True)
+        chroma_client = chromadb.PersistentClient(
+            path=settings.effective_chroma_dir,
+            settings=Settings(anonymized_telemetry=False),
+        )
+    except Exception as e:
+        logger.warning("ChromaDB 初始化失败（向量搜索功能不可用）: %s", e)
+        raise
 
 
 def _get_embedding_config(db: Session = None) -> tuple:
@@ -46,6 +55,7 @@ def _get_embedding_config(db: Session = None) -> tuple:
 
 def get_collection(name: str):
     """获取或创建向量集合"""
+    _ensure_chroma()
     return chroma_client.get_or_create_collection(name=name)
 
 

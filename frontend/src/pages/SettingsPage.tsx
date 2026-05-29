@@ -1055,7 +1055,7 @@ export default function SettingsPage() {
 
       {/* 品牌自定义 */}
       {canEditSettings && (
-        <div className="mb-10 p-5 rounded-xl bg-bg-card border border-border">
+        <div className="mb-10 p-5 max-md:p-4 rounded-xl bg-bg-card border border-border">
           <h3 className="text-base font-medium text-gray-900 dark:text-white mb-1 flex items-center gap-2">
             <Palette size={18} className="text-[#F59E0B]" /> 品牌自定义
           </h3>
@@ -1190,7 +1190,7 @@ export default function SettingsPage() {
 
       {/* MCP 对外服务 */}
       {canEditSettings && (
-        <div className="mb-10 p-5 rounded-xl bg-bg-card border border-border">
+        <div className="mb-10 p-5 max-md:p-4 rounded-xl bg-bg-card border border-border">
           <h3 className="text-base font-medium text-gray-900 dark:text-white mb-1 flex items-center gap-2">
             <Terminal size={18} className="text-[#8B5CF6]" /> MCP 对外服务
           </h3>
@@ -1511,7 +1511,7 @@ export default function SettingsPage() {
                 <textarea
                   value={editingOptions}
                   onChange={(e) => setEditingOptions(e.target.value)}
-                  className="w-full h-52 p-4 rounded-lg bg-bg-input border border-border text-sm text-gray-800 dark:text-gray-300 outline-none focus:border-[#3B82F6] resize-none placeholder-gray-400 dark:placeholder-gray-600 font-mono leading-relaxed transition-colors"
+                  className="w-full h-52 p-4 max-md:p-3 rounded-lg bg-bg-input border border-border text-sm text-gray-800 dark:text-gray-300 outline-none focus:border-[#3B82F6] resize-none placeholder-gray-400 dark:placeholder-gray-600 font-mono leading-relaxed transition-colors"
                   placeholder={`输入${categoryLabels[selectedCategory]}选项，每行一个…`}
                 />
               </div>
@@ -1535,11 +1535,11 @@ export default function SettingsPage() {
       <div className="mt-6">
         <h3 className="text-base font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2"><Building2 size={18} className="text-[#3B82F6]" /> 行业标准化分类</h3>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">获取客户信息时，AI 会将公司自动归类到以下标准行业之一。每行一个行业名称，用换行分隔。</p>
-        <div className="p-4 rounded-xl bg-bg-card border border-border">
+        <div className="p-4 max-md:p-3 rounded-xl bg-bg-card border border-border">
           <textarea
             value={industryCats}
             onChange={(e) => setIndustryCats(e.target.value)}
-            className="w-full h-48 p-4 rounded-lg bg-bg-input border border-border text-sm text-gray-800 dark:text-gray-300 outline-none focus:border-[#3B82F6] resize-none placeholder-gray-400 dark:placeholder-gray-600 font-mono leading-relaxed transition-colors"
+            className="w-full h-48 p-4 max-md:p-3 rounded-lg bg-bg-input border border-border text-sm text-gray-800 dark:text-gray-300 outline-none focus:border-[#3B82F6] resize-none placeholder-gray-400 dark:placeholder-gray-600 font-mono leading-relaxed transition-colors"
             placeholder="每行一个行业分类名称..."
           />
           <div className="flex items-center justify-between mt-3">
@@ -1566,7 +1566,7 @@ export default function SettingsPage() {
             <h3 className="text-base font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
               <User size={18} className="text-accent-blue" /> 个人信息
             </h3>
-            <div className="p-5 rounded-xl bg-bg-card border border-border">
+            <div className="p-5 max-md:p-4 rounded-xl bg-bg-card border border-border">
               {accountMsg && (
                 <div className={`mb-4 p-3 rounded-lg text-sm ${
                   accountMsg.type === 'success'
@@ -1675,7 +1675,7 @@ export default function SettingsPage() {
               <Home size={18} className="text-[#F59E0B]" /> 首页设置
             </h3>
             <p className="text-xs text-gray-500 mb-4">选择打开平台时的默认首页，每位用户可以独立设置</p>
-            <div className="p-5 rounded-xl bg-bg-card border border-border">
+            <div className="p-5 max-md:p-4 rounded-xl bg-bg-card border border-border">
               <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                 <span className="text-sm text-gray-400">默认首页:</span>
                 <select
@@ -1710,7 +1710,7 @@ export default function SettingsPage() {
             <h3 className="text-base font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
               <Key size={18} className="text-amber-400" /> 修改密码
             </h3>
-            <div className="p-5 rounded-xl bg-bg-card border border-border">
+            <div className="p-5 max-md:p-4 rounded-xl bg-bg-card border border-border">
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs text-gray-400 mb-1.5">当前密码</label>
@@ -1797,17 +1797,17 @@ export default function SettingsPage() {
       {/* 系统状态 */}
       <div>
         <h3 className="text-base font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2"><Server size={18} className="text-gray-400" /> 系统信息</h3>
-        <div className="p-4 rounded-xl bg-bg-card border border-border space-y-2">
+        <div className="p-4 max-md:p-3 rounded-xl bg-bg-card border border-border space-y-2">
           {systemInfo ? (
             <>
-              <div className="flex justify-between text-sm"><span className="text-gray-500">数据库</span><span className="text-gray-700 dark:text-gray-300">{systemInfo.database_type || '未知'}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-gray-500">数据库地址</span><span className="text-gray-700 dark:text-gray-300 font-mono text-xs">{systemInfo.database_url || '-'}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-gray-500">向量存储</span><span className="text-gray-700 dark:text-gray-300">{systemInfo.vector_store || 'ChromaDB'}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-gray-500">向量存储大小</span><span className="text-gray-700 dark:text-gray-300">{systemInfo.vector_store_size || '-'}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-gray-500">已配置供应商</span><span className="text-gray-700 dark:text-gray-300">{systemInfo.total_providers || '0'} 个</span></div>
-              <div className="flex justify-between text-sm"><span className="text-gray-500">启用供应商</span><span className="text-gray-700 dark:text-gray-300">{systemInfo.active_providers || '0'} 个</span></div>
-              <div className="flex justify-between text-sm"><span className="text-gray-500">用户总数</span><span className="text-gray-700 dark:text-gray-300">{systemInfo.total_users || '0'} 人（管理员 {systemInfo.admin_users || '0'} 人）</span></div>
-              <div className="flex justify-between text-sm"><span className="text-gray-500">服务运行时间</span><span className="text-gray-700 dark:text-gray-300">{systemInfo.uptime || '-'}</span></div>
+              <div className="flex justify-between text-sm gap-2"><span className="text-gray-500 shrink-0">数据库</span><span className="text-gray-700 dark:text-gray-300 text-right">{systemInfo.database_type || '未知'}</span></div>
+              <div className="flex justify-between text-sm gap-2"><span className="text-gray-500 shrink-0">数据库地址</span><span className="text-gray-700 dark:text-gray-300 font-mono text-xs text-right truncate max-w-[60%]">{systemInfo.database_url || '-'}</span></div>
+              <div className="flex justify-between text-sm gap-2"><span className="text-gray-500 shrink-0">向量存储</span><span className="text-gray-700 dark:text-gray-300">{systemInfo.vector_store || 'ChromaDB'}</span></div>
+              <div className="flex justify-between text-sm gap-2"><span className="text-gray-500 shrink-0">向量存储大小</span><span className="text-gray-700 dark:text-gray-300">{systemInfo.vector_store_size || '-'}</span></div>
+              <div className="flex justify-between text-sm gap-2"><span className="text-gray-500 shrink-0">已配置供应商</span><span className="text-gray-700 dark:text-gray-300">{systemInfo.total_providers || '0'} 个</span></div>
+              <div className="flex justify-between text-sm gap-2"><span className="text-gray-500 shrink-0">启用供应商</span><span className="text-gray-700 dark:text-gray-300">{systemInfo.active_providers || '0'} 个</span></div>
+              <div className="flex justify-between text-sm gap-2"><span className="text-gray-500 shrink-0">用户总数</span><span className="text-gray-700 dark:text-gray-300">{systemInfo.total_users || '0'} 人（管理员 {systemInfo.admin_users || '0'} 人）</span></div>
+              <div className="flex justify-between text-sm gap-2"><span className="text-gray-500 shrink-0">服务运行时间</span><span className="text-gray-700 dark:text-gray-300">{systemInfo.uptime || '-'}</span></div>
             </>
           ) : (
             <div className="text-center py-4 text-gray-500 text-sm">加载中...</div>
@@ -1819,17 +1819,17 @@ export default function SettingsPage() {
 
       {/* 弹窗 */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setShowForm(false)}>
-          <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-bg-card border border-border shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="sticky top-0 bg-bg-card rounded-t-2xl flex items-center justify-between px-5 py-4 border-b border-border z-10">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 max-md:p-0" onClick={() => setShowForm(false)}>
+          <div className="w-full max-w-lg max-md:max-w-full max-md:h-full max-md:rounded-none max-h-[90vh] overflow-y-auto rounded-2xl bg-bg-card border border-border shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="sticky top-0 bg-bg-card rounded-t-2xl max-md:rounded-t-none flex items-center justify-between px-5 max-md:px-4 py-4 border-b border-border z-10">
               <h3 className="text-base font-semibold text-gray-900 dark:text-white">{editingProvider ? '编辑供应商' : '添加模型供应商'}</h3>
               <button onClick={() => setShowForm(false)} className="p-1 rounded-lg hover:bg-bg-hover text-gray-500 hover:text-white transition-colors"><X size={18} /></button>
             </div>
-            <div className="p-5">
+            <div className="p-5 max-md:p-4">
               {!editingProvider && (
                 <>
                   <p className="text-xs text-gray-500 mb-3">选择预置供应商自动填充，或手动填写下方信息</p>
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mb-5">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 mb-5">
                     {presets.map((p) => (
                       <button key={p.name} onClick={() => setForm({ ...form, name: p.name, base_url: p.base_url, project_id: (p as any).project_id || '', location: (p as any).location || '' })}
                         className="px-2 py-2 rounded-lg bg-bg-input border border-border text-xs text-gray-400 hover:text-white hover:border-[#3B82F6]/50 hover:bg-bg-hover transition-all truncate">

@@ -166,7 +166,7 @@ function AppContent() {
           brandTitle={brandTitle}
           onOpenSidebar={() => setSidebarOpen(true)}
         />
-        <div className="p-4 md:px-6 md:py-8">
+        <div className="p-3 md:px-6 md:py-8 safe-area-bottom">
           <AppRoutes homePage={homePage} />
         </div>
       </main>

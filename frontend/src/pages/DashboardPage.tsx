@@ -184,7 +184,7 @@ function KpiCard({ icon: Icon, label, value, sub, trend, color, gradient, onClic
     <button
       onClick={onClick}
       disabled={!onClick}
-      className={`group relative overflow-hidden flex flex-col text-left rounded-2xl bg-bg-card border border-border/80 p-5 hover:border-[#3B82F6]/50 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 ${onClick ? 'cursor-pointer' : 'cursor-default'}`}
+      className={`group relative overflow-hidden flex flex-col text-left rounded-2xl bg-bg-card border border-border/80 p-3 md:p-5 hover:border-[#3B82F6]/50 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 ${onClick ? 'cursor-pointer' : 'cursor-default'}`}
     >
       <div className="absolute top-0 right-0 w-32 h-32 -translate-y-8 translate-x-8 opacity-10" style={{ background: gradient, borderRadius: '50%' }} />
       <div className="absolute -bottom-4 -left-4 w-20 h-20 opacity-5" style={{ background: gradient, borderRadius: '50%' }} />
@@ -202,7 +202,7 @@ function KpiCard({ icon: Icon, label, value, sub, trend, color, gradient, onClic
         )}
       </div>
 
-      <span className="text-3xl font-bold text-white mb-1">{value}</span>
+      <span className="text-2xl md:text-3xl font-bold text-white mb-1">{value}</span>
       
       {sub && (
         <div className="flex items-center justify-between mt-auto pt-2">
@@ -405,11 +405,11 @@ export default function DashboardPage() {
 
   return (
     <div className="mx-auto">
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-500/10 via-purple-500/5 to-pink-500/10 border border-border/50 p-6 mb-6">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-500/10 via-purple-500/5 to-pink-500/10 border border-border/50 p-4 md:p-6 mb-6">
         <div className="absolute top-0 right-0 w-64 h-64 -translate-y-16 translate-x-16 bg-blue-500/5 rounded-full blur-3xl" />
         <div className="absolute bottom-0 left-0 w-48 h-48 translate-y-12 -translate-x-12 bg-purple-500/5 rounded-full blur-3xl" />
         
-        <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="relative flex flex-col items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <Sparkles size={18} className="text-amber-400" />
@@ -430,7 +430,7 @@ export default function DashboardPage() {
               </div>
             )}
 
-            <div className="flex items-center gap-1 bg-white/5 backdrop-blur rounded-xl border border-border/40 p-1">
+            <div className="flex flex-wrap items-center gap-1 bg-white/5 backdrop-blur rounded-xl border border-border/40 p-1">
               {presets.map((p) => (
                 <button
                   key={p.key}
@@ -491,7 +491,7 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <KpiCard
               icon={Briefcase} 
               label="活跃项目" 
@@ -532,7 +532,7 @@ export default function DashboardPage() {
             />
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-6">
             <div className="rounded-2xl bg-bg-card border border-border/50 p-5">
               <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
                 <Activity size={14} className="text-[#06B6D4]" />
@@ -585,7 +585,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-3">
             <div className="rounded-2xl bg-bg-card border border-border/50 p-5">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">

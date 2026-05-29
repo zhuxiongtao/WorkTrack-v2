@@ -319,8 +319,8 @@ export default function ContractsPage() {
         )}
       </div>
 
-      <div className="flex items-center gap-3 mb-5">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex items-center gap-3 mb-5 overflow-x-auto">
+        <div className="relative flex-1 max-w-sm min-w-[180px]">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
           <input value={keyword} onChange={(e) => setKeyword(e.target.value)}
             placeholder="搜索合同..." className="w-full pl-9 pr-3 py-2 rounded-lg bg-bg-card border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6]" />
@@ -344,7 +344,7 @@ export default function ContractsPage() {
         <div className="space-y-2">
           {contracts.map(c => (
             <div key={c.id} className="rounded-xl bg-bg-card border border-border overflow-hidden">
-              <button className="w-full text-left px-5 py-3.5 flex items-center gap-4 hover:bg-bg-hover/50 transition-colors"
+              <button className="w-full text-left px-4 md:px-5 py-3.5 flex items-center gap-4 hover:bg-bg-hover/50 transition-colors"
                 onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}>
                 <FileText size={18} className="text-[#3B82F6] shrink-0" />
                 <div className="flex-1 min-w-0">
@@ -373,8 +373,8 @@ export default function ContractsPage() {
                 </div>
               </button>
               {expandedId === c.id && (
-                <div className="px-5 pb-4 border-t border-border/50 pt-3 space-y-3">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="px-4 md:px-5 pb-4 border-t border-border/50 pt-3 space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                     {c.sign_date && <div><span className="text-[10px] text-gray-500">签订日期</span><p className="text-xs text-gray-200">{c.sign_date}</p></div>}
                     {c.start_date && <div><span className="text-[10px] text-gray-500">开始日期</span><p className="text-xs text-gray-200">{c.start_date}</p></div>}
                     {c.end_date && <div><span className="text-[10px] text-gray-500">截止日期</span><p className="text-xs text-gray-200">{c.end_date}</p></div>}
@@ -430,7 +430,7 @@ export default function ContractsPage() {
 
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => { setShowForm(false); resetForm() }}>
-          <div className="w-full max-w-lg mx-4 p-6 rounded-2xl bg-bg-card border border-border shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-lg mx-0 md:mx-4 p-4 md:p-6 rounded-none md:rounded-2xl bg-bg-card border border-border shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-lg font-medium text-white">{editingId ? '编辑合同' : '新建合同'}</h3>
               <button onClick={() => { setShowForm(false); resetForm() }} className="text-gray-500 hover:text-white"><X size={20} /></button>
@@ -464,7 +464,7 @@ export default function ContractsPage() {
                   </select>
                 </div>
               )}
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <div>
                   <label className="block text-xs text-gray-400 mb-1">签订日期</label>
                   <input type="date" value={form.sign_date} onChange={(e) => setForm({ ...form, sign_date: e.target.value })}
@@ -481,7 +481,7 @@ export default function ContractsPage() {
                     className="w-full px-2 py-2 rounded-lg bg-bg-input border border-border text-xs text-gray-200 outline-none focus:border-[#3B82F6]" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
                   <label className="block text-xs text-gray-400 mb-1">甲方</label>
                   <input value={form.party_a} onChange={(e) => setForm({ ...form, party_a: e.target.value })}
@@ -493,7 +493,7 @@ export default function ContractsPage() {
                     className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-200 outline-none focus:border-[#3B82F6]" placeholder="对方公司" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
                   <label className="block text-xs text-gray-400 mb-1">合同金额（万元）</label>
                   <input type="number" step="0.01" value={form.contract_amount} onChange={(e) => setForm({ ...form, contract_amount: e.target.value })}
@@ -548,9 +548,9 @@ export default function ContractsPage() {
       {/* 文件预览弹窗 */}
       {previewId !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={closePreview}>
-          <div className="w-full max-w-6xl mx-4 h-[90vh] rounded-2xl bg-bg-card border border-border shadow-2xl flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-6xl mx-0 md:mx-4 h-[90vh] rounded-none md:rounded-2xl bg-bg-card border border-border shadow-2xl flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
             {/* 顶部标题栏 */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-border shrink-0">
+            <div className="flex items-center justify-between px-4 md:px-5 py-3 border-b border-border shrink-0">
               <div className="flex items-center gap-3 min-w-0">
                 <FileText size={18} className="text-[#3B82F6] shrink-0" />
                 <span className="text-sm font-medium text-white truncate">{previewName}</span>
@@ -570,8 +570,8 @@ export default function ContractsPage() {
               ) : previewType.toLowerCase() === '.pdf' && previewUrl ? (
                 <iframe src={previewUrl} className="w-full h-full border-0" title={previewName} />
               ) : previewText ? (
-                <div className="h-full overflow-y-auto p-6">
-                  <div className="max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-xl border border-border p-8 shadow-sm">
+                <div className="h-full overflow-y-auto p-4 md:p-6">
+                  <div className="max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-xl border border-border p-4 md:p-8 shadow-sm">
                     <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-gray-800 dark:text-gray-200">
                       {previewText}
                     </div>

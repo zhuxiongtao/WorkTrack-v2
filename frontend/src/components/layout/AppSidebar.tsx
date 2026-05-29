@@ -320,7 +320,7 @@ function AppSidebar({ sidebarOpen, onCloseSidebar, brandLogo, brandTitle, isInsi
         </div>
       </nav>
 
-      <div className="px-4 py-3 border-t border-border max-md:hidden">
+      <div className="px-4 py-3 border-t border-border">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className={`w-1.5 h-1.5 rounded-full ${backendStatus === 'online' ? 'bg-[#10B981] animate-pulse' : backendStatus === 'checking' ? 'bg-yellow-400 animate-pulse' : 'bg-red-500'}`} />

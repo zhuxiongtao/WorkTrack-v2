@@ -188,10 +188,10 @@ export default function WeeklyReportPage() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-8 max-md:mb-4">
+        <div className="flex items-center gap-4 max-md:gap-2 flex-wrap">
           <div>
-            <h2 className="text-2xl font-bold text-white">周报</h2>
+            <h2 className="text-2xl max-md:text-xl font-bold text-white">周报</h2>
             <p className="text-sm text-gray-500 mt-1">{totalWeeks} 周记录</p>
           </div>
           <TeamViewSwitcher
@@ -242,7 +242,7 @@ export default function WeeklyReportPage() {
             return (
               <div key={week.week_start} className="rounded-xl bg-bg-card border border-border overflow-hidden">
                 {/* 周标题栏 */}
-                <div className="flex items-center gap-3 px-5 py-4 hover:bg-bg-hover-secondary/50 transition-colors">
+                <div className="flex items-center gap-3 px-5 max-md:px-3 py-4 max-md:py-3 hover:bg-bg-hover-secondary/50 transition-colors">
                   <button onClick={() => toggleWeek(week.week_start)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
                     {isExpanded ? <ChevronDown size={16} className="text-gray-500 flex-shrink-0" /> : <ChevronRight size={16} className="text-gray-500 flex-shrink-0" />}
                     <Calendar size={15} className="text-gray-500 flex-shrink-0" />
@@ -284,9 +284,9 @@ export default function WeeklyReportPage() {
                   <div className="border-t border-border">
                     {/* AI 周报总结 —— 内联展示 */}
                     {hasSummary && (
-                      <div className="px-5 pt-4 pb-2">
+                      <div className="px-5 max-md:px-3 pt-4 pb-2">
                         <div className="rounded-xl bg-gradient-to-br from-[#8B5CF6]/10 via-bg-card to-[#3B82F6]/10 border border-[#8B5CF6]/20 overflow-hidden">
-                          <div className="flex items-center">
+                            <div className="flex items-center">
                             <button
                               onClick={() => {
                                 setExpandedSummaries(prev => {
@@ -386,9 +386,9 @@ export default function WeeklyReportPage() {
 
                     {/* 手动编写周报（无 AI 摘要时） */}
                     {!hasSummary && editingSummary === week.week_start && (
-                      <div className="px-5 pt-4 pb-2">
+                      <div className="px-5 max-md:px-3 pt-4 pb-2">
                         <div className="rounded-xl bg-[#8B5CF6]/5 border border-[#8B5CF6]/20 overflow-hidden">
-                          <div className="flex items-center px-4 py-2 border-b border-[#8B5CF6]/10">
+                          <div className="flex items-center px-4 max-md:px-3 py-2 border-b border-[#8B5CF6]/10">
                             <Edit3 size={13} className="text-[#8B5CF6] mr-2" />
                             <span className="text-xs font-medium text-[#A78BFA]">编写周报</span>
                           </div>
@@ -430,9 +430,9 @@ export default function WeeklyReportPage() {
 
                     {/* AI 生成中 */}
                     {isSummarizing && (
-                      <div className="px-5 py-4">
+                      <div className="px-5 max-md:px-3 py-4">
                         <div className="flex items-center gap-3 rounded-xl bg-[#8B5CF6]/5 border border-[#8B5CF6]/10 px-4 py-3">
-                          <Loader2 size={15} className="animate-spin text-[#8B5CF6]" />
+                            <Loader2 size={15} className="animate-spin text-[#8B5CF6]" />
                           <div>
                             <p className="text-sm text-[#A78BFA] font-medium">正在生成 AI 周报总结...</p>
                             <p className="text-xs text-gray-500 mt-0.5">正在分析本周日报内容，请稍候</p>
@@ -443,7 +443,7 @@ export default function WeeklyReportPage() {
 
                     {/* 日报条目列表 —— 仅展示 AI 摘要 */}
                     {isExpanded && week.reports.length > 0 && (
-                      <div className={`px-5 ${(hasSummary || isSummarizing) ? 'pb-3' : 'py-3'} space-y-2`}>
+                      <div className={`px-5 max-md:px-3 ${(hasSummary || isSummarizing) ? 'pb-3' : 'py-3'} space-y-2`}>
                         {week.reports.map((r) => {
                           const d = new Date(r.date)
                           return (
@@ -486,9 +486,9 @@ export default function WeeklyReportPage() {
 
       {/* 单篇日报详情弹窗 */}
       {modalDetail && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-start justify-center pt-[10vh] pb-10 overflow-y-auto" onClick={closeDetail}>
-          <div className="w-full max-w-3xl mx-4 rounded-2xl bg-bg-card border border-border shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-border bg-bg-card/95 backdrop-blur-sm rounded-t-2xl">
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-start justify-center pt-[10vh] max-md:pt-0 pb-10 max-md:pb-0 overflow-y-auto" onClick={closeDetail}>
+          <div className="w-full max-w-3xl max-md:max-w-full mx-4 max-md:mx-0 rounded-2xl max-md:rounded-none bg-bg-card border border-border max-md:border-0 shadow-2xl max-md:h-full max-md:overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="sticky top-0 z-10 flex items-center justify-between px-6 max-md:px-4 py-4 border-b border-border bg-bg-card/95 backdrop-blur-sm rounded-t-2xl max-md:rounded-t-none">
               <h3 className="text-lg font-bold text-white">
                 {new Date(modalDetail.report_date).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
               </h3>
@@ -496,7 +496,7 @@ export default function WeeklyReportPage() {
                 <X size={18} />
               </button>
             </div>
-            <div className="p-6">
+            <div className="p-6 max-md:p-4">
               {modalLoading ? (
                 <div className="text-center py-12"><Loader2 size={20} className="mx-auto animate-spin text-gray-500" /></div>
               ) : (

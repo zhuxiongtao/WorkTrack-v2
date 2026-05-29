@@ -571,7 +571,7 @@ export default function ProjectsPage() {
                   style={{ borderTopWidth: '3px', borderTopColor: barColor + '60' }}
                 >
                   {/* 卡片内容 */}
-                  <div className="p-5 flex flex-col flex-1">
+                  <div className="p-4 md:p-5 flex flex-col flex-1">
                     {/* 标题 + 状态 */}
                     <div className="flex items-start justify-between gap-2 mb-3">
                       <h4 className="text-sm font-bold text-white truncate leading-tight">{p.name}</h4>
@@ -661,10 +661,10 @@ export default function ProjectsPage() {
 
       {/* 全屏详情弹窗 */}
       {modalProject && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-start justify-center pt-[10vh] pb-10 overflow-y-auto" onClick={closeDetail}>
-          <div className="w-full max-w-2xl mx-4 rounded-2xl bg-bg-card border border-border shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end md:items-start justify-center md:pt-[10vh] pb-0 md:pb-10 overflow-y-auto" onClick={closeDetail}>
+          <div className="w-full max-w-2xl mx-0 md:mx-4 rounded-none md:rounded-2xl bg-bg-card border border-border shadow-2xl" onClick={(e) => e.stopPropagation()}>
             {/* Header */}
-            <div className="flex flex-wrap items-start justify-between gap-2 px-6 py-4 border-b border-border bg-bg-card rounded-t-2xl">
+            <div className="flex flex-wrap items-start justify-between gap-2 px-4 md:px-6 py-4 border-b border-border bg-bg-card rounded-t-none md:rounded-t-2xl">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-3 mb-2 flex-wrap">
                   <h3 className="text-lg font-bold text-white truncate">{modalProject.name}</h3>
@@ -735,7 +735,7 @@ export default function ProjectsPage() {
               </div>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-4 md:p-6 space-y-4">
               {/* AI 项目分析 */}
               <div className="rounded-xl bg-bg-input border border-border overflow-hidden">
                 <div className="px-4 py-3 border-b border-border flex items-center gap-2 bg-bg-card/50">
@@ -982,20 +982,20 @@ export default function ProjectsPage() {
       {/* 创建/编辑项目弹窗 */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowForm(false)}>
-          <div className="w-full max-w-lg mx-2 p-6 rounded-2xl bg-bg-card border border-border shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-lg mx-0 md:mx-2 p-4 md:p-6 rounded-none md:rounded-2xl bg-bg-card border border-border shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-lg font-bold text-white">{editingId ? '编辑项目' : '新建项目'}</h3>
               <button onClick={() => setShowForm(false)} className="text-gray-500 hover:text-white transition-colors"><X size={20} /></button>
             </div>
 
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>项目名称 *</label>
                   <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
                     className={inputClass} placeholder="输入项目名称" autoFocus />
                 </div>
-                <div className="col-span-2">
+                <div className="col-span-1 md:col-span-2">
                   <label className={labelClass}>客户名称</label>
                   <div className="flex gap-2">
                     <div className="flex-1">
@@ -1022,7 +1022,7 @@ export default function ProjectsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>开始时间</label>
                   <input type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })}
@@ -1035,7 +1035,7 @@ export default function ProjectsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>涉及产品</label>
                   <SearchableSelect
@@ -1063,7 +1063,7 @@ export default function ProjectsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>销售</label>
                   {options.sales_person?.length ? (
@@ -1098,7 +1098,7 @@ export default function ProjectsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>商机金额（万）</label>
                   <input type="number" step="0.01" min="0" value={form.opportunity_amount} onChange={(e) => setForm({ ...form, opportunity_amount: e.target.value })}
@@ -1111,7 +1111,7 @@ export default function ProjectsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>供应商</label>
                   <SearchableSelect

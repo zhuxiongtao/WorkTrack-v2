@@ -309,7 +309,7 @@ export default function AIPage() {
         </div>
 
         {/* 快捷指令 */}
-        <div className="flex items-center gap-1.5 mb-2 overflow-x-auto scrollbar-none">
+        <div className="flex items-center gap-2 max-md:gap-1.5 mb-2 overflow-x-auto scrollbar-none">
           {[
             { icon: Search, label: '/搜索', color: 'text-blue-400' },
             { icon: TrendingUp, label: '/总结', color: 'text-pink-400' },
@@ -327,19 +327,19 @@ export default function AIPage() {
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 max-md:gap-2">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
             placeholder="输入消息，Enter 发送..."
-            className="flex-1 px-4 py-3 rounded-xl bg-bg-card border border-border text-sm text-gray-300 outline-none focus:border-accent-blue placeholder-gray-600"
+            className="flex-1 px-4 py-3 max-md:px-3 max-md:py-2.5 rounded-xl bg-bg-card border border-border text-sm max-md:text-[13px] text-gray-300 outline-none focus:border-accent-blue placeholder-gray-600"
           />
           <button
             onClick={sendMessage}
             disabled={loading || !input.trim()}
-            className="p-3 rounded-xl bg-accent-blue text-white hover:bg-accent-blue/85 disabled:opacity-50 transition-colors"
+            className="p-3 max-md:p-2.5 rounded-xl bg-accent-blue text-white hover:bg-accent-blue/85 disabled:opacity-50 transition-colors"
           >
             <Send size={18} />
           </button>

@@ -26,12 +26,12 @@ export default function UserManagementPage() {
       {/* 现代导航选项卡 */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pt-2">
         {/* Tabs 面板 */}
-        <div className="inline-flex p-1 rounded-xl bg-bg-hover/80 border border-gray-200 dark:border-border/20 self-start">
+        <div className="inline-flex p-1 rounded-xl bg-bg-hover/80 border border-gray-200 dark:border-border/20 self-start overflow-x-auto scrollbar-none">
           {(['users', 'roles'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 cursor-pointer border ${
+              className={`flex items-center gap-2 px-5 max-md:px-3.5 py-2.5 max-md:py-2 rounded-lg text-sm max-md:text-xs font-semibold transition-all duration-200 cursor-pointer border whitespace-nowrap ${
                 activeTab === tab
                   ? 'bg-bg-card text-gray-900 dark:text-gray-100 shadow-md border-gray-200 dark:border-border/30'
                   : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-200/40 dark:hover:bg-bg-hover/40'
@@ -47,7 +47,7 @@ export default function UserManagementPage() {
 
       {/* ========== 选项卡 1：用户列表（左右分栏布局） ========== */}
       {activeTab === 'users' && (
-        <div className="flex gap-5">
+        <div className="flex flex-col md:flex-row gap-5">
           {/* 左侧：部门树 */}
           <DepartmentTree
             selectedDepartmentId={selectedDepartmentId}
@@ -55,7 +55,7 @@ export default function UserManagementPage() {
           />
 
           {/* 右侧：用户列表 */}
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 overflow-x-auto">
             <UserListTab departmentId={selectedDepartmentId} />
           </div>
         </div>

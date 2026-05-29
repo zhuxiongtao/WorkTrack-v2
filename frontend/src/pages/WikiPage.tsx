@@ -920,8 +920,8 @@ export default function WikiPage() {
 
         {/* 新建空间对话框 */}
         {showSpaceDialog && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center px-4" onClick={() => setShowSpaceDialog(false)}>
-            <div className="bg-bg-card rounded-2xl p-6 w-full max-w-md border border-gray-200 dark:border-border/50 shadow-2xl animate-scaleIn" onClick={e => e.stopPropagation()}>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center px-4 max-md:px-0" onClick={() => setShowSpaceDialog(false)}>
+            <div className="bg-bg-card rounded-2xl max-md:rounded-none p-6 max-md:p-4 w-full max-w-md max-md:max-w-full max-md:h-full max-md:overflow-y-auto border border-gray-200 dark:border-border/50 shadow-2xl animate-scaleIn" onClick={e => e.stopPropagation()}>
               <h2 className="text-base font-bold mb-4 flex items-center gap-1.5 text-gray-900 dark:text-gray-100">
                 <Plus size={18} className="text-accent-blue" />
                 新建知识库空间
@@ -952,7 +952,7 @@ export default function WikiPage() {
                 {/* 封面选择 */}
                 <div>
                   <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-2">定制空间封面</p>
-                  <div className="grid grid-cols-6 gap-2">
+                  <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
                     {PRESET_COVERS.map(cover => (
                       <button
                         key={cover.id}
@@ -983,8 +983,8 @@ export default function WikiPage() {
 
         {/* 编辑空间对话框 */}
         {showEditSpaceDialog && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center px-4" onClick={() => { setShowEditSpaceDialog(false); setEditingSpace(null) }}>
-            <div className="bg-bg-card rounded-2xl p-6 w-full max-w-md border border-gray-200 dark:border-border/50 shadow-2xl animate-scaleIn" onClick={e => e.stopPropagation()}>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center px-4 max-md:px-0" onClick={() => { setShowEditSpaceDialog(false); setEditingSpace(null) }}>
+            <div className="bg-bg-card rounded-2xl max-md:rounded-none p-6 max-md:p-4 w-full max-w-md max-md:max-w-full max-md:h-full max-md:overflow-y-auto border border-gray-200 dark:border-border/50 shadow-2xl animate-scaleIn" onClick={e => e.stopPropagation()}>
               <h2 className="text-base font-bold mb-4 flex items-center gap-1.5 text-gray-900 dark:text-gray-100">
                 <Edit3 size={18} className="text-accent-blue" />
                 更新空间配置
@@ -1015,7 +1015,7 @@ export default function WikiPage() {
                 {/* 封面选择 */}
                 <div>
                   <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-2">更换封面图</p>
-                  <div className="grid grid-cols-6 gap-2">
+                  <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
                     {PRESET_COVERS.map(cover => (
                       <button
                         key={cover.id}
@@ -1046,8 +1046,8 @@ export default function WikiPage() {
 
         {/* 删除确认空间 */}
         {showDeleteConfirm && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center px-4" onClick={() => setShowDeleteConfirm(null)}>
-            <div className="bg-bg-card rounded-2xl p-6 w-full max-w-sm border border-gray-200 dark:border-border/40 shadow-2xl animate-scaleIn" onClick={e => e.stopPropagation()}>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center px-4 max-md:px-0" onClick={() => setShowDeleteConfirm(null)}>
+            <div className="bg-bg-card rounded-2xl max-md:rounded-none p-6 max-md:p-4 w-full max-w-sm max-md:max-w-full border border-gray-200 dark:border-border/40 shadow-2xl animate-scaleIn" onClick={e => e.stopPropagation()}>
               <h2 className="text-base font-bold mb-2 text-gray-900 dark:text-gray-100">确认删除吗？</h2>
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 leading-relaxed">
                 确定要物理注销该空间「{showDeleteConfirm.name}」？请在操作前确保组内所有的层级文档已经注销完毕，此项毁灭性删除动作将不可退回。
@@ -1075,7 +1075,7 @@ export default function WikiPage() {
     >
       {/* 左侧面板：目录树 + 内容目录 */}
       {!isFullscreen && (
-        <div className="w-56 lg:w-64 flex-shrink-0 border-r border-gray-200 dark:border-border bg-bg-sidebar flex flex-col">
+        <div className="w-56 lg:w-64 max-md:hidden flex-shrink-0 border-r border-gray-200 dark:border-border bg-bg-sidebar flex flex-col">
           {/* 空间头部 */}
           <div className="p-3 border-b border-gray-200 dark:border-border bg-gray-50/50 dark:bg-transparent">
             <button
@@ -1122,7 +1122,7 @@ export default function WikiPage() {
         {editingPage ? (
           <>
             {/* 中间编辑/阅读功能控制栏 */}
-             <div className={`flex items-center gap-3 px-4 lg:px-6 py-2.5 border-b border-border bg-bg-card backdrop-blur flex-shrink-0 ${isFullscreen ? 'px-6 shadow-sm' : ''}`}>
+             <div className={`flex items-center gap-3 px-4 lg:px-6 py-2.5 max-md:px-3 max-md:py-2 max-md:gap-1.5 border-b border-border bg-bg-card backdrop-blur flex-shrink-0 ${isFullscreen ? 'px-6 shadow-sm' : ''}`}>
               {isFullscreen && (
                 <button
                   onClick={() => setIsFullscreen(false)}
@@ -1148,7 +1148,7 @@ export default function WikiPage() {
                       title="共享链接与协作者权限"
                     >
                       <Share2 size={14} className="text-accent-blue" />
-                      <span>分享</span>
+                      <span className="max-md:hidden">分享</span>
                     </button>
                     <div className="w-px h-4 bg-gray-200 dark:bg-border/60 mx-1 hidden sm:block" />
                   </>
@@ -1174,7 +1174,7 @@ export default function WikiPage() {
                       title="切换到在线编辑状态"
                     >
                       <Edit3 size={14} />
-                      <span>编辑</span>
+                      <span className="max-md:hidden">编辑</span>
                     </button>
                   )
                 )}
@@ -1236,7 +1236,7 @@ export default function WikiPage() {
                   onDoubleClick={() => { if (!isEditingMode && canEdit) setIsEditingMode(true) }}
                 >
                   {/* 2. 模拟真实纸张卡片 (Paper Sheet Canvas) */}
-                  <div className="max-w-4xl mx-auto bg-white dark:bg-bg-card border border-transparent dark:border-border/30 rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.02)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.05)] transition-all duration-300 p-6 md:p-8 lg:p-12 min-h-[calc(100vh-80px)] md:min-h-[calc(100vh-100px)] flex flex-col relative">
+                  <div className="max-w-4xl mx-auto bg-white dark:bg-bg-card border border-transparent dark:border-border/30 rounded-2xl max-md:rounded-xl shadow-[0_4px_24px_rgba(0,0,0,0.02)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.05)] transition-all duration-300 p-6 md:p-8 lg:p-12 max-md:p-4 min-h-[calc(100vh-80px)] md:min-h-[calc(100vh-100px)] flex flex-col relative">
                     
                     {/* 右上角悬浮自动保存状态徽标 */}
                     {isEditingMode && (
@@ -1272,7 +1272,7 @@ export default function WikiPage() {
                           placeholder="请输入文档标题"
                         />
                       ) : (
-                        <h2 className="text-3xl font-extrabold text-gray-900 dark:text-gray-100 tracking-tight leading-tight mb-3">
+                        <h2 className="text-3xl max-md:text-xl font-extrabold text-gray-900 dark:text-gray-100 tracking-tight leading-tight mb-3">
                           {editorTitle || '无标题在线文档'}
                         </h2>
                       )}
@@ -1312,7 +1312,7 @@ export default function WikiPage() {
                 </div>
 
                 {/* 3. 悬浮目录大纲面板（放置在右侧，契合 Notion / 飞书习惯） */}
-                <TocPanel html={editorContent} inline={false} className="border-l border-gray-200 dark:border-border bg-gray-50/10 dark:bg-transparent shrink-0" />
+                <TocPanel html={editorContent} inline={false} className="border-l border-gray-200 dark:border-border bg-gray-50/10 dark:bg-transparent shrink-0 max-md:hidden" />
               </div>
 
               {/* 4. 飞书/Notion AI 同款：行内直接 AI 协同处理面板 (Floating Inline AI Co-author Workspace) */}
@@ -1320,7 +1320,7 @@ export default function WikiPage() {
                 inlineAiActive ? (
                   /* 行内直接处理中的高档 Card 面板 */
                   <div
-                    className="fixed z-[100] w-80 bg-gray-950/95 dark:bg-bg-card/95 text-white p-4.5 rounded-2xl shadow-2xl border border-gray-800 dark:border-border/40 backdrop-blur-xl ai-prevent-deselect animate-scaleIn flex flex-col gap-3"
+                    className="fixed z-[100] w-80 max-md:w-[calc(100vw-2rem)] bg-gray-950/95 dark:bg-bg-card/95 text-white p-4.5 max-md:p-3 rounded-2xl max-md:rounded-xl shadow-2xl border border-gray-800 dark:border-border/40 backdrop-blur-xl ai-prevent-deselect animate-scaleIn flex flex-col gap-3"
                     style={{
                       left: `${aiToolbarCoords.x}px`,
                       top: `${aiToolbarCoords.y}px`,
@@ -1408,7 +1408,7 @@ export default function WikiPage() {
 
               {/* 5. 飞书同款：智能写作侧边栏协助面板 (AI Copilot Sidebar Panel) */}
               {aiSidebarOpen && (
-                <div className="w-80 lg:w-96 flex-shrink-0 border-l border-gray-200 dark:border-border bg-bg-sidebar flex flex-col h-full ai-prevent-deselect animate-slideLeft">
+                <div className="w-80 lg:w-96 max-md:fixed max-md:inset-0 max-md:w-full max-md:z-50 max-md:animate-slideUp flex-shrink-0 border-l border-gray-200 dark:border-border max-md:border-l-0 bg-bg-sidebar max-md:bg-bg-card flex flex-col h-full ai-prevent-deselect animate-slideLeft">
                   {/* 头部 */}
                   <div className="p-4 border-b border-gray-200 dark:border-border bg-gray-50/50 dark:bg-transparent flex items-center justify-between select-none shrink-0">
                     <div className="flex items-center gap-1.5 font-bold text-gray-900 dark:text-gray-100 text-xs">
@@ -1525,8 +1525,8 @@ export default function WikiPage() {
 
       {/* ===== 模态框 1：新建页面对话框 ===== */}
       {showPageDialog && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center px-4" onClick={() => setShowPageDialog(false)}>
-          <div className="bg-bg-card rounded-2xl p-6 w-full max-w-sm border border-gray-200 dark:border-border/50 shadow-2xl animate-scaleIn" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center px-4 max-md:px-0" onClick={() => setShowPageDialog(false)}>
+          <div className="bg-bg-card rounded-2xl max-md:rounded-none p-6 max-md:p-4 w-full max-w-sm max-md:max-w-full border border-gray-200 dark:border-border/50 shadow-2xl animate-scaleIn" onClick={e => e.stopPropagation()}>
             <h2 className="text-base font-bold mb-4 text-gray-900 dark:text-gray-100 flex items-center gap-1.5">
               <FileText size={18} className="text-accent-blue" />
               创建在线云文档
@@ -1552,8 +1552,8 @@ export default function WikiPage() {
 
       {/* ===== 模态框 2：删除页面/空间确认弹窗 ===== */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center px-4" onClick={() => setShowDeleteConfirm(null)}>
-          <div className="bg-bg-card rounded-2xl p-6 w-full max-w-sm border border-gray-200 dark:border-border/50 shadow-2xl animate-scaleIn" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center px-4 max-md:px-0" onClick={() => setShowDeleteConfirm(null)}>
+          <div className="bg-bg-card rounded-2xl max-md:rounded-none p-6 max-md:p-4 w-full max-w-sm max-md:max-w-full border border-gray-200 dark:border-border/50 shadow-2xl animate-scaleIn" onClick={e => e.stopPropagation()}>
             <h2 className="text-base font-bold mb-2 text-gray-900 dark:text-gray-100 flex items-center gap-1">
               <ShieldAlert size={18} className="text-red-500" />
               确认彻底删除文档吗？
@@ -1575,8 +1575,8 @@ export default function WikiPage() {
 
       {/* ===== 模态框 3：未保存确认离场弹窗 ===== */}
       {showUnsavedDialog && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center px-4" onClick={() => setShowUnsavedDialog(false)}>
-          <div className="bg-bg-card rounded-2xl p-6 w-full max-w-sm border border-gray-200 dark:border-border/50 shadow-2xl animate-scaleIn" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center px-4 max-md:px-0" onClick={() => setShowUnsavedDialog(false)}>
+          <div className="bg-bg-card rounded-2xl max-md:rounded-none p-6 max-md:p-4 w-full max-w-sm max-md:max-w-full border border-gray-200 dark:border-border/50 shadow-2xl animate-scaleIn" onClick={e => e.stopPropagation()}>
             <h2 className="text-base font-bold mb-2 text-gray-900 dark:text-gray-100 flex items-center gap-1.5">
               <Info size={18} className="text-amber-500" />
               检测到未保存内容
@@ -1584,7 +1584,7 @@ export default function WikiPage() {
             <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed mb-4">
               您当前正在编辑的文档中存在尚未发布的临时草稿。直接离开将丢失最新的修改内容。
             </p>
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
               <button
                 onClick={() => { setShowUnsavedDialog(false); pendingActionRef.current = null }}
                 className="px-4 py-2 text-xs text-gray-500 hover:text-gray-850 dark:text-gray-400 dark:hover:text-gray-200 border border-gray-200 dark:border-border/30 rounded-lg cursor-pointer font-semibold"
@@ -1619,10 +1619,10 @@ export default function WikiPage() {
 
       {/* ===== 飞书级全新模态框 4：分享与协作者权限管理 (Ultimate Redesigned Share & Permissions Modal) ===== */}
       {showShareModal && editingPage && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center px-4" onClick={() => setShowShareModal(false)}>
-          <div className="bg-bg-card rounded-2xl w-full max-w-lg border border-gray-150 dark:border-border/50 shadow-2xl flex flex-col overflow-hidden max-h-[85vh] animate-scaleIn" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center px-4 max-md:px-0" onClick={() => setShowShareModal(false)}>
+          <div className="bg-bg-card rounded-2xl max-md:rounded-none w-full max-w-lg max-md:max-w-full max-md:h-full border border-gray-150 dark:border-border/50 shadow-2xl flex flex-col overflow-hidden max-h-[85vh] max-md:max-h-full animate-scaleIn" onClick={e => e.stopPropagation()}>
             {/* 头 */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-150 dark:border-border/15 shrink-0">
+            <div className="flex items-center justify-between px-6 max-md:px-4 py-4 border-b border-gray-150 dark:border-border/15 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-accent-blue/10 flex items-center justify-center text-accent-blue">
                   <Share2 size={16} />
@@ -1633,7 +1633,7 @@ export default function WikiPage() {
             </div>
 
             {/* 模态框主体 */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div className="flex-1 overflow-y-auto p-6 max-md:p-4 space-y-6">
               {/* 模块 1：一键外链公开分享区 */}
               <div className="space-y-3.5 pb-5 border-b border-gray-150 dark:border-border/15">
                 <span className="text-[11px] font-bold tracking-wider text-gray-400 dark:text-gray-500 uppercase flex items-center gap-1.5">
@@ -1685,7 +1685,7 @@ export default function WikiPage() {
                     </div>
 
                     {/* 链接有效期配置 */}
-                    <div className="grid grid-cols-2 gap-3.5 border-t border-gray-150 dark:border-border/10 pt-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 border-t border-gray-150 dark:border-border/10 pt-3">
                       <div>
                         <label className="block text-[10px] font-bold text-gray-500 mb-1.5">链接有效期</label>
                         <select
@@ -1960,7 +1960,7 @@ export default function WikiPage() {
             </div>
 
             {/* 脚 */}
-            <div className="px-6 py-4 border-t border-gray-150 dark:border-border/15 shrink-0 bg-gray-50/50 dark:bg-bg-hover/10 flex items-center justify-end">
+            <div className="px-6 max-md:px-4 py-4 border-t border-gray-150 dark:border-border/15 shrink-0 bg-gray-50/50 dark:bg-bg-hover/10 flex items-center justify-end">
               <button
                 type="button"
                 onClick={() => setShowShareModal(false)}

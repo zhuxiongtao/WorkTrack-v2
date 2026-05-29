@@ -596,7 +596,7 @@ export default function MeetingsPage() {
           <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-bg-card border border-border focus-within:border-[#3B82F6] transition-colors">
             <Search size={15} className="text-gray-500" />
             <input type="text" placeholder="搜索会议..." value={searchText} onChange={(e) => setSearchText(e.target.value)}
-              className="bg-transparent text-sm text-gray-300 outline-none w-36 placeholder-gray-600" />
+              className="bg-transparent text-sm text-gray-300 outline-none w-28 sm:w-36 placeholder-gray-600" />
             {searchText && <button onClick={() => setSearchText('')} className="text-gray-500 hover:text-white"><X size={14} /></button>}
           </div>
           {hasPermission('meeting:create') && (
@@ -691,9 +691,9 @@ export default function MeetingsPage() {
 
       {/* 全屏详情弹窗 */}
       {modalMeeting && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-start justify-center pt-[8vh] pb-10 overflow-y-auto" onClick={closeDetail}>
-          <div className="w-full max-w-3xl mx-4 rounded-2xl bg-bg-card border border-border shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-border bg-bg-card/95 backdrop-blur-sm rounded-t-2xl">
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end md:items-start justify-center md:pt-[8vh] pb-0 md:pb-10 overflow-y-auto" onClick={closeDetail}>
+          <div className="w-full max-w-3xl mx-0 md:mx-4 rounded-none md:rounded-2xl bg-bg-card border border-border shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="sticky top-0 z-10 flex items-center justify-between px-4 md:px-6 py-4 border-b border-border bg-bg-card/95 backdrop-blur-sm rounded-t-none md:rounded-t-2xl">
               <div>
                 <h3 className="text-lg font-bold text-white">{modalMeeting.title}</h3>
                 <div className="flex items-center gap-2 flex-wrap mt-1">
@@ -741,7 +741,7 @@ export default function MeetingsPage() {
               </div>
             </div>
 
-            <div className="p-6">
+            <div className="p-4 md:p-6">
               {/* AI 总结 */}
               {modalMeeting.ai_summary && (
                 <div className="mb-4 p-4 rounded-xl bg-[#8B5CF6]/10 border border-[#8B5CF6]/20">
@@ -850,13 +850,13 @@ export default function MeetingsPage() {
 
       {/* 分享弹窗 */}
       {showShareModal && modalMeeting && (
-        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center" onClick={() => setShowShareModal(false)}>
-          <div className="w-full max-w-md mx-4 rounded-2xl bg-bg-card border border-border shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-end md:items-center justify-center" onClick={() => setShowShareModal(false)}>
+          <div className="w-full max-w-md mx-0 md:mx-4 rounded-none md:rounded-2xl bg-bg-card border border-border shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 md:px-5 py-4 border-b border-border">
               <h3 className="text-base font-bold text-white">分享会议</h3>
               <button onClick={() => setShowShareModal(false)} className="p-1.5 rounded-lg hover:bg-bg-hover text-gray-500 hover:text-white transition-colors"><X size={16} /></button>
             </div>
-            <div className="p-5 space-y-5">
+            <div className="p-4 md:p-5 space-y-5">
               <div>
                 <h4 className="text-xs font-bold text-gray-400 mb-2">添加协作者</h4>
                 <div className="flex items-center gap-2">
@@ -912,7 +912,7 @@ export default function MeetingsPage() {
       {/* 新建/编辑弹窗 */}
       {showForm && (
         <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm ${isMaximized ? 'items-start pt-4 pb-4' : ''}`} onClick={() => { setShowForm(false); cancelRecording(); setEditingId(null); setIsMaximized(false) }}>
-          <div className={`mx-4 p-6 rounded-2xl bg-bg-card border border-border shadow-2xl flex flex-col ${
+          <div className={`mx-0 md:mx-4 p-4 md:p-6 rounded-none md:rounded-2xl bg-bg-card border border-border shadow-2xl flex flex-col ${
             isMaximized 
               ? 'w-full max-w-5xl h-[calc(100vh-2rem)] max-h-[900px]' 
               : 'w-full max-w-lg max-h-[90vh]'

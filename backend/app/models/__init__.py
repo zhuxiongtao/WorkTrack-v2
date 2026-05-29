@@ -4,6 +4,7 @@ from app.models.customer import Customer
 from app.models.customer_contact import CustomerContact
 from app.models.contract import Contract
 from app.models.project import Project
+from app.models.meeting_collab import MeetingPermission, MeetingComment
 from app.models.meeting_note import MeetingNote
 from app.models.scheduled_task import ScheduledTask
 from app.models.model_provider import ModelProvider, TaskModelConfig, ProviderModel

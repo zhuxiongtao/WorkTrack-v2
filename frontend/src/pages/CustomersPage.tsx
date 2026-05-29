@@ -479,8 +479,8 @@ export default function CustomersPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
+        <div className="flex flex-wrap items-center gap-4">
           <div>
             <h2 className="text-2xl font-bold text-white">客户管理</h2>
             <p className="text-sm text-gray-500 mt-1">{customers.length} 个客户</p>
@@ -507,7 +507,7 @@ export default function CustomersPage() {
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-hover border border-border">
             <Search size={16} className="text-gray-500" />
             <input type="text" placeholder="搜索..." value={search} onChange={(e) => setSearch(e.target.value)}
-              className="bg-transparent text-sm text-gray-300 outline-none w-32" />
+              className="bg-transparent text-sm text-gray-300 outline-none w-24 sm:w-32" />
           </div>
 
           {hasPermission('customer:create') && (
@@ -604,7 +604,7 @@ export default function CustomersPage() {
                 key={c.id}
                 className="w-full text-left break-inside-avoid mb-4 rounded-xl bg-bg-card border border-border hover:border-[#8B5CF6]/60 hover:bg-bg-hover-secondary transition-all group/card cursor-pointer"
               >
-                <div onClick={() => setExpandedCustomerId(c.id)} className="p-5 pb-3">
+                <div onClick={() => setExpandedCustomerId(c.id)} className="p-4 md:p-5 pb-3">
                   {/* Logo + 标题 */}
                   <div className="flex items-start gap-3 mb-3">
                     <CompanyLogo name={c.name} logoUrl={c.logo_url} size={40} />
@@ -645,7 +645,7 @@ export default function CustomersPage() {
                   </div>
                 </div>
                 {/* 操作按钮 — 始终可见 */}
-                <div className="flex items-center gap-2 px-5 pb-3">
+                <div className="flex items-center gap-2 px-4 md:px-5 pb-3">
                   <button onClick={(e) => { e.stopPropagation(); handleRefreshNews(c.id) }}
                     disabled={refreshingNewsId === c.id}
                     className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md bg-bg-hover text-amber-400 hover:text-amber-300 transition-colors disabled:opacity-50">
@@ -672,10 +672,10 @@ export default function CustomersPage() {
         if (!c) return null
         const hasDetail = c.core_products || c.business_scope || c.scale || c.profile || c.recent_news || c.contact
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setExpandedCustomerId(null)}>
-            <div className="w-full max-w-lg mx-4 rounded-2xl bg-bg-card border border-border shadow-2xl max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setExpandedCustomerId(null)}>
+            <div className="w-full max-w-lg mx-0 md:mx-4 rounded-none md:rounded-2xl bg-bg-card border border-border shadow-2xl max-h-[85vh] md:max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
               {/* Header */}
-              <div className="sticky top-0 z-10 flex items-center justify-between px-5 py-4 border-b border-border bg-bg-card/95 backdrop-blur-sm rounded-t-2xl">
+              <div className="sticky top-0 z-10 flex items-center justify-between px-4 md:px-5 py-4 border-b border-border bg-bg-card/95 backdrop-blur-sm rounded-t-none md:rounded-t-2xl">
                 <div className="flex items-center gap-3">
                   <CompanyLogo name={c.name} logoUrl={c.logo_url} size={36} />
                   <div>
@@ -692,7 +692,7 @@ export default function CustomersPage() {
                 </div>
               </div>
               {/* Body */}
-              <div className="p-5 space-y-4">
+              <div className="p-4 md:p-5 space-y-4">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className={`text-[11px] px-2.5 py-1 rounded-full border ${statusColors[c.status] || statusColors['潜在']}`}>{c.status}</span>
                   {c.contact && (
@@ -739,7 +739,7 @@ export default function CustomersPage() {
                       <div className="space-y-1.5">
                         <input value={contactForm.name} onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })}
                           placeholder="联系人姓名 *" className="w-full px-2 py-1.5 rounded bg-bg-card border border-border text-xs text-gray-200 outline-none focus:border-[#3B82F6]" />
-                        <div className="grid grid-cols-2 gap-1.5">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
                           <input value={contactForm.phone} onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })}
                             placeholder="手机" className="w-full px-2 py-1.5 rounded bg-bg-card border border-border text-xs text-gray-200 outline-none focus:border-[#3B82F6]" />
                           <input value={contactForm.email} onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
@@ -831,7 +831,7 @@ export default function CustomersPage() {
 
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => { setShowForm(false); resetForm() }}>
-          <div className="w-full max-w-lg mx-4 p-6 rounded-2xl bg-bg-card border border-border shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-lg mx-0 md:mx-4 p-4 md:p-6 rounded-none md:rounded-2xl bg-bg-card border border-border shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-lg font-medium text-white">{editingId ? '编辑客户' : '新建客户'}</h3>
               <button onClick={() => { setShowForm(false); resetForm() }} className="text-gray-500 hover:text-white"><X size={20} /></button>

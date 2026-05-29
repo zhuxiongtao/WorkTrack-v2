@@ -429,7 +429,6 @@ def fetch_provider_models(provider_id: int, db: Session = Depends(get_session),
     try:
         from app.services.ai_service import _is_vertex_ai, _get_vertex_credentials
         if _is_vertex_ai(provider):
-            # 使用 genai SDK 拉取 Vertex AI 真实可用模型列表
             from google import genai
             credentials = _get_vertex_credentials(provider)
             client = genai.Client(
@@ -438,14 +437,38 @@ def fetch_provider_models(provider_id: int, db: Session = Depends(get_session),
                 location=provider.location or "global",
                 credentials=credentials,
             )
-            models_data = list(client.models.list())
+            # 从多个 publisher 拉取模型
+            publishers = ["google", "meta", "mistralai", "anthropic", "google-cloud"]
             models = []
-            for m in models_data:
-                name = m.name  # e.g. "publishers/google/models/gemini-2.5-flash"
-                if "publishers/" in name:
-                    # 提取模型短名，如 "gemini-2.5-flash"
-                    short_name = name.split("/")[-1]
-                    models.append({"id": short_name, "owned_by": name.split("/")[-3] if len(name.split("/")) >= 3 else "google"})
+            seen = set()
+            for pub in publishers:
+                try:
+                    models_data = list(client.models.list(config={"publisher": pub}))
+                    for m in models_data:
+                        name = getattr(m, 'name', '')
+                        if not name or "publishers/" not in name:
+                            continue
+                        short_name = name.split("/")[-1]
+                        if short_name not in seen:
+                            seen.add(short_name)
+                            models.append({"id": short_name, "owned_by": pub})
+                except Exception:
+                    pass
+            # 如果 API 拉取失败或为空，使用常见模型列表作为兜底
+            if not models:
+                models = [
+                    {"id": "gemini-2.5-flash", "owned_by": "google"},
+                    {"id": "gemini-2.5-pro", "owned_by": "google"},
+                    {"id": "gemini-2.0-flash", "owned_by": "google"},
+                    {"id": "gemini-2.0-flash-lite", "owned_by": "google"},
+                    {"id": "gemini-1.5-pro", "owned_by": "google"},
+                    {"id": "gemini-1.5-flash", "owned_by": "google"},
+                    {"id": "claude-3-5-sonnet@20241022", "owned_by": "anthropic"},
+                    {"id": "claude-3-5-haiku@20241022", "owned_by": "anthropic"},
+                    {"id": "claude-3-opus@20240229", "owned_by": "anthropic"},
+                    {"id": "mistral-large@2411", "owned_by": "mistralai"},
+                    {"id": "llama-3.3-70b-instruct", "owned_by": "meta"},
+                ]
         else:
             from openai import OpenAI
             base_url = provider.base_url
@@ -459,6 +482,8 @@ def fetch_provider_models(provider_id: int, db: Session = Depends(get_session),
         db.commit()
         return {"success": True, "count": len(models), "models": models}
     except Exception as e:
+        import logging
+        logging.getLogger("worktrack").error("拉取模型列表失败: %s", e, exc_info=True)
         return {"success": False, "message": str(e)[:200]}
 
 
