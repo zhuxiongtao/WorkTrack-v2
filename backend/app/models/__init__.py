@@ -7,7 +7,7 @@ from app.models.project import Project
 from app.models.meeting_collab import MeetingPermission, MeetingComment
 from app.models.meeting_note import MeetingNote
 from app.models.scheduled_task import ScheduledTask
-from app.models.model_provider import ModelProvider, TaskModelConfig, ProviderModel
+from app.models.model_provider import ModelProvider, TaskModelConfig, ProviderModel, ModelParamPreset
 from app.models.field_option import FieldOption
 from app.models.chat import ChatConversation, ChatMessage
 from app.models.system_preference import SystemPreference
@@ -18,6 +18,16 @@ from app.models.wiki import UserGroup, UserGroupMember, WikiSpace, WikiPage, Wik
 from app.models.rbac import Permission, Role, RolePermission, UserRole, GroupRole, DepartmentRole
 from app.models.department import Department
 from app.models.data_share import DataShare, DataShareComment
+from app.models.news_cache import NewsCache
+from app.models.project_cost import ProjectCost
+from app.models.supplier import Supplier
+from app.models.channel import Channel
+from app.models.reconcile import (
+    ReconcileSales,
+    ReconcileSupply,
+    ReconcileSummary,
+    ReconcileDiff,
+)
 
 __all__ = [
     "User",
@@ -28,10 +38,13 @@ __all__ = [
     "Contract",
     "Project",
     "MeetingNote",
+    "MeetingPermission",
+    "MeetingComment",
     "ScheduledTask",
     "ModelProvider",
     "TaskModelConfig",
     "ProviderModel",
+    "ModelParamPreset",
     "FieldOption",
     "ChatConversation",
     "ChatMessage",
@@ -53,4 +66,12 @@ __all__ = [
     "DepartmentRole",
     "DataShare",
     "DataShareComment",
+    "NewsCache",
+    "ProjectCost",
+    "Supplier",
+    "Channel",
+    "ReconcileSales",
+    "ReconcileSupply",
+    "ReconcileSummary",
+    "ReconcileDiff",
 ]
