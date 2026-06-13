@@ -92,9 +92,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // 初始化时用现有 token 获取用户信息
   useEffect(() => {
+    let cancelled = false
     if (token) {
       fetch('/api/v1/auth/me')
         .then((res) => {
+          if (cancelled) return Promise.reject(new Error('cancelled'))
           if (res.status === 401) {
             localStorage.removeItem('auth_token')
             setToken(null)
@@ -105,10 +107,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return res.json()
         })
         .then((data) => {
-          setUser(data)
+          if (cancelled) return
+          if (!data) {
+            localStorage.removeItem('auth_token')
+            setToken(null)
+            setUser(null)
+          } else {
+            setUser(data)
+          }
           setLoading(false)
         })
         .catch(() => {
+          if (cancelled) return
           // Token 无效则清除
           localStorage.removeItem('auth_token')
           setToken(null)
@@ -118,6 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } else {
       setLoading(false)
     }
+    return () => { cancelled = true }
   }, [token])
 
   /** 带认证头的 fetch 封装 */
@@ -143,8 +154,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({ username, password }),
     })
     if (!res.ok) {
-      const err = await res.json()
-      throw new Error(err.detail || '登录失败')
+      let detail = '登录失败'
+      try {
+        const err = await res.json()
+        detail = err.detail || detail
+      } catch {}
+      throw new Error(detail)
     }
     const data = await res.json()
     localStorage.setItem('auth_token', data.access_token)
@@ -167,8 +182,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
       })
       if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.detail || '修改密码失败')
+        let detail = '修改密码失败'
+        try {
+          const err = await res.json()
+          detail = err.detail || detail
+        } catch {}
+        throw new Error(detail)
       }
       // 修改密码后 token_version 已变，需要重新登录
       localStorage.removeItem('auth_token')

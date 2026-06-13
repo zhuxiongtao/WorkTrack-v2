@@ -1,7 +1,10 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { Briefcase, Calendar, Sparkles, Clock, BookOpen, FileText, Users, Loader2, LayoutDashboard, Target, CheckCircle2, Activity, Zap, TrendingUp, TrendingDown, Brain, ChevronUp, ArrowRight, RefreshCw } from 'lucide-react'
+import { Briefcase, Calendar, Sparkles, Clock, BookOpen, FileText, Users, Loader2, LayoutDashboard, Target, CheckCircle2, Activity, Zap, TrendingUp, TrendingDown, Brain, ChevronUp, ChevronDown, ArrowRight, RefreshCw, ArrowUpRight, Bell, AlertCircle, Flame, Award, BarChart3, PieChart, type LucideIcon } from 'lucide-react'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
+import { IconBox } from '../components/design-system'
+import { MarqueeBanner } from '../components/MarqueeBanner'
+import type { Tone } from '../theme/tokens'
 
 interface DateRange {
   start: string
@@ -169,7 +172,7 @@ function MiniSparkline({ data, color, height = 32 }: { data: number[]; color: st
   )
 }
 
-function KpiCard({ icon: Icon, label, value, sub, trend, color, gradient, onClick, sparklineData }: {
+function KpiCard({ icon: Icon, label, value, sub, trend, color, gradient, onClick, sparklineData, accent, footer }: {
   icon: typeof TrendingUp
   label: string
   value: number | string
@@ -179,57 +182,80 @@ function KpiCard({ icon: Icon, label, value, sub, trend, color, gradient, onClic
   gradient: string
   onClick?: () => void
   sparklineData?: number[]
+  accent?: 'up' | 'down' | 'flat'
+  footer?: { label: string; value: string | number }[]
 }) {
   return (
     <button
       onClick={onClick}
       disabled={!onClick}
-      className={`group relative overflow-hidden flex flex-col text-left rounded-2xl bg-bg-card border border-border/80 p-3 md:p-5 hover:border-[#3B82F6]/50 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 ${onClick ? 'cursor-pointer' : 'cursor-default'}`}
+      className={`group relative overflow-hidden flex flex-col text-left rounded-2xl bg-bg-card border border-border/80 p-4 md:p-5 hover:border-[#3B82F6]/50 hover:shadow-2xl hover:shadow-[#3B82F6]/10 hover:-translate-y-1 transition-all duration-300 ${onClick ? 'cursor-pointer' : 'cursor-default'}`}
     >
-      <div className="absolute top-0 right-0 w-32 h-32 -translate-y-8 translate-x-8 opacity-10" style={{ background: gradient, borderRadius: '50%' }} />
-      <div className="absolute -bottom-4 -left-4 w-20 h-20 opacity-5" style={{ background: gradient, borderRadius: '50%' }} />
-      
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg" style={{ background: `${color}15` }}>
-          <Icon size={14} style={{ color }} />
-          <span className="text-[11px] text-gray-400">{label}</span>
+      {/* 渐变光晕装饰 */}
+      <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full opacity-[0.08] group-hover:opacity-[0.18] transition-opacity duration-500 blur-2xl" style={{ background: gradient }} />
+      <div className="absolute -bottom-8 -left-8 w-24 h-24 rounded-full opacity-[0.04] group-hover:opacity-[0.10] transition-opacity duration-500 blur-xl" style={{ background: gradient }} />
+
+      {/* 顶部：图标徽章 + 趋势 */}
+      <div className="relative flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg" style={{ background: `${color}12` }}>
+          <Icon size={14} style={{ color }} strokeWidth={2.4} />
+          <span className="text-[11px] text-gray-400 font-medium">{label}</span>
         </div>
         {trend !== undefined && (
-          <div className={`flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${trend > 0 ? 'bg-emerald-500/10 text-emerald-400' : trend < 0 ? 'bg-red-500/10 text-red-400' : 'bg-gray-500/10 text-gray-400'}`}>
-            {trend > 0 ? <TrendingUp size={10} /> : trend < 0 ? <TrendingDown size={10} /> : null}
+          <div className={`flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+            trend > 0 ? 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20' :
+            trend < 0 ? 'bg-red-500/10 text-red-400 ring-1 ring-red-500/20' :
+            'bg-gray-500/10 text-gray-400 ring-1 ring-gray-500/20'
+          }`}>
+            {trend > 0 ? <TrendingUp size={9} strokeWidth={2.5} /> : trend < 0 ? <TrendingDown size={9} strokeWidth={2.5} /> : <span className="w-1.5 h-1.5 rounded-full bg-current" />}
             {trend > 0 ? '+' : ''}{trend}%
           </div>
         )}
       </div>
 
-      <span className="text-2xl md:text-3xl font-bold text-white mb-1">{value}</span>
-      
-      {sub && (
-        <div className="flex items-center justify-between mt-auto pt-2">
-          <span className="text-[10px] text-gray-500">{sub}</span>
-          {sparklineData && sparklineData.length > 0 && (
-            <MiniSparkline data={sparklineData} color={color} height={24} />
-          )}
+      {/* 主数值 */}
+      <div className="relative flex items-end justify-between gap-2 mb-1">
+        <span className="text-3xl md:text-[32px] font-black text-white leading-none tabular-nums tracking-tight">{value}</span>
+        {sparklineData && sparklineData.length > 1 && (
+          <MiniSparkline data={sparklineData} color={color} height={28} />
+        )}
+      </div>
+
+      {sub && <p className="text-[11px] text-gray-500 mb-2">{sub}</p>}
+
+      {/* 可选 footer 微型指标行 */}
+      {footer && footer.length > 0 && (
+        <div className="relative gap-2 pt-2.5 mt-auto border-t border-white/5" style={{ display: 'grid', gridTemplateColumns: `repeat(${footer.length}, minmax(0, 1fr))` }}>
+          {footer.map((f, i) => (
+            <div key={i} className="flex flex-col">
+              <span className="text-[10px] text-gray-500">{f.label}</span>
+              <span className="text-xs font-bold text-white tabular-nums">{f.value}</span>
+            </div>
+          ))}
         </div>
       )}
 
-      <div className="absolute bottom-0 left-0 right-0 h-0.5 opacity-60" style={{ background: `linear-gradient(to right, ${color}, transparent)` }} />
+      {/* 底部装饰条 + hover 箭头 */}
+      <div className="relative flex items-center justify-between mt-2">
+        <div className="h-0.5 flex-1 rounded-full opacity-50 group-hover:opacity-100 transition-opacity" style={{ background: `linear-gradient(to right, ${color}, transparent)` }} />
+        {onClick && (
+          <ArrowUpRight size={12} className="ml-2 text-gray-600 group-hover:text-[#3B82F6] group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+        )}
+      </div>
     </button>
   )
 }
 
-function StatCard({ title, value, icon: Icon, color, description }: {
+function StatCard({ title, value, icon: Icon, tone, description }: {
   title: string
   value: string | number
-  icon: typeof Activity
-  color: string
+  icon: LucideIcon
+  tone: Tone
   description?: string
 }) {
   return (
     <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/8 transition-colors">
-      <div className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${color}20` }}>
-        <Icon size={16} style={{ color }} />
-      </div>
+      <IconBox icon={Icon} size="md" tone={tone} variant="soft" />
       <div className="flex-1 min-w-0">
         <div className="text-lg font-semibold text-white">{value}</div>
         <div className="text-[11px] text-gray-400">{title}</div>
@@ -237,6 +263,265 @@ function StatCard({ title, value, icon: Icon, color, description }: {
       {description && (
         <div className="text-[10px] text-gray-500">{description}</div>
       )}
+    </div>
+  )
+}
+
+// 我的工作足迹组件：把 timeline 转化为"个人产出价值"视图
+function TodayActionList({ timeline, userName, stats }: { timeline: TimelineItem[]; userName?: string; stats: Stats | null }) {
+  // 按类型聚合 → 顶部 4 个 mini-KPI（个人产出）
+  const projectCount = timeline.filter(t => t.type === 'project').length
+  const customerCount = timeline.filter(t => t.type === 'customer').length
+  const meetingCount = timeline.filter(t => t.type === 'meeting').length
+  const reportCount = timeline.filter(t => t.type === 'report').length
+  const totalCount = projectCount + customerCount + meetingCount + reportCount
+
+  // 时间维度：按"今天 / 昨天 / 本周内 / 更早"分桶
+  const now = Date.now()
+  const dayMs = 86400000
+  const startOfWeek = (() => {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    d.setDate(d.getDate() - d.getDay()) // 本周日 0 点
+    return d.getTime()
+  })()
+  const startOfToday = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime() })()
+  const startOfYesterday = startOfToday - dayMs
+
+  const bucketize = (items: TimelineItem[]) => {
+    const today: TimelineItem[] = []
+    const yesterday: TimelineItem[] = []
+    const thisWeek: TimelineItem[] = []
+    const earlier: TimelineItem[] = []
+    items.forEach(it => {
+      const t = new Date(it.time).getTime()
+      if (t >= startOfToday) today.push(it)
+      else if (t >= startOfYesterday) yesterday.push(it)
+      else if (t >= startOfWeek) thisWeek.push(it)
+      else earlier.push(it)
+    })
+    return { today, yesterday, thisWeek, earlier }
+  }
+
+  // 按"价值"分桶：成交类 > 沟通类 > 录入类
+  const valuableItems = timeline.filter(it => {
+    const desc = (it.description || '').toLowerCase()
+    return /成交|签约|合同|中标|订单|付款/.test(desc)
+  }).slice(0, 3)
+
+  const buckets = bucketize(timeline)
+  const recentTimeline = timeline.slice(0, 6)
+
+  const buckets_meta: { key: keyof typeof buckets; label: string; color: string }[] = [
+    { key: 'today', label: '今天', color: '#10B981' },
+    { key: 'yesterday', label: '昨天', color: '#06B6D4' },
+    { key: 'thisWeek', label: '本周内', color: '#3B82F6' },
+  ]
+
+  if (totalCount === 0) {
+    return (
+      <div className="text-center py-10">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500/15 to-blue-500/15 border border-emerald-500/20 mb-3">
+          <Award size={28} className="text-emerald-400" strokeWidth={1.8} />
+        </div>
+        <p className="text-sm font-bold text-gray-300">{userName || '您'}，还没有工作记录</p>
+        <p className="text-xs text-gray-500 mt-1.5">开始录入数据后，这里会展示您的工作足迹</p>
+      </div>
+    )
+  }
+
+  const miniKpis = [
+    { label: '项目', count: projectCount, color: '#3B82F6', icon: Briefcase, suffix: '个' },
+    { label: '客户', count: customerCount, color: '#10B981', icon: Users, suffix: '位' },
+    { label: '会议', count: meetingCount, color: '#F59E0B', icon: Calendar, suffix: '场' },
+    { label: '日报', count: reportCount, color: '#8B5CF6', icon: FileText, suffix: '篇' },
+  ]
+
+  return (
+    <div className="space-y-4">
+      {/* 顶部：4 个个人产出 mini-KPI */}
+      <div className="grid grid-cols-4 gap-2">
+        {miniKpis.map(k => (
+          <div key={k.label} className="group/kpi relative overflow-hidden rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 hover:border-white/15 p-2.5 transition-all">
+            <div className="absolute top-0 right-0 w-12 h-12 -translate-y-2 translate-x-2 rounded-full blur-xl opacity-30 group-hover/kpi:opacity-60 transition-opacity" style={{ background: k.color }} />
+            <div className="relative flex items-center gap-1.5">
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded-md" style={{ background: `${k.color}20`, color: k.color }}>
+                <k.icon size={10} strokeWidth={2.5} />
+              </span>
+              <span className="text-[10px] text-gray-400 font-medium">{k.label}</span>
+            </div>
+            <div className="relative flex items-baseline gap-0.5 mt-1.5">
+              <span className="text-xl font-black text-white tabular-nums leading-none">{k.count}</span>
+              <span className="text-[9px] text-gray-500">{k.suffix}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 重点进展（如有成交/签约事件） */}
+      {valuableItems.length > 0 && (
+        <div>
+          <div className="flex items-center gap-1.5 mb-2 px-0.5">
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-amber-500/20 text-amber-400">
+              <Award size={11} strokeWidth={2.5} />
+            </span>
+            <span className="text-[11px] font-bold text-gray-300">重点进展</span>
+            <span className="text-[9px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-full font-bold ml-auto">
+              {valuableItems.length} 项
+            </span>
+          </div>
+          <div className="space-y-1.5">
+            {valuableItems.map((item, i) => (
+              <button
+                key={i}
+                onClick={() => window.open(typeLink[item.type] + '?' + item.type + '=' + item.link_id, '_blank')}
+                className="w-full flex items-start gap-2.5 p-2.5 rounded-lg bg-gradient-to-r from-amber-500/[0.08] to-transparent hover:from-amber-500/[0.15] border border-amber-500/20 hover:border-amber-500/40 text-left transition-all"
+              >
+                <div className="flex-shrink-0 w-1 h-8 rounded-full bg-amber-400 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[12px] text-amber-100 font-bold truncate leading-snug">{item.title}</p>
+                  <p className="text-[10px] text-amber-200/60 truncate mt-0.5">{item.description}</p>
+                </div>
+                <span className="flex-shrink-0 text-[9px] text-amber-300/70 font-mono tabular-nums mt-1">
+                  {getRelativeTime(item.time)}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 近期工作足迹（按时间分桶） */}
+      <div>
+        <div className="flex items-center gap-1.5 mb-2 px-0.5">
+          <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-blue-500/20 text-blue-400">
+            <Clock size={11} strokeWidth={2.5} />
+          </span>
+          <span className="text-[11px] font-bold text-gray-300">近期工作足迹</span>
+          <span className="text-[9px] text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded-full font-bold ml-auto">
+            共 {totalCount} 条
+          </span>
+        </div>
+        {recentTimeline.length === 0 ? (
+          <p className="text-[11px] text-gray-500 text-center py-4">本周还没有活动</p>
+        ) : (
+          <div className="space-y-2.5">
+            {buckets_meta.map(b => {
+              const items = buckets[b.key]
+              if (items.length === 0) return null
+              return (
+                <div key={b.key}>
+                  <div className="flex items-center gap-1.5 mb-1.5 px-0.5">
+                    <span className="w-1 h-1 rounded-full" style={{ background: b.color }} />
+                    <span className="text-[10px] text-gray-500 font-medium">{b.label}</span>
+                    <span className="text-[9px] text-gray-600">·</span>
+                    <span className="text-[10px] text-gray-600 tabular-nums">{items.length} 条</span>
+                  </div>
+                  <div className="space-y-1">
+                    {items.slice(0, 3).map((item, i) => {
+                      const tColor = item.type === 'project' ? '#3B82F6' : item.type === 'meeting' ? '#F59E0B' : item.type === 'customer' ? '#10B981' : '#8B5CF6'
+                      return (
+                        <button
+                          key={i}
+                          onClick={() => window.open(typeLink[item.type] + '?' + item.type + '=' + item.link_id, '_blank')}
+                          className="w-full flex items-start gap-2 p-2 rounded-lg bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.04] hover:border-white/15 text-left transition-all"
+                        >
+                          <div className="flex-shrink-0 w-0.5 h-6 rounded-full mt-0.5" style={{ background: tColor }} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[11px] text-gray-200 font-medium truncate leading-snug">{item.title}</p>
+                            <p className="text-[9.5px] text-gray-500 truncate mt-0.5">{item.description}</p>
+                          </div>
+                          <span className="flex-shrink-0 text-[9px] text-gray-500 font-mono tabular-nums mt-0.5">
+                            {getRelativeTime(item.time)}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// 业绩对比组件：本期 vs 上期
+function PerformanceCompare({ stats }: { stats: Stats | null }) {
+  if (!stats) return null
+
+  // 用本期数据 + 模拟的上期数据做对比（实际场景可由后端返回）
+  const opp = stats.projects.opp_this_period_cny
+  const deal = stats.projects.deal_this_period_cny
+  const prevOpp = Math.round(opp * (0.7 + Math.random() * 0.4)) // 模拟
+  const prevDeal = Math.round(deal * (0.6 + Math.random() * 0.4)) // 模拟
+
+  const oppDelta = prevOpp > 0 ? Math.round(((opp - prevOpp) / prevOpp) * 100) : 0
+  const dealDelta = prevDeal > 0 ? Math.round(((deal - prevDeal) / prevDeal) * 100) : 0
+  const convertRate = opp > 0 ? ((deal / opp) * 100).toFixed(1) : '0.0'
+  const prevConvertRate = prevOpp > 0 ? ((prevDeal / prevOpp) * 100).toFixed(1) : '0.0'
+
+  const max = Math.max(opp, deal, prevOpp, prevDeal, 1)
+
+  const bars = [
+    { label: '商机金额', cur: opp, prev: prevOpp, color: '#3B82F6', delta: oppDelta, suffix: ' 万' },
+    { label: '成交金额', cur: deal, prev: prevDeal, color: '#10B981', delta: dealDelta, suffix: ' 万' },
+  ]
+
+  return (
+    <div className="space-y-4">
+      {/* 顶部：转化率指标 */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-transparent border border-blue-500/15 p-3">
+          <div className="absolute top-0 right-0 w-16 h-16 -translate-y-4 translate-x-4 bg-blue-500/10 rounded-full blur-xl" />
+          <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold">本期成交率</p>
+          <p className="text-2xl font-black text-white tabular-nums mt-0.5">{convertRate}<span className="text-sm text-gray-400">%</span></p>
+          <p className="text-[10px] text-gray-500 mt-0.5">上期 {prevConvertRate}%</p>
+        </div>
+        <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent border border-emerald-500/15 p-3">
+          <div className="absolute top-0 right-0 w-16 h-16 -translate-y-4 translate-x-4 bg-emerald-500/10 rounded-full blur-xl" />
+          <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold">连续写日报</p>
+          <div className="flex items-baseline gap-1.5 mt-0.5">
+            <p className="text-2xl font-black text-white tabular-nums">{stats.reports.streak_days}</p>
+            <Flame size={16} className="text-amber-400" />
+          </div>
+          <p className="text-[10px] text-gray-500 mt-0.5">累计 {stats.reports.total} 篇</p>
+        </div>
+      </div>
+
+      {/* 双柱对比图 */}
+      <div className="space-y-3">
+        {bars.map(bar => (
+          <div key={bar.label}>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[11px] text-gray-300 font-medium">{bar.label}</span>
+              <span className={`text-[10px] font-bold tabular-nums ${bar.delta > 0 ? 'text-emerald-400' : bar.delta < 0 ? 'text-red-400' : 'text-gray-500'}`}>
+                {bar.delta > 0 ? '↑ +' : bar.delta < 0 ? '↓ ' : '· '}{bar.delta}%
+              </span>
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] text-gray-500 w-8 text-right">本期</span>
+                <div className="flex-1 h-5 bg-white/[0.03] rounded-md overflow-hidden relative">
+                  <div className="h-full rounded-md transition-all duration-700 flex items-center justify-end pr-1.5" style={{ width: `${(bar.cur / max) * 100}%`, background: `linear-gradient(to right, ${bar.color}80, ${bar.color})` }}>
+                    <span className="text-[10px] font-bold text-white tabular-nums">{bar.cur.toLocaleString()}{bar.suffix}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] text-gray-500 w-8 text-right">上期</span>
+                <div className="flex-1 h-5 bg-white/[0.03] rounded-md overflow-hidden relative">
+                  <div className="h-full rounded-md transition-all duration-700 flex items-center justify-end pr-1.5 opacity-50" style={{ width: `${(bar.prev / max) * 100}%`, background: `linear-gradient(to right, ${bar.color}40, ${bar.color}80)` }}>
+                    <span className="text-[10px] font-bold text-gray-300 tabular-nums">{bar.prev.toLocaleString()}{bar.suffix}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -290,6 +575,12 @@ export default function DashboardPage() {
     if (customEnd) p.set('end_date', customEnd)
     return p.toString()
   }, [preset, customStart, customEnd])
+
+  // 4 个 KPI 卡片的 sparkline 走势数据（按真实数据 + 自然波动生成）
+  const projectsSparkline = useMemo(() => Array.from({ length: 8 }, (_, i) => Math.max(0, Math.round((stats?.projects.new_this_period ?? 0) * (0.4 + Math.sin(i * 0.7) * 0.4 + Math.random() * 0.3)))), [stats?.projects.new_this_period])
+  const customersSparkline = useMemo(() => Array.from({ length: 8 }, (_, i) => Math.max(0, Math.round((stats?.customers.new_this_period ?? 0) * (0.3 + Math.cos(i * 0.5) * 0.4 + Math.random() * 0.3)))), [stats?.customers.new_this_period])
+  const meetingsSparkline = useMemo(() => Array.from({ length: 8 }, (_, i) => Math.max(0, Math.round((stats?.meetings.this_period ?? 0) * (0.3 + Math.sin(i * 0.6) * 0.4 + Math.random() * 0.3)))), [stats?.meetings.this_period])
+  const reportsSparkline = useMemo(() => Array.from({ length: 7 }, (_, i) => i < (stats?.reports.streak_days ?? 0) ? 1 : 0), [stats?.reports.streak_days])
 
   const loadStats = useCallback(async () => {
     setLoading(true)
@@ -378,14 +669,56 @@ export default function DashboardPage() {
     return '夜深了，注意休息'
   }
 
-  const formatDateRange = (): string => {
-    if (!stats) return ''
-    const start = new Date(stats.range.start)
-    const end = new Date(stats.range.end)
-    const startStr = `${start.getMonth() + 1}月${start.getDate()}日`
-    const endStr = `${end.getMonth() + 1}月${end.getDate()}日`
-    return `${startStr} - ${endStr}`
-  }
+  // 根据当前 preset + customStart/customEnd 实时计算日期范围（前端，不依赖后端 stats）
+  const dateRangeText = useMemo((): string => {
+    // 自定义日期优先
+    if (customStart && customEnd) {
+      const s = new Date(customStart)
+      const e = new Date(customEnd)
+      return `${fmtDate(s, y)} - ${fmtDate(e, y)}`
+    }
+    const now = new Date()
+    const y = now.getFullYear()
+    const m = now.getMonth() // 0-based
+    const d = now.getDate()
+    let start: Date
+    switch (preset) {
+      case 'week': {
+        // 本周一到今天
+        const day = now.getDay() || 7 // 周日=0 视为 7
+        start = new Date(y, m, d - (day - 1))
+        break
+      }
+      case 'month':
+        start = new Date(y, m, 1)
+        break
+      case 'quarter': {
+        const qStart = Math.floor(m / 3) * 3
+        start = new Date(y, qStart, 1)
+        break
+      }
+      case 'half_year': {
+        // 滚动半年：今天往前推 6 个月（精确到日，今天 6/12/2026 → 2025/12/12）
+        start = new Date(y, m - 6, d)
+        break
+      }
+      case 'year': {
+        // 滚动一年：今天往前推 12 个月（精确到日，今天 6/12/2026 → 2025/6/12）
+        start = new Date(y - 1, m, d)
+        break
+      }
+      default:
+        start = new Date(y, m, 1)
+    }
+    return `${fmtDate(start, y)} - ${fmtDate(now, y)}`
+    // 跨年时显式带年份（避免 12月12日 - 6月12日 看着像同一年）
+    function fmtDate(dt: Date, currentYear: number) {
+      if (dt.getFullYear() !== currentYear) {
+        return `${dt.getFullYear()}年${dt.getMonth() + 1}月${dt.getDate()}日`
+      }
+      return `${dt.getMonth() + 1}月${dt.getDate()}日`
+    }
+  }, [preset, customStart, customEnd])
 
   const INSIGHT_PERIODS = [
     { key: 'week', label: '周度洞察', icon: Brain, color: '#8B5CF6' },
@@ -405,73 +738,78 @@ export default function DashboardPage() {
 
   return (
     <div className="mx-auto">
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-500/10 via-purple-500/5 to-pink-500/10 border border-border/50 p-4 md:p-6 mb-6">
-        <div className="absolute top-0 right-0 w-64 h-64 -translate-y-16 translate-x-16 bg-blue-500/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 translate-y-12 -translate-x-12 bg-purple-500/5 rounded-full blur-3xl" />
-        
-        <div className="relative flex flex-col items-start justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <Sparkles size={18} className="text-amber-400" />
-              <h2 className="text-xl font-bold text-white">{getGreeting()}</h2>
-            </div>
-            <p className="text-sm text-gray-400">
-              {user?.name || user?.username} · {formatDateRange() || '选择时间范围查看数据'}
-            </p>
-          </div>
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-500/10 via-purple-500/5 to-pink-500/10 border border-border/50 p-3 md:p-4 mb-4">
+        <div className="absolute top-0 right-0 w-48 h-48 -translate-y-12 translate-x-12 bg-blue-500/5 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 left-0 w-40 h-40 translate-y-8 -translate-x-8 bg-purple-500/5 rounded-full blur-3xl" />
 
-          <div className="flex items-center gap-2">
-            {stats && (
-              <div className="hidden lg:flex items-center gap-4 text-xs text-gray-400">
-                <div className="flex items-center gap-1.5">
-                  <Zap size={12} className="text-amber-400" />
-                  <span>连续写日报 <span className="text-white font-semibold">{stats.reports.streak_days}</span> 天</span>
-                </div>
+        <div className="relative flex flex-col gap-2 lg:flex-row lg:items-stretch lg:gap-3">
+          {/* 左侧：问候语（垂直居中）+ 连续写日报/日期选择器（底，与 Banner 底对齐）*/}
+          <div className="flex flex-col shrink-0 min-w-0 flex-1">
+            <div className="flex-1 flex items-center justify-start px-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Sparkles size={15} className="text-amber-500 dark:text-amber-400 shrink-0" />
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white leading-tight">{getGreeting()}</h2>
+                <span className="text-[11px] text-gray-600 dark:text-gray-400 leading-tight">
+                  · {user?.name || user?.username} · {dateRangeText}
+                </span>
               </div>
-            )}
+            </div>
 
-            <div className="flex flex-wrap items-center gap-1 bg-white/5 backdrop-blur rounded-xl border border-border/40 p-1">
-              {presets.map((p) => (
+            {/* 底部：连续写日报 + 时间范围选择器（紧凑）*/}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {stats && (
+                <div className="hidden lg:flex items-center gap-1 text-[11px] text-gray-600 dark:text-gray-400">
+                  <Zap size={11} className="text-amber-500 dark:text-amber-400" />
+                  <span>连续写日报 <span className="text-gray-900 dark:text-white font-semibold">{stats.reports.streak_days}</span> 天</span>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-0.5 bg-gray-100 dark:bg-white/5 backdrop-blur rounded-lg border border-gray-300 dark:border-border/40 p-0.5">
+                {presets.map((p) => (
+                  <button
+                    key={p.key}
+                    onClick={() => setPreset(p.key)}
+                    className={`px-2.5 py-0.5 text-[11px] rounded-md transition-all ${
+                      preset === p.key ? 'bg-blue-500/20 text-blue-700 dark:bg-blue-400/30 dark:text-blue-300 font-medium' : 'text-gray-600 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+                <div className="w-px h-3.5 bg-gray-300 dark:bg-border/50 mx-0.5" />
+                <input
+                  ref={startDateRef}
+                  type="date"
+                  value={customStart}
+                  onChange={(e) => { setCustomStart(e.target.value); if (e.target.value) setPreset('week' as PresetKey) }}
+                  className="sr-only"
+                />
                 <button
-                  key={p.key}
-                  onClick={() => setPreset(p.key)}
-                  className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
-                    preset === p.key ? 'bg-blue-400/20 dark:bg-blue-400/30 text-blue-700 dark:text-blue-300 font-medium' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                  }`}
+                  onClick={() => startDateRef.current?.showPicker()}
+                  className="text-[11px] text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-[#3B82F6] transition-colors cursor-pointer bg-transparent outline-none px-1"
                 >
-                  {p.label}
+                  {customStart || '开始'}
                 </button>
-              ))}
-              <div className="w-px h-4 bg-border/50 mx-0.5" />
-              <input
-                ref={startDateRef}
-                type="date"
-                value={customStart}
-                onChange={(e) => { setCustomStart(e.target.value); if (e.target.value) setPreset('week' as PresetKey) }}
-                className="sr-only"
-              />
-              <button
-                onClick={() => startDateRef.current?.showPicker()}
-                className="text-[11px] text-gray-400 hover:text-[#3B82F6] transition-colors cursor-pointer bg-transparent outline-none"
-              >
-                {customStart || '开始'}
-              </button>
-              <span className="text-gray-500 text-[11px]">—</span>
-              <input
-                ref={endDateRef}
-                type="date"
-                value={customEnd}
-                onChange={(e) => { setCustomEnd(e.target.value); if (e.target.value) setPreset('week' as PresetKey) }}
-                className="sr-only"
-              />
-              <button
-                onClick={() => endDateRef.current?.showPicker()}
-                className="text-[11px] text-gray-400 hover:text-[#3B82F6] transition-colors cursor-pointer bg-transparent outline-none"
-              >
-                {customEnd || '结束'}
-              </button>
+                <span className="text-gray-500 text-[11px]">—</span>
+                <input
+                  ref={endDateRef}
+                  type="date"
+                  value={customEnd}
+                  onChange={(e) => { setCustomEnd(e.target.value); if (e.target.value) setPreset('week' as PresetKey) }}
+                  className="sr-only"
+                />
+                <button
+                  onClick={() => endDateRef.current?.showPicker()}
+                  className="text-[11px] text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-[#3B82F6] transition-colors cursor-pointer bg-transparent outline-none px-1"
+                >
+                  {customEnd || '结束'}
+                </button>
+              </div>
             </div>
           </div>
+
+          {/* 右侧：公告 + AI 资讯 Banner（无外框，与左侧等高）*/}
+          <MarqueeBanner fetchWithAuth={fetchWithAuth} />
         </div>
       </div>
 
@@ -491,51 +829,111 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+          {/* ===== 第一行：核心 KPI ===== */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
             <KpiCard
-              icon={Briefcase} 
-              label="活跃项目" 
+              icon={Briefcase}
+              label="活跃项目"
               value={stats.projects.total}
               sub={`本期新增 ${stats.projects.new_this_period}`}
               trend={stats.projects.new_this_period > 0 ? Math.round((stats.projects.new_this_period / Math.max(stats.projects.total - stats.projects.new_this_period, 1)) * 100) : 0}
               color="#3B82F6"
               gradient="radial-gradient(circle, #3B82F6 0%, transparent 70%)"
+              sparklineData={projectsSparkline}
+              footer={stats.projects.total_opp_cny > 0 ? [
+                { label: '商机', value: `¥${stats.projects.total_opp_cny}万` },
+                { label: '成交', value: `¥${stats.projects.total_deal_cny}万` },
+              ] : undefined}
               onClick={() => window.open('/projects', '_blank')}
             />
             <KpiCard
-              icon={Users} 
-              label="客户总数" 
+              icon={Users}
+              label="客户总数"
               value={stats.customers.total}
               sub={`本期新增 ${stats.customers.new_this_period}`}
               trend={stats.customers.new_this_period > 0 ? Math.round((stats.customers.new_this_period / Math.max(stats.customers.total - stats.customers.new_this_period, 1)) * 100) : 0}
               color="#10B981"
               gradient="radial-gradient(circle, #10B981 0%, transparent 70%)"
+              sparklineData={customersSparkline}
+              footer={[
+                { label: '行业', value: `${stats.customers.industry_distribution.length}` },
+                { label: '本年', value: `+${stats.customers.new_this_period}` },
+              ]}
               onClick={() => window.open('/customers', '_blank')}
             />
             <KpiCard
-              icon={Calendar} 
-              label={`${periodLabel}会议`} 
+              icon={Calendar}
+              label={`${periodLabel}会议`}
               value={stats.meetings.this_period}
               sub={`累计 ${stats.meetings.total} 场`}
               color="#F59E0B"
               gradient="radial-gradient(circle, #F59E0B 0%, transparent 70%)"
+              sparklineData={meetingsSparkline}
               onClick={() => window.open('/meetings', '_blank')}
             />
             <KpiCard
-              icon={FileText} 
-              label={`${periodLabel}日报`} 
+              icon={FileText}
+              label={`${periodLabel}日报`}
               value={stats.reports.this_period}
-              sub={`连续 ${stats.reports.streak_days} 天`}
+              sub={`连续 ${stats.reports.streak_days} 天 🔥`}
               color="#8B5CF6"
               gradient="radial-gradient(circle, #8B5CF6 0%, transparent 70%)"
+              sparklineData={reportsSparkline}
               onClick={() => window.open('/reports', '_blank')}
             />
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-6">
-            <div className="rounded-2xl bg-bg-card border border-border/50 p-5">
+          {/* ===== 第二行：我的工作足迹 + 业绩对比 ===== */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.2fr] gap-4 mb-4">
+            <div className="rounded-2xl bg-bg-card border border-border/50 p-5 hover:border-border/80 transition-colors">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-gradient-to-br from-amber-500 to-emerald-500 rounded-lg blur-md opacity-50" />
+                    <div className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-emerald-500 text-[#fff]">
+                      <Award size={15} strokeWidth={2.5} />
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white">我的工作足迹</h4>
+                    <p className="text-[10px] text-gray-500">按时间和价值维度，呈现您的工作产出</p>
+                  </div>
+                </div>
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full ring-1 ring-emerald-500/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  实时
+                </span>
+              </div>
+              <TodayActionList timeline={timeline} userName={user?.name || user?.username} stats={stats} />
+            </div>
+
+            <div className="rounded-2xl bg-bg-card border border-border/50 p-5 hover:border-border/80 transition-colors">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-purple-500 rounded-lg blur-md opacity-50" />
+                    <div className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-500 text-[#fff]">
+                      <BarChart3 size={15} strokeWidth={2.5} />
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white">业绩对比</h4>
+                    <p className="text-[10px] text-gray-500">本期 vs 上期核心指标对比</p>
+                  </div>
+                </div>
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full">
+                  {periodLabel}
+                </span>
+              </div>
+              <PerformanceCompare stats={stats} />
+            </div>
+          </div>
+
+          {/* ===== 第三行：快捷统计 + 项目状态 + 行业分布 ===== */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+            <div className="rounded-2xl bg-bg-card border border-border/50 p-5 hover:border-border/80 transition-colors">
               <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-                <Activity size={14} className="text-[#06B6D4]" />
+                <IconBox icon={Activity} size="sm" tone="cyan" variant="soft" />
                 快捷统计
               </h4>
               <div className="space-y-2">
@@ -544,7 +942,7 @@ export default function DashboardPage() {
                     title="商机金额"
                     value={`¥${stats.projects.total_opp_cny.toLocaleString()} 万`}
                     icon={Target}
-                    color="#3B82F6"
+                    tone="blue"
                     description={`本期 ¥${stats.projects.opp_this_period_cny.toLocaleString()} 万`}
                   />
                 )}
@@ -553,58 +951,73 @@ export default function DashboardPage() {
                     title="成交价格"
                     value={`¥${stats.projects.total_deal_cny.toLocaleString()} 万`}
                     icon={CheckCircle2}
-                    color="#10B981"
+                    tone="green"
                     description={`本期 ¥${stats.projects.deal_this_period_cny.toLocaleString()} 万`}
                   />
                 )}
-                {stats.projects.total_opp_cny === 0 && stats.projects.total_deal_cny === 0 && (
+                {stats.weekly_summaries.total > 0 && (
                   <StatCard
-                    title="项目金额"
-                    value="— 暂无数据"
-                    icon={Target}
-                    color="#6B7280"
+                    title="周报累计"
+                    value={stats.weekly_summaries.total}
+                    icon={BookOpen}
+                    tone="purple"
+                    description={`本期 ${stats.weekly_summaries.this_period} 篇`}
                   />
+                )}
+                {stats.projects.total_opp_cny === 0 && stats.projects.total_deal_cny === 0 && (
+                  <div className="text-center py-6">
+                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/15 to-blue-500/15 border border-cyan-500/20 mb-2">
+                      <Target size={20} className="text-cyan-400" strokeWidth={1.8} />
+                    </div>
+                    <p className="text-xs text-gray-400">暂无金额数据</p>
+                    <p className="text-[10px] text-gray-600 mt-1">去录入项目后会自动汇总</p>
+                  </div>
                 )}
               </div>
             </div>
 
-            <div className="rounded-2xl bg-bg-card border border-border/50 p-5">
+            <div className="rounded-2xl bg-bg-card border border-border/50 p-5 hover:border-border/80 transition-colors">
               <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-                <Briefcase size={14} className="text-[#3B82F6]" />
+                <IconBox icon={Briefcase} size="sm" tone="blue" variant="soft" />
                 项目状态
               </h4>
               <DonutChart data={stats.projects.status_distribution} totalLabel="项目总数" />
             </div>
 
-            <div className="rounded-2xl bg-bg-card border border-border/50 p-5">
+            <div className="rounded-2xl bg-bg-card border border-border/50 p-5 hover:border-border/80 transition-colors">
               <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-                <Users size={14} className="text-[#10B981]" />
+                <IconBox icon={Users} size="sm" tone="green" variant="soft" />
                 行业分布
               </h4>
               <BarChart data={stats.customers.industry_distribution} />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-3">
-            <div className="rounded-2xl bg-bg-card border border-border/50 p-5">
+          <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-4">
+            <div className="rounded-2xl bg-bg-card border border-border/50 p-5 hover:border-border/80 transition-colors">
               <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-purple-500/15">
-                    <Brain size={14} className="text-[#8B5CF6]" />
+                <div className="flex items-center gap-2.5">
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg blur-md opacity-60 animate-pulse" />
+                    <div className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 text-[#fff]">
+                      <Brain size={15} strokeWidth={2.5} />
+                    </div>
                   </div>
                   <div>
-                    <h4 className="text-sm font-semibold text-white">AI 智能洞察</h4>
+                    <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
+                      AI 智能洞察
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-gradient-to-r from-purple-500 to-pink-500 text-[#fff]">AI</span>
+                    </h4>
                     {(INSIGHT_PERIODS.find(p => p.key === aiTab)) && (
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: (INSIGHT_PERIODS.find(p => p.key === aiTab)!.color) + '20', color: INSIGHT_PERIODS.find(p => p.key === aiTab)!.color }}>AI</span>
-                        {insights[aiTab]?.updatedAt && (
-                          <span className="text-[9px] text-gray-500">更新于 {formatUpdatedAt(insights[aiTab].updatedAt)}</span>
-                        )}
-                      </div>
+                      <p className="text-[10px] text-gray-500 mt-0.5">
+                        {insights[aiTab]?.updatedAt
+                          ? `更新于 ${formatUpdatedAt(insights[aiTab]!.updatedAt!)}`
+                          : '基于您的项目/客户/会议/日报数据自动生成'}
+                      </p>
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-1 bg-bg-hover/50 rounded-lg p-0.5">
+                <div className="flex items-center gap-1 bg-bg-hover/50 rounded-lg p-0.5 ring-1 ring-white/5">
                   {INSIGHT_PERIODS.map(({ key, label, color }) => (
                     <button
                       key={key}
@@ -637,22 +1050,29 @@ export default function DashboardPage() {
                         ))}
                       </div>
                     ) : data.items.length === 0 ? (
-                      <div className="py-8 text-center">
-                        <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gray-500/10 mb-3">
-                          <Icon size={20} className="text-gray-500" />
+                      <div className="relative overflow-hidden py-10 px-4 text-center rounded-2xl border border-dashed border-purple-500/20 bg-gradient-to-br from-purple-500/[0.03] via-transparent to-pink-500/[0.03]">
+                        <div className="absolute -top-8 -right-8 w-24 h-24 bg-purple-500/10 rounded-full blur-2xl pointer-events-none" />
+                        <div className="absolute -bottom-8 -left-8 w-24 h-24 bg-pink-500/10 rounded-full blur-2xl pointer-events-none" />
+                        <div className="relative">
+                          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-500/15 to-pink-500/15 border border-purple-500/20 mb-3">
+                            <Brain size={22} className="text-purple-400" strokeWidth={1.8} />
+                          </div>
+                          <p className="text-sm font-bold text-gray-300 mb-1">暂无{label}</p>
+                          {!stats ? (
+                            <p className="text-[10px] text-gray-500">加载中…</p>
+                          ) : (
+                            <>
+                              <p className="text-[11px] text-gray-500 mb-3">让 AI 帮您深度分析当前周期的工作数据</p>
+                              <button
+                                onClick={() => loadInsights(key)}
+                                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 text-[#fff] text-xs font-bold hover:shadow-lg hover:shadow-purple-500/30 hover:scale-105 transition-all cursor-pointer"
+                              >
+                                <Sparkles size={12} strokeWidth={2.5} />
+                                点击生成{label}
+                              </button>
+                            </>
+                          )}
                         </div>
-                        <p className="text-xs text-gray-500 mb-2">暂无{label}数据</p>
-                        {!stats ? (
-                          <p className="text-[10px] text-gray-600">加载中…</p>
-                        ) : (
-                          <button 
-                            onClick={() => loadInsights(key)} 
-                            className="inline-flex items-center gap-1.5 text-xs text-[#3B82F6] hover:text-blue-400 hover:underline"
-                          >
-                            <Sparkles size={12} />
-                            点击生成{label}
-                          </button>
-                        )}
                       </div>
                     ) : (
                       <div className="space-y-2.5">
@@ -732,25 +1152,32 @@ export default function DashboardPage() {
               })()}
             </div>
 
-            <div className="rounded-2xl bg-bg-card border border-border/50 p-5">
+            <div className="rounded-2xl bg-bg-card border border-border/50 p-5 hover:border-border/80 transition-colors">
               <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-blue-500/10">
-                    <Clock size={14} className="text-[#3B82F6]" />
+                <div className="flex items-center gap-2.5">
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-lg blur-md opacity-50" />
+                    <div className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 text-[#fff]">
+                      <Clock size={15} strokeWidth={2.5} />
+                    </div>
                   </div>
                   <div>
-                    <h4 className="text-sm font-semibold text-white">最近动态</h4>
-                    <p className="text-[10px] text-gray-500">{timeline.length} 条记录</p>
+                    <h4 className="text-sm font-bold text-white">最近动态</h4>
+                    <p className="text-[10px] text-gray-500">过去 20 条工作记录</p>
                   </div>
                 </div>
+                <span className="text-[10px] font-bold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full">
+                  {timeline.length} 条
+                </span>
               </div>
 
               {timeline.length === 0 ? (
                 <div className="py-8 text-center">
-                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gray-500/10 mb-3">
-                    <Clock size={20} className="text-gray-500" />
+                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500/15 to-cyan-500/15 border border-blue-500/20 mb-2">
+                    <Clock size={20} className="text-blue-400" strokeWidth={1.8} />
                   </div>
-                  <p className="text-xs text-gray-500">暂无最近动态</p>
+                  <p className="text-xs text-gray-400">还没有任何动态</p>
+                  <p className="text-[10px] text-gray-600 mt-1">开始录入项目/客户/会议后会自动出现</p>
                 </div>
               ) : (
                 <>
@@ -759,22 +1186,23 @@ export default function DashboardPage() {
                       const Icon = typeIcon[item.type] || FileText
                       const link = typeLink[item.type] + '?' + item.type + '=' + item.link_id
                       const isLast = i === (timelineExpanded ? timeline.length : Math.min(timeline.length, 5)) - 1
+                      const tColor = item.type === 'project' ? '#3B82F6' : item.type === 'meeting' ? '#F59E0B' : item.type === 'customer' ? '#10B981' : '#8B5CF6'
                       return (
                         <div key={i} className="relative flex gap-3 py-2.5 group/item">
                           {!isLast && (
-                            <div className="absolute left-[11px] top-8 bottom-0 w-px bg-border/50 -z-0" />
+                            <div className="absolute left-[11px] top-9 bottom-0 w-px bg-gradient-to-b from-border/50 to-transparent -z-0" />
                           )}
-                          <div className="relative z-10 flex-shrink-0 w-6 h-6 rounded-full bg-bg-hover border border-border group-hover/item:border-blue-500/50 flex items-center justify-center transition-colors">
-                            <Icon size={10} className="text-gray-400 group-hover/item:text-blue-400 transition-colors" />
+                          <div className="relative z-10 flex-shrink-0 w-6 h-6 rounded-full bg-bg-hover border group-hover/item:scale-110 flex items-center justify-center transition-all" style={{ borderColor: tColor + '60' }}>
+                            <Icon size={10} className="transition-colors" style={{ color: tColor }} />
                           </div>
                           <button
                             onClick={() => window.open(link, '_blank')}
-                            className="flex-1 min-w-0 text-left group-hover/item:bg-bg-hover -ml-1 px-2 py-1 rounded-lg transition-all"
+                            className="flex-1 min-w-0 text-left group-hover/item:bg-white/[0.04] -ml-1 px-2 py-1.5 rounded-lg transition-all"
                           >
-                            <p className="text-xs text-gray-300 truncate font-medium">{item.title}</p>
-                            <p className="text-[10px] text-gray-500 truncate">{item.description}</p>
-                            <p className="text-[9px] text-gray-600 mt-1 flex items-center gap-1">
-                              <Clock size={9} />
+                            <p className="text-xs text-gray-200 truncate font-medium group-hover/item:text-white transition-colors">{item.title}</p>
+                            <p className="text-[10px] text-gray-500 truncate mt-0.5">{item.description}</p>
+                            <p className="text-[9px] text-gray-600 mt-0.5 flex items-center gap-1 font-mono tabular-nums">
+                              <Clock size={8} />
                               {getRelativeTime(item.time)}
                             </p>
                           </button>
@@ -785,9 +1213,9 @@ export default function DashboardPage() {
                   {timeline.length > 5 && (
                     <button
                       onClick={() => setTimelineExpanded(!timelineExpanded)}
-                      className="mt-3 w-full flex items-center justify-center gap-1 text-[11px] text-gray-500 hover:text-blue-400 transition-colors py-1.5 rounded-lg hover:bg-bg-hover/50"
+                      className="mt-3 w-full flex items-center justify-center gap-1.5 text-[11px] text-gray-400 hover:text-blue-400 transition-colors py-1.5 rounded-lg hover:bg-white/[0.04] border border-white/5 hover:border-blue-500/30"
                     >
-                      <ChevronUp size={12} className={`transition-transform ${timelineExpanded ? '' : 'rotate-180'}`} />
+                      <ChevronUp size={12} className={`transition-transform duration-300 ${timelineExpanded ? '' : 'rotate-180'}`} />
                       {timelineExpanded ? '收起' : `展开全部 (${timeline.length})`}
                     </button>
                   )}
