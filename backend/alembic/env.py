@@ -23,7 +23,7 @@ if config.config_file_name is not None:
 from sqlmodel import SQLModel
 from app.models import (  # noqa: F401
     User, DailyReport, Customer, Project, MeetingNote, ScheduledTask,
-    ModelProvider, TaskModelConfig, ProviderModel, FieldOption,
+    ModelProvider, TaskModelConfig, ProviderModel, ModelParamPreset, FieldOption,
     ChatConversation, ChatMessage, SystemPreference, LogEntry,
     AIPrompt, WeeklySummary,
     # Wiki 模型

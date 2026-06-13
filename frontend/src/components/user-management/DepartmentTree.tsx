@@ -1,10 +1,11 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { Loader2, Plus, Building2 } from 'lucide-react'
 import { useToast } from '../../contexts/ToastContext'
 import type { DepartmentTreeNode } from '../../services/types'
 import {
   useDepartmentTreeQuery,
   useDeleteDepartmentMutation,
+  useMoveDepartmentMutation,
 } from '../../hooks/useUserManagementQueries'
 import { DepartmentTreeNodeComponent } from './DepartmentTreeNode'
 import { DepartmentFormModal } from './DepartmentFormModal'
@@ -15,21 +16,36 @@ interface DepartmentTreeProps {
   onDepartmentSelect: (id: number | null) => void
 }
 
+function buildDescendantsMap(nodes: DepartmentTreeNode[]): Record<number, Set<number>> {
+  const map: Record<number, Set<number>> = {}
+  const walk = (n: DepartmentTreeNode, ancestors: Set<number>) => {
+    for (const a of ancestors) {
+      if (!map[a]) map[a] = new Set()
+      map[a].add(n.id)
+    }
+    const next = new Set(ancestors)
+    next.add(n.id)
+    if (n.children?.length) for (const c of n.children) walk(c, next)
+  }
+  for (const root of nodes) walk(root, new Set())
+  return map
+}
+
 export function DepartmentTree({ selectedDepartmentId, onDepartmentSelect }: DepartmentTreeProps) {
   const { confirm: showConfirm } = useToast()
 
   const { data: tree = [], isLoading } = useDepartmentTreeQuery()
   const deleteMutation = useDeleteDepartmentMutation()
+  const moveMutation = useMoveDepartmentMutation()
 
   const [showFormModal, setShowFormModal] = useState(false)
   const [editingDepartment, setEditingDepartment] = useState<DepartmentTreeNode | null>(null)
   const [parentIdForNew, setParentIdForNew] = useState<number | null>(null)
-
-  // 角色配置弹窗
   const [roleConfigNode, setRoleConfigNode] = useState<DepartmentTreeNode | null>(null)
 
+  const descendantsMap = useMemo(() => buildDescendantsMap(tree), [tree])
+
   const handleSelect = useCallback((id: number) => {
-    // 点击已选中的节点取消选择
     onDepartmentSelect(selectedDepartmentId === id ? null : id)
   }, [selectedDepartmentId, onDepartmentSelect])
 
@@ -63,13 +79,20 @@ export function DepartmentTree({ selectedDepartmentId, onDepartmentSelect }: Dep
     }
   }, [showConfirm, deleteMutation, selectedDepartmentId, onDepartmentSelect])
 
+  const handleMove = useCallback(async (deptId: number, newParentId: number | null) => {
+    if (newParentId !== null && descendantsMap[deptId]?.has(newParentId)) {
+      return
+    }
+    moveMutation.mutate({ deptId, newParentId })
+  }, [moveMutation, descendantsMap])
+
   return (
     <div className="w-[260px] shrink-0 flex flex-col rounded-xl bg-bg-card border border-gray-200 dark:border-border/30 overflow-hidden shadow-sm">
-      {/* 头部 */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-border/20 shrink-0">
         <div className="flex items-center gap-2">
           <Building2 size={16} className="text-accent-blue" />
           <span className="text-sm font-bold text-gray-800 dark:text-gray-200">组织架构</span>
+          <span className="text-[10px] text-gray-400 dark:text-gray-500 ml-1" title="按住行首拖动图标可调整上级">可拖拽改父</span>
         </div>
         <button
           onClick={openCreateRoot}
@@ -80,7 +103,6 @@ export function DepartmentTree({ selectedDepartmentId, onDepartmentSelect }: Dep
         </button>
       </div>
 
-      {/* 树列表 */}
       <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-12 text-gray-400">
@@ -104,12 +126,13 @@ export function DepartmentTree({ selectedDepartmentId, onDepartmentSelect }: Dep
               onEdit={openEdit}
               onDelete={handleDelete}
               onRoleConfig={openRoleConfig}
+              onMove={handleMove}
+              descendantsMap={descendantsMap}
             />
           ))
         )}
       </div>
 
-      {/* 部门表单弹窗 */}
       <DepartmentFormModal
         isOpen={showFormModal}
         editingDepartment={editingDepartment}
@@ -118,7 +141,6 @@ export function DepartmentTree({ selectedDepartmentId, onDepartmentSelect }: Dep
         onClose={() => setShowFormModal(false)}
       />
 
-      {/* 部门角色配置弹窗 */}
       <DepartmentRoleModal
         isOpen={roleConfigNode !== null}
         departmentId={roleConfigNode?.id ?? null}

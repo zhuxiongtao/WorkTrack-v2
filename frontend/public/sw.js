@@ -1,7 +1,7 @@
 // WorkTrack Service Worker
-// 策略：Network First + 离线回退缓存
+// 策略：Network First + 离线回退缓存（仅生产环境生效，dev 不注册）
 
-const CACHE_NAME = 'worktrack-v1';
+const CACHE_NAME = 'worktrack-v2'; // 版本号提升 → 旧缓存自动失效
 const PRE_CACHE = ['/', '/api/v1/settings/branding/manifest', '/api/v1/settings/branding/apple-touch-icon'];
 
 // 安装：预缓存核心资源
@@ -24,7 +24,7 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// 请求拦截：API 走网络，静态资源缓存回退
+// 请求拦截
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
@@ -33,12 +33,18 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 静态资源：Network First + 缓存回退
+  // 仅缓存 GET 请求
+  if (event.request.method !== 'GET') {
+    return;
+  }
+
+  // HTML 文档：Network First，回退到缓存（离线场景）
+  // JS/CSS/图片等静态资源：Network First
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // 缓存成功的 GET 响应
-        if (event.request.method === 'GET' && response.ok) {
+        // 仅缓存同源且成功的响应
+        if (response.ok && url.origin === self.location.origin) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, clone);

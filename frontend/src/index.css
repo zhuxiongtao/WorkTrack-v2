@@ -89,6 +89,8 @@ html {
 [data-theme="light"] .bg-amber-500 *,
 [data-theme="light"] .bg-violet-500,
 [data-theme="light"] .bg-violet-500 *,
+[data-theme="light"] .from-\[\#3B82F6\].to-\[\#8B5CF6\],
+[data-theme="light"] .from-\[\#3B82F6\].to-\[\#8B5CF6\] *,
 [data-theme="light"] .text-white-force {
   color: #ffffff !important;
 }
@@ -265,3 +267,74 @@ body {
     width: 100% !important;
   }
 }
+
+/* ===== 全局动画 ===== */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.animate-fadeIn  { animation: fadeIn  0.22s ease-out both; }
+.animate-scaleIn { animation: scaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+/* ===== 上下滚动 banner（ticker）=====
+   - 列表形式：固定高度视口 + 复制一份实现无缝循环
+   - 50% 时刚好走完第一份回到起点（视觉上无缝衔接）
+   - duration 按条目数 / 速度线性增长：12 条 × 26px = 312px，30s 走完 ≈ 10.4px/s */
+@keyframes scrollUp {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-50%); }
+}
+.animate-scroll-up {
+  animation: scrollUp 30s linear infinite;
+  will-change: transform;
+}
+.animate-scroll-up:hover {
+  animation-play-state: paused;
+}
+
+/* 上下渐隐遮罩，让边缘的滚动条有"被裁掉"的视觉感 */
+.ticker-mask {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 14px,
+    #000 calc(100% - 14px),
+    transparent 100%
+  );
+          mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 14px,
+    #000 calc(100% - 14px),
+    transparent 100%
+  );
+}
+
+/* ===== 表单输入统一样式 ===== */
+.form-input {
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  border-radius: 0.75rem;
+  background-color: #ffffff;
+  border: 1px solid rgb(229, 231, 235);
+  font-size: 0.8125rem;
+  color: rgb(31, 41, 55);
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
+  font-weight: 500;
+}
+.form-input::placeholder { color: rgb(156, 163, 175); }
+.form-input:focus {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+:root[data-theme="dark"] .form-input {
+  background-color: var(--bg-input);
+  border-color: var(--border);
+  color: rgb(229, 231, 235);
+}
+:root[data-theme="dark"] .form-input::placeholder { color: rgb(107, 114, 128); }

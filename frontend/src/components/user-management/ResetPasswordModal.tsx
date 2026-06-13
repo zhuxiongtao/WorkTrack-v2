@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Key, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useResetPasswordMutation } from '../../hooks/useUserManagementQueries'
 import type { UserData } from '../../services/types'
@@ -21,8 +22,8 @@ export function ResetPasswordModal({ isOpen, user, onClose }: ResetPasswordModal
     mutation.mutate({ id: user.id, newPassword }, { onSuccess: onClose })
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4" onClick={onClose}>
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 px-4 py-6" onClick={onClose}>
       <div className="w-full max-w-sm rounded-2xl bg-bg-card border border-gray-150 dark:border-border/50 shadow-2xl p-6 animate-scaleIn" onClick={e => e.stopPropagation()}>
         <div className="flex items-center gap-2 mb-2">
           <div className="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center text-amber-650 dark:text-amber-500">
@@ -48,12 +49,12 @@ export function ResetPasswordModal({ isOpen, user, onClose }: ResetPasswordModal
         </div>
 
         <div className="flex gap-2">
-          <button onClick={onClose} className="flex-1 py-2 rounded-lg bg-bg-hover hover:bg-gray-200 text-xs text-gray-500 hover:text-gray-850 dark:text-gray-400 dark:hover:text-gray-200 border border-gray-200 dark:border-border/30 transition-colors cursor-pointer font-semibold shadow-sm">取消</button>
+          <button onClick={onClose} className="flex-1 py-2 rounded-lg bg-bg-hover hover:bg-gray-200 text-xs text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 border border-gray-200 dark:border-border/30 transition-colors cursor-pointer font-semibold shadow-sm">取消</button>
           <button onClick={handleReset} disabled={!newPassword.trim() || mutation.isPending} className="flex-1 py-2 rounded-lg bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 disabled:opacity-40 transition-colors cursor-pointer shadow-sm">
             {mutation.isPending ? <Loader2 size={13} className="animate-spin mx-auto" /> : '确认强制重置'}
           </button>
         </div>
       </div>
     </div>
-  )
+  , document.body)
 }

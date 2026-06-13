@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Save, Loader2, UserCog } from 'lucide-react'
 import { useToast } from '../../contexts/ToastContext'
 import type { DepartmentTreeNode, DepartmentFlat } from '../../services/types'
@@ -125,9 +126,9 @@ export function DepartmentFormModal({ isOpen, editingDepartment, parentDepartmen
 
   if (!isOpen) return null
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="w-full max-w-md bg-bg-card rounded-2xl shadow-2xl border border-gray-200 dark:border-border/30 mx-4 animate-fadeIn">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 px-4 py-6" onClick={onClose}>
+      <div className="w-full max-w-md max-h-[90vh] rounded-2xl bg-bg-card border border-gray-150 dark:border-border/50 shadow-2xl flex flex-col overflow-hidden animate-scaleIn" onClick={e => e.stopPropagation()}>
         {/* 标题栏 */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-border/20">
           <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
@@ -219,5 +220,5 @@ export function DepartmentFormModal({ isOpen, editingDepartment, parentDepartmen
         </div>
       </div>
     </div>
-  )
+  , document.body)
 }

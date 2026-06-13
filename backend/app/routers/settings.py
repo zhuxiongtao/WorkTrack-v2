@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select, or_, func
 from pydantic import BaseModel
 from app.database import get_session
-from app.models.model_provider import ModelProvider, TaskModelConfig, ProviderModel
+from app.models.model_provider import ModelProvider, TaskModelConfig, ProviderModel, ModelParamPreset
 from app.models.field_option import FieldOption
 from app.models.system_preference import SystemPreference
 from app.models.ai_prompt import AIPrompt
@@ -149,9 +149,103 @@ def delete_provider(provider_id: int, db: Session = Depends(get_session),
 
 # ===== 供应商模型 CRUD =====
 
+# 完整的模型参数字段（创建/更新共用）
+_MODEL_PARAM_FIELDS = {
+    # 基础采样
+    "default_temperature": (Optional[float], None),
+    "default_top_p": (Optional[float], None),
+    "default_max_tokens": (Optional[int], None),
+    "default_frequency_penalty": (Optional[float], None),
+    "default_presence_penalty": (Optional[float], None),
+    "default_stop": (Optional[str], None),
+    # 思考 / 推理
+    "default_thinking_mode": (Optional[str], None),
+    "default_thinking_budget": (Optional[int], None),
+    # 输出控制
+    "default_response_format": (Optional[str], None),
+    "default_json_schema": (Optional[str], None),
+    # 能力标签
+    "context_window": (Optional[int], None),
+    "supports_streaming": (Optional[bool], None),
+    "supports_function_calling": (Optional[bool], None),
+    "supports_vision": (Optional[bool], None),
+    "supports_json_mode": (Optional[bool], None),
+    "supports_thinking": (Optional[bool], None),
+    "supports_system_prompt": (Optional[bool], None),
+    # 元数据
+    "extra_params_json": (Optional[str], None),
+    "description": (Optional[str], None),
+    "tags": (Optional[str], None),
+}
+
+
 class ModelAdd(BaseModel):
     model_name: str
     model_type: str = "chat"
+    # P1 多模态：列出该模型可执行的所有 task_type
+    # 留空则按 model_name 自动推断（chat 兜底 + vision 关键词 → 加 vision）
+    supported_task_types: Optional[list[str]] = None
+    # 默认参数（全部可选，向后兼容老接口）
+    default_temperature: Optional[float] = None
+    default_top_p: Optional[float] = None
+    default_max_tokens: Optional[int] = None
+    default_frequency_penalty: Optional[float] = None
+    default_presence_penalty: Optional[float] = None
+    default_stop: Optional[str] = None
+    default_thinking_mode: Optional[str] = None
+    default_thinking_budget: Optional[int] = None
+    default_response_format: Optional[str] = None
+    default_json_schema: Optional[str] = None
+    context_window: Optional[int] = None
+    supports_streaming: Optional[bool] = None
+    supports_function_calling: Optional[bool] = None
+    supports_vision: Optional[bool] = None
+    supports_json_mode: Optional[bool] = None
+    supports_thinking: Optional[bool] = None
+    supports_system_prompt: Optional[bool] = None
+    extra_params_json: Optional[str] = None
+    description: Optional[str] = None
+    tags: Optional[str] = None
+
+
+def _serialize_model(m: ProviderModel) -> dict:
+    """完整序列化 ProviderModel（含 P0 新字段）"""
+    # P1 多模态：把 JSON 字符串反序列化成 list
+    stt = m.supported_task_types
+    if isinstance(stt, str) and stt:
+        try:
+            stt = json.loads(stt)
+        except Exception:
+            stt = [stt]
+    if not stt:
+        stt = backward_compat_task_types(m.model_type or "chat", m.model_name)
+    return {
+        "id": m.id,
+        "model_name": m.model_name,
+        "model_type": m.model_type,
+        "supported_task_types": stt,
+        "created_at": m.created_at.isoformat() if m.created_at else None,
+        "default_temperature": m.default_temperature,
+        "default_top_p": m.default_top_p,
+        "default_max_tokens": m.default_max_tokens,
+        "default_frequency_penalty": m.default_frequency_penalty,
+        "default_presence_penalty": m.default_presence_penalty,
+        "default_stop": m.default_stop,
+        "default_thinking_mode": m.default_thinking_mode,
+        "default_thinking_budget": m.default_thinking_budget,
+        "default_response_format": m.default_response_format,
+        "default_json_schema": m.default_json_schema,
+        "context_window": m.context_window,
+        "supports_streaming": m.supports_streaming,
+        "supports_function_calling": m.supports_function_calling,
+        "supports_vision": m.supports_vision,
+        "supports_json_mode": m.supports_json_mode,
+        "supports_thinking": m.supports_thinking,
+        "supports_system_prompt": m.supports_system_prompt,
+        "extra_params_json": m.extra_params_json,
+        "description": m.description,
+        "tags": m.tags,
+    }
 
 
 def _guess_model_type(name: str) -> str:
@@ -170,17 +264,82 @@ def _guess_model_type(name: str) -> str:
         "gemini-2.5", "gemini-2.0", "gemini-1.5",
         "gpt-4o", "gpt-4-turbo", "gpt-4-vision",
         "claude-3", "claude-4",
-        "qwen-vl", "qwen2-vl", "qwen3",
+        "qwen-vl", "qwen2-vl",
         "glm-4v", "internvl", "minicpm-v",
+        "mimo-v2-omni",
     ]):
         return "vision"
     return "chat"
 
 
+# ===== 多模态支持：模型可执行的 task_type 列表 =====
+# 一个模型可以是多模态（如 Gemini 3 flash 同时是 chat + vision）
+# 这个 list 决定它能绑定到哪些 task_type
+MULTIMODAL_VISION_KEYWORDS = [
+    "vision", "vl-", "image", "ocr", "video", "kolors", "wan-",
+    "gemini",            # 全系 Gemini 1.0/1.5/2.0/2.5/3.0 都支持 vision
+    "gpt-4o", "gpt-4-turbo", "gpt-4-vision",
+    "claude-3", "claude-4",
+    "qwen-vl", "qwen2-vl", "qwen2.5-vl", "qvq",
+    "glm-4v", "glm-4.1v", "glm-4.5v",
+    "internvl",
+    "minicpm-v",
+    "mimo-v2-omni",
+    "doubao-1.5-vision", "doubao-vision",
+    "step-1v", "step-1o",
+    "yi-vision", "yi-vl",
+]
+SPEECH_KEYWORDS = ["asr", "speech", "transcribe", "whisper", "transcriber", "parakeet", "sensevoice"]
+EMBEDDING_KEYWORDS = ["embed", "bge-", "bce-", "m3e-", "bge-m3"]
+SEARCH_KEYWORDS = ["search", "tavily", "serp", "crawl"]
+
+
+def infer_supported_task_types(name: str) -> list[str]:
+    """
+    根据模型名推断它可执行的 task_type 列表。
+
+    返回：['chat', 'vision'] / ['embedding'] / ['speech_to_text'] 等
+    永远包含 'chat' 兜底（除非是纯 embedding/asr）。
+    """
+    low = (name or "").lower()
+    if not low:
+        return ["chat"]
+    types: list[str] = []
+    # 1) embedding
+    if any(k in low for k in EMBEDDING_KEYWORDS):
+        return ["embedding"]
+    # 2) speech_to_text
+    if any(k in low for k in SPEECH_KEYWORDS):
+        return ["speech_to_text"]
+    # 3) vision
+    has_vision = any(k in low for k in MULTIMODAL_VISION_KEYWORDS)
+    # 4) 默认 chat
+    types.append("chat")
+    if has_vision:
+        types.append("vision")
+    return types
+
+
+def backward_compat_task_types(model_type: str, model_name: str) -> list[str]:
+    """
+    老数据迁移：根据 model_type 字段（单选枚举）回填 supported_task_types
+    优先用 infer，没有再用 model_type 兜底。
+    """
+    if model_type in ("vision",):
+        return ["chat", "vision"]
+    if model_type in ("speech_to_text",):
+        return ["speech_to_text"]
+    if model_type in ("embedding",):
+        return ["embedding"]
+    if model_type in ("web_search",):
+        return ["chat"]
+    return infer_supported_task_types(model_name)
+
+
 @router.get("/providers/{provider_id}/models")
 def list_provider_models(provider_id: int, db: Session = Depends(get_session),
                          current_user: User = Depends(get_current_user)):
-    """获取供应商下已配置的模型列表"""
+    """获取供应商下已配置的模型列表（含默认参数）"""
     provider = db.get(ModelProvider, provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="供应商不存在")
@@ -189,13 +348,13 @@ def list_provider_models(provider_id: int, db: Session = Depends(get_session),
     models = db.exec(
         select(ProviderModel).where(ProviderModel.provider_id == provider_id).order_by(ProviderModel.created_at)
     ).all()
-    return [{"id": m.id, "model_name": m.model_name, "model_type": m.model_type, "created_at": m.created_at.isoformat()} for m in models]
+    return [_serialize_model(m) for m in models]
 
 
 @router.post("/providers/{provider_id}/models", status_code=201)
 def add_provider_model(provider_id: int, data: ModelAdd, db: Session = Depends(get_session),
                        current_user: User = Depends(get_current_user)):
-    """给供应商添加一个模型"""
+    """给供应商添加一个模型（可携带默认参数）"""
     provider = db.get(ModelProvider, provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="供应商不存在")
@@ -212,11 +371,40 @@ def add_provider_model(provider_id: int, data: ModelAdd, db: Session = Depends(g
     if existing:
         raise HTTPException(status_code=409, detail="该模型已存在")
     mtype = data.model_type if data.model_type != "chat" else _guess_model_type(data.model_name)
-    model = ProviderModel(provider_id=provider_id, model_name=data.model_name, model_type=mtype)
+    # P1 多模态：决定 supported_task_types
+    # 优先级：用户显式传 > model_name 推断
+    if data.supported_task_types:
+        supported = data.supported_task_types
+    else:
+        # 用 _guess_model_type 决定的 mtype 反推 + name 推断
+        supported = infer_supported_task_types(data.model_name)
+        # 推断的 chat 默认要包含 model_type（避免老 vision-only 模型升级后丢了 vision 标签）
+        if mtype == "vision" and "vision" not in supported:
+            supported.append("vision")
+    # 自动按模型名推断能力（如果用户没显式设）
+    from app.services.param_resolver import detect_capabilities_from_name
+    detected = detect_capabilities_from_name(data.model_name)
+    payload = data.model_dump(exclude={"model_name", "model_type", "supported_task_types"})
+    # 合并 detected（用户显式 None 优先，detected 只在用户未填时填入）
+    for k, v in detected.items():
+        if payload.get(k) is None and v is not None:
+            payload[k] = v
+    # 兜底一致性：若 supported_task_types 含 vision / speech_to_text / embedding
+    # 且对应 supports_* 仍为 None 或 False，强制打开（防止命名不在关键词表里被误判）
+    stt_lower = {s.lower() for s in (supported or [])}
+    if "vision" in stt_lower and not payload.get("supports_vision"):
+        payload["supports_vision"] = True
+    model = ProviderModel(
+        provider_id=provider_id,
+        model_name=data.model_name,
+        model_type=mtype,
+        supported_task_types=json.dumps(supported, ensure_ascii=False) if supported else None,
+        **payload,
+    )
     db.add(model)
     db.commit()
     db.refresh(model)
-    return {"id": model.id, "model_name": model.model_name, "model_type": model.model_type}
+    return _serialize_model(model)
 
 
 @router.delete("/providers/{provider_id}/models/{model_id}", status_code=204)
@@ -233,6 +421,16 @@ def remove_provider_model(provider_id: int, model_id: int, db: Session = Depends
     model = db.get(ProviderModel, model_id)
     if not model or model.provider_id != provider_id:
         raise HTTPException(status_code=404, detail="模型不存在")
+    # 清理引用该模型的 TaskModelConfig
+    model_name = model.model_name
+    stale_cfgs = db.exec(
+        select(TaskModelConfig).where(
+            TaskModelConfig.provider_id == provider_id,
+            TaskModelConfig.model_name == model_name,
+        )
+    ).all()
+    for cfg in stale_cfgs:
+        db.delete(cfg)
     db.delete(model)
     db.commit()
 
@@ -240,12 +438,35 @@ def remove_provider_model(provider_id: int, model_id: int, db: Session = Depends
 class ModelUpdate(BaseModel):
     model_type: Optional[str] = None
     model_name: Optional[str] = None
+    # P1 多模态
+    supported_task_types: Optional[list[str]] = None
+    # 默认参数（全部可选）
+    default_temperature: Optional[float] = None
+    default_top_p: Optional[float] = None
+    default_max_tokens: Optional[int] = None
+    default_frequency_penalty: Optional[float] = None
+    default_presence_penalty: Optional[float] = None
+    default_stop: Optional[str] = None
+    default_thinking_mode: Optional[str] = None
+    default_thinking_budget: Optional[int] = None
+    default_response_format: Optional[str] = None
+    default_json_schema: Optional[str] = None
+    context_window: Optional[int] = None
+    supports_streaming: Optional[bool] = None
+    supports_function_calling: Optional[bool] = None
+    supports_vision: Optional[bool] = None
+    supports_json_mode: Optional[bool] = None
+    supports_thinking: Optional[bool] = None
+    supports_system_prompt: Optional[bool] = None
+    extra_params_json: Optional[str] = None
+    description: Optional[str] = None
+    tags: Optional[str] = None
 
 
 @router.put("/providers/{provider_id}/models/{model_id}")
 def update_provider_model(provider_id: int, model_id: int, data: ModelUpdate, db: Session = Depends(get_session),
                           current_user: User = Depends(get_current_user)):
-    """更新模型的类型或名称"""
+    """更新模型的类型/名称/默认参数"""
     provider = db.get(ModelProvider, provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="供应商不存在")
@@ -271,10 +492,17 @@ def update_provider_model(provider_id: int, model_id: int, data: ModelUpdate, db
         if dup:
             raise HTTPException(status_code=409, detail="该模型名已存在")
         model.model_name = data.model_name
+    # P0: 更新所有 default_* / 能力 / 元数据 字段
+    update_payload = data.model_dump(exclude={"model_type", "model_name"}, exclude_unset=True)
+    # P1 多模态：list → JSON 字符串
+    if "supported_task_types" in update_payload and isinstance(update_payload["supported_task_types"], list):
+        update_payload["supported_task_types"] = json.dumps(update_payload["supported_task_types"], ensure_ascii=False)
+    for key, value in update_payload.items():
+        setattr(model, key, value)
     db.add(model)
     db.commit()
     db.refresh(model)
-    return {"id": model.id, "model_name": model.model_name, "model_type": model.model_type}
+    return _serialize_model(model)
 
 
 @router.post("/providers/{provider_id}/models/{model_id}/test")
@@ -349,11 +577,17 @@ def test_provider(provider_id: int, current_user: User = Depends(get_current_use
     result = {"success": False, "message": "", "models_found": 0}
     try:
         from app.services.ai_service import _get_client, _is_vertex_ai
+        # 判断是否为Gemini（Google AI Studio）
+        def _is_gemini(p: ModelProvider) -> bool:
+            return "generativelanguage.googleapis.com" in (p.base_url or "")
+        # 判断是否为Anthropic（Claude）
+        def _is_anthropic(p: ModelProvider) -> bool:
+            return "api.anthropic.com" in (p.base_url or "")
+        
         client = _get_client(provider.base_url, provider.api_key, provider)
         # 先测试模型列表
         try:
             if _is_vertex_ai(provider):
-                # 使用 genai SDK 拉取真实模型列表
                 from google import genai
                 from app.services.ai_service import _get_vertex_credentials
                 credentials = _get_vertex_credentials(provider)
@@ -364,12 +598,54 @@ def test_provider(provider_id: int, current_user: User = Depends(get_current_use
                     credentials=credentials,
                 )
                 models_data = list(gclient.models.list())
-                model_ids = [m.name for m in models_data if "publishers/google" in m.name]
+                model_ids = [m.name for m in models_data if "publishers/" in (getattr(m, 'name', ''))]
+                result["models_found"] = len(model_ids)
+                result["sample_models"] = model_ids[:8]
+            elif _is_gemini(provider):
+                # Gemini使用原生SDK获取模型列表
+                from google import genai
+                import logging
+                logger = logging.getLogger("worktrack")
+                try:
+                    logger.info("正在测试Gemini连接...")
+                    gclient = genai.Client(api_key=provider.api_key)
+                    logger.info("Gemini客户端初始化成功")
+                    try:
+                        models_data = gclient.models.list()
+                        model_ids = []
+                        for m in models_data:
+                            model_id = getattr(m, 'name', '') or getattr(m, 'id', '')
+                            if model_id:
+                                if model_id.startswith('models/'):
+                                    model_id = model_id[7:]
+                                model_ids.append(model_id)
+                        result["models_found"] = len(model_ids)
+                        result["sample_models"] = model_ids[:10]
+                        logger.info(f"成功获取到{len(model_ids)}个Gemini模型")
+                    except Exception as api_err:
+                        logger.error(f"Gemini models.list()调用失败: {str(api_err)}", exc_info=True)
+                        # 如果获取失败，使用预设模型
+                        sample_gemini_models = [
+                            "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", 
+                            "gemini-1.5-pro", "gemini-1.5-flash"
+                        ]
+                        result["models_found"] = 10
+                        result["sample_models"] = sample_gemini_models
+                except Exception as e:
+                    logger.error(f"Gemini连接测试失败: {str(e)}", exc_info=True)
+            elif _is_anthropic(provider):
+                # Anthropic直接用预设模型
+                sample_anthropic_models = [
+                    "claude-3-7-sonnet-20250219", "claude-3-5-sonnet-20241022", 
+                    "claude-3-5-haiku-20241022", "claude-3-opus-20240229"
+                ]
+                result["models_found"] = 6
+                result["sample_models"] = sample_anthropic_models
             else:
                 models_resp = client.models.list()
                 model_ids = [m.id for m in models_resp.data]
-            result["models_found"] = len(model_ids)
-            result["sample_models"] = model_ids[:8]
+                result["models_found"] = len(model_ids)
+                result["sample_models"] = model_ids[:8]
         except Exception:
             pass
         # 再测试对话 — 从 ProviderModel 获取候选模型，逐个尝试
@@ -377,9 +653,29 @@ def test_provider(provider_id: int, current_user: User = Depends(get_current_use
             select(ProviderModel).where(ProviderModel.provider_id == provider_id).order_by(ProviderModel.created_at)
         ).all()
         candidates = [m.model_name for m in provider_models]
+        
+        # 根据供应商类型智能选择默认测试模型
         if not candidates:
-            candidates.append("gpt-3.5-turbo")
-        priority_kw = ["chat", "instruct", "deepseek", "qwen", "gpt", "claude", "llama", "glm", "yi-", "moonshot"]
+            if _is_gemini(provider):
+                candidates.append("gemini-2.5-flash")
+            elif _is_vertex_ai(provider):
+                candidates.append("gemini-2.5-flash")
+            elif "api.anthropic.com" in (provider.base_url or ""):
+                candidates.append("claude-3-5-sonnet-20241022")
+            elif "api.deepseek.com" in (provider.base_url or ""):
+                candidates.append("deepseek-chat")
+            elif "dashscope.aliyuncs.com" in (provider.base_url or ""):
+                candidates.append("qwen-turbo")
+            elif "api.siliconflow.cn" in (provider.base_url or ""):
+                candidates.append("Qwen/Qwen2.5-7B-Instruct")
+            elif "api.xiaomimimo.com" in (provider.base_url or ""):
+                candidates.append("mimo-v2.5-pro")
+            elif "api.minimax.chat" in (provider.base_url or ""):
+                candidates.append("abab6.5s-chat")
+            else:
+                candidates.append("gpt-3.5-turbo")
+        
+        priority_kw = ["chat", "instruct", "deepseek", "qwen", "gpt", "claude", "llama", "glm", "yi-", "moonshot", "mimo", "gemini"]
         non_chat_kw = ["embed", "bge-", "stable-diffusion", "sd-", "tts-", "whisper", "dall-e"]
         def model_priority(m: str) -> int:
             low = m.lower()
@@ -428,6 +724,13 @@ def fetch_provider_models(provider_id: int, db: Session = Depends(get_session),
 
     try:
         from app.services.ai_service import _is_vertex_ai, _get_vertex_credentials
+        # 判断是否为Gemini（Google AI Studio）
+        def _is_gemini(p: ModelProvider) -> bool:
+            return "generativelanguage.googleapis.com" in (p.base_url or "")
+        # 判断是否为Anthropic（Claude）
+        def _is_anthropic(p: ModelProvider) -> bool:
+            return "api.anthropic.com" in (p.base_url or "")
+        
         if _is_vertex_ai(provider):
             from google import genai
             credentials = _get_vertex_credentials(provider)
@@ -437,23 +740,25 @@ def fetch_provider_models(provider_id: int, db: Session = Depends(get_session),
                 location=provider.location or "global",
                 credentials=credentials,
             )
-            # 从多个 publisher 拉取模型
-            publishers = ["google", "meta", "mistralai", "anthropic", "google-cloud"]
+            # 使用Google Gen AI SDK的list方法获取模型
             models = []
             seen = set()
-            for pub in publishers:
-                try:
-                    models_data = list(client.models.list(config={"publisher": pub}))
-                    for m in models_data:
-                        name = getattr(m, 'name', '')
-                        if not name or "publishers/" not in name:
-                            continue
-                        short_name = name.split("/")[-1]
-                        if short_name not in seen:
+            try:
+                models_data = client.models.list()
+                for m in models_data:
+                    model_id = getattr(m, 'name', '') or getattr(m, 'id', '') or getattr(m, 'model_id', '')
+                    if model_id:
+                        if "/" in model_id:
+                            short_name = model_id.split("/")[-1]
+                        else:
+                            short_name = model_id
+                        if short_name and short_name not in seen:
                             seen.add(short_name)
-                            models.append({"id": short_name, "owned_by": pub})
-                except Exception:
-                    pass
+                            owned_by = getattr(m, 'owned_by', '') or 'google'
+                            models.append({"id": short_name, "owned_by": owned_by})
+            except Exception as api_err:
+                import logging
+                logging.getLogger("worktrack").warning("Vertex AI模型列表API调用失败: %s，使用兜底模型列表", api_err)
             # 如果 API 拉取失败或为空，使用常见模型列表作为兜底
             if not models:
                 models = [
@@ -469,6 +774,67 @@ def fetch_provider_models(provider_id: int, db: Session = Depends(get_session),
                     {"id": "mistral-large@2411", "owned_by": "mistralai"},
                     {"id": "llama-3.3-70b-instruct", "owned_by": "meta"},
                 ]
+        elif _is_gemini(provider):
+            # Gemini（Google AI Studio）使用原生SDK获取模型列表
+            from google import genai
+            models = []
+            seen = set()
+            try:
+                import logging
+                logger = logging.getLogger("worktrack")
+                logger.info("正在初始化Gemini客户端...")
+                gclient = genai.Client(api_key=provider.api_key)
+                logger.info("Gemini客户端初始化成功，正在获取模型列表...")
+                
+                # 尝试获取模型列表
+                try:
+                    models_data = gclient.models.list()
+                    logger.info("Gemini models.list()调用成功，开始处理返回结果...")
+                    
+                    # 处理模型数据
+                    for m in models_data:
+                        # 获取模型ID
+                        model_id = getattr(m, 'name', '') or getattr(m, 'id', '')
+                        if not model_id:
+                            continue
+                        # 清理模型名
+                        if model_id.startswith('models/'):
+                            model_id = model_id[7:]
+                        if model_id and model_id not in seen:
+                            seen.add(model_id)
+                            models.append({"id": model_id, "owned_by": "google"})
+                    logger.info(f"成功获取到{len(models)}个Gemini模型")
+                except Exception as api_err:
+                    logger.error(f"Gemini models.list()调用失败: {str(api_err)}", exc_info=True)
+                    raise
+            except Exception as e:
+                import logging
+                logger = logging.getLogger("worktrack")
+                logger.error(f"Gemini模型列表获取失败: {str(e)}", exc_info=True)
+            # 如果API获取失败或为空，使用兜底列表
+            if not models:
+                models = [
+                    {"id": "gemini-2.5-flash", "owned_by": "google"},
+                    {"id": "gemini-2.5-pro", "owned_by": "google"},
+                    {"id": "gemini-2.0-flash", "owned_by": "google"},
+                    {"id": "gemini-2.0-flash-lite", "owned_by": "google"},
+                    {"id": "gemini-2.0-pro-exp-02-05", "owned_by": "google"},
+                    {"id": "gemini-1.5-pro", "owned_by": "google"},
+                    {"id": "gemini-1.5-flash", "owned_by": "google"},
+                    {"id": "gemini-1.5-pro-latest", "owned_by": "google"},
+                    {"id": "gemini-1.5-flash-latest", "owned_by": "google"},
+                    {"id": "text-embedding-004", "owned_by": "google"},
+                ]
+        elif _is_anthropic(provider):
+            # Anthropic（Claude）使用预设模型列表
+            models = [
+                {"id": "claude-3-7-sonnet-20250219", "owned_by": "anthropic"},
+                {"id": "claude-3-5-sonnet-20241022", "owned_by": "anthropic"},
+                {"id": "claude-3-5-haiku-20241022", "owned_by": "anthropic"},
+                {"id": "claude-3-opus-20240229", "owned_by": "anthropic"},
+                {"id": "claude-3-sonnet-20240229", "owned_by": "anthropic"},
+                {"id": "claude-3-haiku-20240307", "owned_by": "anthropic"},
+            ]
         else:
             from openai import OpenAI
             base_url = provider.base_url
@@ -493,12 +859,67 @@ class TaskModelUpdate(BaseModel):
     task_type: str
     provider_id: Optional[int] = None
     model_name: str = ""
+    # P0: 任务级参数覆盖
+    override_temperature: Optional[float] = None
+    override_top_p: Optional[float] = None
+    override_max_tokens: Optional[int] = None
+    override_frequency_penalty: Optional[float] = None
+    override_presence_penalty: Optional[float] = None
+    override_stop: Optional[str] = None
+    override_thinking_mode: Optional[str] = None
+    override_thinking_budget: Optional[int] = None
+    override_response_format: Optional[str] = None
+    override_json_schema: Optional[str] = None
+    override_extra_params_json: Optional[str] = None
+    preset_id: Optional[int] = None
+    # P1: 任务级「需要能力」约束
+    # 可选值：function_calling / vision / json_mode / thinking / streaming / system_prompt
+    # 留空 = 不约束（向后兼容）
+    required_capabilities: Optional[list[str]] = None
+
+
+def _serialize_task_config(c: TaskModelConfig) -> dict:
+    """完整序列化 TaskModelConfig（含 P0 override 字段 + P1 required_capabilities）"""
+    # P1: required_capabilities 在 DB 里是 JSON 列，存的是 list；
+    # 但 SQLAlchemy + Pydantic str 字段配合时可能返回 string，这里防御性处理
+    raw_caps = c.required_capabilities
+    if raw_caps is None:
+        caps_out: list = []
+    elif isinstance(raw_caps, str):
+        try:
+            caps_out = json.loads(raw_caps) if raw_caps else []
+        except Exception:
+            caps_out = []
+    elif isinstance(raw_caps, list):
+        caps_out = raw_caps
+    else:
+        caps_out = []
+    return {
+        "task_type": c.task_type,
+        "provider_id": c.provider_id,
+        "model_name": c.model_name,
+        "user_id": c.user_id,
+        "override_temperature": c.override_temperature,
+        "override_top_p": c.override_top_p,
+        "override_max_tokens": c.override_max_tokens,
+        "override_frequency_penalty": c.override_frequency_penalty,
+        "override_presence_penalty": c.override_presence_penalty,
+        "override_stop": c.override_stop,
+        "override_thinking_mode": c.override_thinking_mode,
+        "override_thinking_budget": c.override_thinking_budget,
+        "override_response_format": c.override_response_format,
+        "override_json_schema": c.override_json_schema,
+        "override_extra_params_json": c.override_extra_params_json,
+        "preset_id": c.preset_id,
+        # P1: 任务级「需要能力」约束
+        "required_capabilities": caps_out,
+    }
 
 
 @router.get("/task-models")
 def get_task_models(db: Session = Depends(get_session),
                     current_user: User = Depends(get_current_user)):
-    """获取任务模型配置：用户私有 +（有权限时）共享"""
+    """获取任务模型配置：用户私有 +（有权限时）共享，自动清理无效配置"""
     can_manage = has_permission(current_user, "ai:manage_shared", db)
     use_shared = can_manage or has_permission(current_user, "ai:use", db)
     uid = current_user.id if not can_manage else None
@@ -515,19 +936,39 @@ def get_task_models(db: Session = Depends(get_session),
         select(TaskModelConfig).where(or_(*conditions))
     ).all()
     result = {}
+    stale_ids = []
     for c in configs:
         provider = db.get(ModelProvider, c.provider_id) if c.provider_id else None
-        cfg = {
-            "task_type": c.task_type,
-            "provider_id": c.provider_id,
-            "provider_name": provider.name if provider else None,
-            "model_name": c.model_name,
-            "user_id": c.user_id,
-        }
+        if not provider:
+            stale_ids.append(c.id)
+            continue
+        # 检查模型是否仍存在于供应商下
+        if c.model_name:
+            model_exists = db.exec(
+                select(ProviderModel).where(
+                    ProviderModel.provider_id == c.provider_id,
+                    ProviderModel.model_name == c.model_name,
+                )
+            ).first()
+            if not model_exists:
+                stale_ids.append(c.id)
+                continue
+        cfg = _serialize_task_config(c)
+        if "provider_name" not in cfg:
+            cfg["provider_name"] = provider.name if provider else None
+        else:
+            cfg["provider_name"] = provider.name if provider else None
         if c.user_id is None and c.task_type not in result:
             result[c.task_type] = cfg
         elif c.user_id is not None:
             result[c.task_type] = cfg
+    # 清理无效配置
+    if stale_ids:
+        for sid in stale_ids:
+            stale = db.get(TaskModelConfig, sid)
+            if stale:
+                db.delete(stale)
+        db.commit()
     return result
 
 
@@ -537,6 +978,42 @@ def update_task_model(data: TaskModelUpdate, db: Session = Depends(get_session),
     """更新任务模型配置：管理员更新共享的，普通用户更新自己的"""
     can_manage_shared = has_permission(current_user, "ai:manage_shared", db)
     uid = None if can_manage_shared else current_user.id
+
+    # P1: 校验 required_capabilities 与所选模型能力是否一致
+    caps = data.required_capabilities or []
+    valid_caps = {
+        "function_calling", "vision", "json_mode",
+        "thinking", "streaming", "system_prompt",
+    }
+    bad_caps = [c for c in caps if c not in valid_caps]
+    if bad_caps:
+        raise HTTPException(
+            status_code=422,
+            detail=f"未知的能力标识: {bad_caps}，可选: {sorted(valid_caps)}",
+        )
+    caps_warning: list[str] = []  # 模型不满足的能力
+    if caps and data.provider_id and data.model_name:
+        m = db.exec(
+            select(ProviderModel).where(
+                ProviderModel.provider_id == data.provider_id,
+                ProviderModel.model_name == data.model_name,
+            )
+        ).first()
+        if m:
+            cap_field_map = {
+                "function_calling": m.supports_function_calling,
+                "vision": m.supports_vision,
+                "json_mode": m.supports_json_mode,
+                "thinking": m.supports_thinking,
+                "streaming": m.supports_streaming,
+                "system_prompt": m.supports_system_prompt,
+            }
+            for c in caps:
+                if not cap_field_map.get(c):
+                    caps_warning.append(c)
+        else:
+            caps_warning.append(f"__model_not_found:{data.model_name}__")
+
     config = db.exec(
         select(TaskModelConfig).where(
             TaskModelConfig.task_type == data.task_type,
@@ -544,15 +1021,189 @@ def update_task_model(data: TaskModelUpdate, db: Session = Depends(get_session),
         )
     ).first()
     if not config:
-        config = TaskModelConfig(task_type=data.task_type, provider_id=data.provider_id, model_name=data.model_name, user_id=uid)
+        # P0: 创建时携带 override 字段
+        config = TaskModelConfig(
+            task_type=data.task_type,
+            provider_id=data.provider_id,
+            model_name=data.model_name,
+            user_id=uid,
+            override_temperature=data.override_temperature,
+            override_top_p=data.override_top_p,
+            override_max_tokens=data.override_max_tokens,
+            override_frequency_penalty=data.override_frequency_penalty,
+            override_presence_penalty=data.override_presence_penalty,
+            override_stop=data.override_stop,
+            override_thinking_mode=data.override_thinking_mode,
+            override_thinking_budget=data.override_thinking_budget,
+            override_response_format=data.override_response_format,
+            override_json_schema=data.override_json_schema,
+            override_extra_params_json=data.override_extra_params_json,
+            preset_id=data.preset_id,
+            required_capabilities=json.dumps(caps, ensure_ascii=False) if caps else None,  # P1
+        )
         db.add(config)
     else:
         config.provider_id = data.provider_id
         config.model_name = data.model_name
+        # P0: 更新 override 字段（仅在请求里显式带了的字段才更新）
+        update_payload = data.model_dump(
+            exclude={"task_type", "provider_id", "model_name"},
+            exclude_unset=False,
+        )
+        # P1: 序列化 required_capabilities 为 JSON 字符串
+        if "required_capabilities" in update_payload:
+            v = update_payload["required_capabilities"]
+            if v is None:
+                update_payload["required_capabilities"] = None
+            else:
+                update_payload["required_capabilities"] = json.dumps(v, ensure_ascii=False)
+        for key, value in update_payload.items():
+            setattr(config, key, value)
         db.add(config)
     db.commit()
     db.refresh(config)
-    return {"task_type": config.task_type, "provider_id": config.provider_id, "model_name": config.model_name, "user_id": config.user_id}
+    out = _serialize_task_config(config)
+    if config.provider_id:
+        p = db.get(ModelProvider, config.provider_id)
+        out["provider_name"] = p.name if p else None
+    if caps_warning:
+        # 不阻断保存，附带 warning 字段让前端展示
+        out["caps_warning"] = caps_warning
+    return out
+
+
+# ===== 参数预设 CRUD =====
+
+class PresetCreate(BaseModel):
+    name: str
+    description: str = ""
+    temperature: Optional[float] = None
+    top_p: Optional[float] = None
+    max_tokens: Optional[int] = None
+    frequency_penalty: Optional[float] = None
+    presence_penalty: Optional[float] = None
+    stop: Optional[str] = None
+    thinking_mode: Optional[str] = None
+    thinking_budget: Optional[int] = None
+    response_format: Optional[str] = None
+    json_schema: Optional[str] = None
+    extra_params_json: Optional[str] = None
+
+
+class PresetUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    temperature: Optional[float] = None
+    top_p: Optional[float] = None
+    max_tokens: Optional[int] = None
+    frequency_penalty: Optional[float] = None
+    presence_penalty: Optional[float] = None
+    stop: Optional[str] = None
+    thinking_mode: Optional[str] = None
+    thinking_budget: Optional[int] = None
+    response_format: Optional[str] = None
+    json_schema: Optional[str] = None
+    extra_params_json: Optional[str] = None
+
+
+def _serialize_preset(p: ModelParamPreset) -> dict:
+    return {
+        "id": p.id,
+        "name": p.name,
+        "description": p.description,
+        "user_id": p.user_id,
+        "is_system": p.is_system,
+        "temperature": p.temperature,
+        "top_p": p.top_p,
+        "max_tokens": p.max_tokens,
+        "frequency_penalty": p.frequency_penalty,
+        "presence_penalty": p.presence_penalty,
+        "stop": p.stop,
+        "thinking_mode": p.thinking_mode,
+        "thinking_budget": p.thinking_budget,
+        "response_format": p.response_format,
+        "json_schema": p.json_schema,
+        "extra_params_json": p.extra_params_json,
+        "created_at": p.created_at.isoformat() if p.created_at else None,
+        "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+    }
+
+
+@router.get("/model-presets")
+def list_presets(db: Session = Depends(get_session),
+                 current_user: User = Depends(get_current_user)):
+    """列出所有可见预设：平台预设（is_system=True）+ 当前用户的个人预设"""
+    presets = db.exec(
+        select(ModelParamPreset).where(
+            or_(
+                ModelParamPreset.is_system == True,
+                ModelParamPreset.user_id == current_user.id,
+                ModelParamPreset.user_id == None,  # NULL=平台预设
+            )
+        ).order_by(ModelParamPreset.is_system.desc(), ModelParamPreset.id)
+    ).all()
+    return [_serialize_preset(p) for p in presets]
+
+
+@router.post("/model-presets", status_code=201)
+def create_preset(data: PresetCreate, db: Session = Depends(get_session),
+                  current_user: User = Depends(get_current_user)):
+    """创建个人预设（user_id 强制为当前用户）"""
+    if not data.name.strip():
+        raise HTTPException(status_code=400, detail="预设名称不能为空")
+    preset = ModelParamPreset(
+        user_id=current_user.id,
+        is_system=False,
+        **data.model_dump(),
+    )
+    db.add(preset)
+    db.commit()
+    db.refresh(preset)
+    return _serialize_preset(preset)
+
+
+@router.put("/model-presets/{preset_id}")
+def update_preset(preset_id: int, data: PresetUpdate, db: Session = Depends(get_session),
+                  current_user: User = Depends(get_current_user)):
+    """更新个人预设（系统预设不可改）"""
+    preset = db.get(ModelParamPreset, preset_id)
+    if not preset:
+        raise HTTPException(status_code=404, detail="预设不存在")
+    if preset.is_system or preset.user_id is None:
+        raise HTTPException(status_code=403, detail="系统预设不可修改")
+    if preset.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="只能修改自己的预设")
+    payload = data.model_dump(exclude_unset=False)
+    for key, value in payload.items():
+        setattr(preset, key, value)
+    from datetime import datetime, timezone
+    preset.updated_at = datetime.now(timezone.utc)
+    db.add(preset)
+    db.commit()
+    db.refresh(preset)
+    return _serialize_preset(preset)
+
+
+@router.delete("/model-presets/{preset_id}", status_code=204)
+def delete_preset(preset_id: int, db: Session = Depends(get_session),
+                  current_user: User = Depends(get_current_user)):
+    """删除个人预设（系统预设不可删）"""
+    preset = db.get(ModelParamPreset, preset_id)
+    if not preset:
+        raise HTTPException(status_code=404, detail="预设不存在")
+    if preset.is_system or preset.user_id is None:
+        raise HTTPException(status_code=403, detail="系统预设不可删除")
+    if preset.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="只能删除自己的预设")
+    # 清理引用该 preset 的 TaskModelConfig
+    from sqlmodel import update as sql_update
+    db.exec(
+        sql_update(TaskModelConfig)
+        .where(TaskModelConfig.preset_id == preset_id)
+        .values(preset_id=None)
+    )
+    db.delete(preset)
+    db.commit()
 
 
 # ===== 字段选项管理 =====
@@ -782,6 +1433,55 @@ DEFAULT_PROMPTS = {
         "user_prompt_template": "请分析本季度（{range}）工作数据：\n\n项目: {projects_summary}\n客户: {customers_summary}\n会议: {meetings_summary}\n日报: {reports_summary}\n周报: {weeklies_summary}",
         "variables": ["{range}", "{projects_summary}", "{customers_summary}", "{meetings_summary}", "{reports_summary}", "{weeklies_summary}"],
     },
+    # ===== 以下为 P1 补全：覆盖代码中实际使用的 task_type =====
+    "chat": {
+        "task_type": "chat",
+        "label": "💬 通用对话",
+        "desc": "AI 助手/在线问答/自由聊天场景",
+        "system_prompt": "你是一个专业、友好的工作助手。回答简洁准确，必要时用 markdown 格式。",
+        "user_prompt_template": "{messages}",
+        "variables": ["{messages}"],
+    },
+    "speech_to_text": {
+        "task_type": "speech_to_text",
+        "label": "🎧 语音转文字",
+        "desc": "会议录音 → 文字（走 ASR 模型，无 LLM 提示词）",
+        "system_prompt": "",
+        "user_prompt_template": "",
+        "variables": [],
+    },
+    "vision": {
+        "task_type": "vision",
+        "label": "🖼️ 图像理解",
+        "desc": "合同扫描件/图片 OCR 与结构化理解（vision 模型）",
+        "system_prompt": "你是一个专业的图像理解助手。请仔细阅读图片中的文字内容，准确识别并转写所有可读的中文/英文文字。保留原段落结构，修正明显错别字。如果是表格，请用 markdown 表格输出。",
+        "user_prompt_template": "请识别并转写以下图片中的全部文字内容：\n{image_description}",
+        "variables": ["{image_description}"],
+    },
+    "contract_parse": {
+        "task_type": "contract_parse",
+        "label": "📑 合同解析",
+        "desc": "合同文字 → 关键字段结构化抽取（low temp + JSON）",
+        "system_prompt": "你是一个专业的合同解析助手。请从合同文本中抽取关键字段，以 JSON 格式返回。\n要求：\n1. 严格按给定 schema 输出，不要遗漏\n2. 没有的字段填空字符串或空数组\n3. 日期统一 ISO 格式 YYYY-MM-DD\n4. 只返回 JSON，不要其他文字",
+        "user_prompt_template": "请解析以下合同文本：\n{content}\n\n字段：甲方、乙方、合同金额、签订日期、生效日期、截止日期、付款方式、违约条款、争议解决",
+        "variables": ["{content}"],
+    },
+    "company_info": {
+        "task_type": "company_info",
+        "label": "🏢 公司信息整合",
+        "desc": "Tavily 联网搜索结果 → 公司画像整合",
+        "system_prompt": "你是一个专业的企业信息分析师。请根据提供的搜索结果，整合该公司的关键信息（行业、规模、产品、近期动态）。\n要求：\n1. 客观准确，不编造\n2. 突出近期动态\n3. 用中文回答，结构清晰\n4. 总长不超过 300 字",
+        "user_prompt_template": "请整合以下公司的搜索信息：\n公司名: {company_name}\n\n搜索结果:\n{search_results}",
+        "variables": ["{company_name}", "{search_results}"],
+    },
+    "embedding": {
+        "task_type": "embedding",
+        "label": "🧬 文本向量化",
+        "desc": "知识库/语义检索的文本向量化（embedding 模型，无 LLM 提示词）",
+        "system_prompt": "",
+        "user_prompt_template": "",
+        "variables": [],
+    },
 }
 
 
@@ -998,115 +1698,6 @@ def reset_ai_prompt(task_type: str, db: Session = Depends(get_session),
     return {"task_type": task_type, "reset": True}
 
 
-# ===== 行业标准化分类 =====
-
-DEFAULT_INDUSTRY_CATEGORIES = [
-    # ===== AI / 大模型 =====
-    "大模型基础研发与训练平台",
-    "AI Agent / 智能体开发",
-    "向量数据库 / 知识检索 RAG",
-    "模型推理优化与部署 MLOps",
-    "AI 安全 / 对齐 / 可解释性",
-    "多模态 / 视觉生成 AIGC",
-    "语音 / NLP / 对话 AI",
-    "AI 芯片 / 算力基础设施",
-    "开源模型生态与工具链",
-
-    # ===== 云计算 =====
-    "云原生 / 容器 / Kubernetes",
-    "公有云 IaaS / PaaS",
-    "混合云 / 多云管理",
-    "边缘计算 / CDN / 分布式云",
-    "Serverless / FaaS",
-    "云安全 / 零信任 / WAF",
-    "FinOps / 云成本优化",
-    "DevOps / CI/CD / GitOps",
-    "可观测性 / AIOps / 运维平台",
-
-    # ===== 企业服务 / SaaS =====
-    "协同办公 / 企业 IM",
-    "CRM / 营销自动化",
-    "ERP / 财务 / HR SaaS",
-    "低代码 / 无代码平台",
-    "数据中台 / 数据治理",
-
-    # ===== 其他垂直行业 =====
-    "金融科技 / 支付 / 数字银行",
-    "新能源汽车 / 智能出行",
-    "半导体 / 芯片 / EDA",
-    "电商 / 新零售 / 跨境电商",
-    "社交媒体 / 内容平台",
-    "游戏 / 互动娱乐",
-    "在线教育 / 教育科技",
-    "医疗健康 / 数字医疗",
-    "物流 / 供应链 / 配送",
-    "网络安全 / 信息安全",
-    "物联网 / 智能硬件",
-    "消费电子 / 智能家居",
-    "农业科技 / 食品科技",
-    "新能源 / 碳中和 / 环保",
-    "法律科技 / 合规科技",
-    "航空航天 / 卫星 / 低空经济",
-    "自动驾驶 / 智能交通",
-    "工业互联网 / 智能制造",
-    "旅游 / 出行服务",
-    "本地生活 / 餐饮 / 即时零售",
-    "保险科技",
-    "通信 / 5G / 6G",
-    "政务 / 智慧城市 / 数字政府",
-    "区块链 / Web3 / 数字资产",
-    "广告营销 / MarTech",
-    "人力资源 / 招聘科技",
-]
-
-
-def _get_industry_categories(db: Session) -> list[str]:
-    """从 SystemPreference 读取行业分类，没有则返回默认"""
-    pref = db.exec(
-        select(SystemPreference).where(
-            SystemPreference.key == "industry_categories",
-            SystemPreference.user_id == None,
-        )
-    ).first()
-    if pref and pref.value:
-        cats = [c.strip() for c in pref.value.split("\n") if c.strip()]
-        if cats:
-            return cats
-    return list(DEFAULT_INDUSTRY_CATEGORIES)
-
-
-@router.get("/industry-categories")
-def get_industry_categories(current_user: User = Depends(get_current_user),
-                           db: Session = Depends(get_session)):
-    """获取行业标准化分类列表"""
-    return {"categories": _get_industry_categories(db)}
-
-
-class IndustryCategoriesUpdate(BaseModel):
-    categories: str
-
-
-@router.put("/industry-categories")
-def update_industry_categories(data: IndustryCategoriesUpdate, current_user: User = Depends(require_permission("settings:edit")),
-                               db: Session = Depends(get_session)):
-    """更新行业分类（管理员），data.categories 为换行分隔字符串"""
-    cats = data.categories.strip()
-    if not cats:
-        raise HTTPException(status_code=400, detail="分类不能为空")
-    pref = db.exec(
-        select(SystemPreference).where(
-            SystemPreference.key == "industry_categories",
-            SystemPreference.user_id == None,
-        )
-    ).first()
-    if pref:
-        pref.value = cats
-    else:
-        db.add(SystemPreference(key="industry_categories", value=cats, user_id=None))
-    db.commit()
-    return {"categories": cats.split("\n"), "saved": True}
-
-
 # ===== 系统信息 =====
 
 # 记录服务启动时间
@@ -1305,13 +1896,14 @@ def serve_apple_touch_icon(db: Session = Depends(get_session)):
             if fname.startswith("logo_"):
                 return FileResponse(os.path.join(BRAND_DIR, fname))
     # 2) 回退：尝试 pwa-192x192.png
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
     for candidate in [
         os.path.join(base_dir, "data", "pwa-192x192.png"),
-        os.path.join(base_dir, "..", "frontend", "public", "pwa-192x192.png"),
+        os.path.join(base_dir, "frontend", "public", "pwa-192x192.png"),
+        os.path.join(base_dir, "frontend", "public", "favicon.svg"),
     ]:
         if os.path.isfile(candidate):
-            return FileResponse(candidate, media_type="image/png")
+            return FileResponse(candidate, media_type="image/png" if candidate.endswith('.png') else "image/svg+xml")
     # 3) 最终回退：返回 1x1 透明 PNG 避免 iOS 生成字母图标
     import base64
     blank_png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
@@ -1334,7 +1926,9 @@ def serve_manifest(db: Session = Depends(get_session)):
         )
     ).first()
     site_title = title_pref.value if title_pref else "WorkTrack"
-    icon_url = logo_pref.value if (logo_pref and logo_pref.value) else "/api/v1/settings/branding/apple-touch-icon"
+    # 强制使用静态图标，确保PWA兼容性
+    icon_192 = "/pwa-192x192.png"
+    icon_512 = "/pwa-512x512.png"
     return {
         "name": site_title,
         "short_name": site_title,
@@ -1345,8 +1939,11 @@ def serve_manifest(db: Session = Depends(get_session)):
         "background_color": "#101720",
         "theme_color": "#101720",
         "icons": [
-            {"src": icon_url, "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
-            {"src": icon_url, "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+            {"src": icon_192, "sizes": "64x64", "type": "image/png", "purpose": "any maskable"},
+            {"src": icon_192, "sizes": "128x128", "type": "image/png", "purpose": "any maskable"},
+            {"src": icon_192, "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": icon_192, "sizes": "256x256", "type": "image/png", "purpose": "any maskable"},
+            {"src": icon_512, "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
         ],
     }
 

@@ -181,7 +181,7 @@ export default function SharedWithMePage() {
             onClick={() => setActiveTab(tab.key)}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
               activeTab === tab.key
-                ? 'bg-[#3B82F6] text-white shadow-lg shadow-blue-500/20'
+                ? 'bg-[#3B82F6] text-[#fff] shadow-lg shadow-blue-500/20'
                 : 'bg-bg-card border border-border text-gray-400 hover:text-white hover:border-gray-600'
             }`}
           >
@@ -203,14 +203,14 @@ export default function SharedWithMePage() {
           <p className="text-xs text-gray-600">当其他用户分享数据给你时，会在这里显示</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {shares.map(share => {
             const config = TYPE_CONFIG[share.target_type] || TYPE_CONFIG.report
             return (
               <div
                 key={share.id}
                 onClick={() => openDetail(share)}
-                className="group p-4 rounded-xl bg-bg-card border border-border hover:border-[#3B82F6]/50 transition-all cursor-pointer"
+                className="group p-4 rounded-xl bg-bg-card border border-border hover:border-[#3B82F6]/50 transition-all cursor-pointer min-h-[140px] flex flex-col"
               >
                 <div className="flex items-start justify-between mb-3">
                   <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium ${config.color}`}>
@@ -299,7 +299,7 @@ export default function SharedWithMePage() {
                   <div className="space-y-3 mb-4">
                     {comments.map(c => (
                       <div key={c.id} className="flex gap-3">
-                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white text-xs font-medium shrink-0">
+                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-[#fff] text-xs font-medium shrink-0">
                           {(c.user_name || '?')[0]}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -330,7 +330,7 @@ export default function SharedWithMePage() {
                     <button
                       onClick={submitComment}
                       disabled={sendingComment || !newComment.trim()}
-                      className="px-3 py-2 rounded-lg bg-[#3B82F6] text-white text-sm hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      className="px-3 py-2 rounded-lg bg-[#3B82F6] text-[#fff] text-sm hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
                       {sendingComment ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                     </button>

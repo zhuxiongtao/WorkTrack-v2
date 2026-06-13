@@ -1,11 +1,25 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Send, Sparkles, Zap, Plus, Trash2, MessageSquare, PanelLeftClose, PanelLeft, Loader2, Search, FileText, Building2, Briefcase, CalendarCheck, TrendingUp, Globe, Clock } from 'lucide-react'
+import { Send, Sparkles, Zap, Plus, Trash2, MessageSquare, PanelLeftClose, PanelLeft, Loader2, Search, FileText, Building2, Briefcase, CalendarCheck, TrendingUp, Globe, Clock, Cpu } from 'lucide-react'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import { useToast } from '../contexts/ToastContext'
+import { IconBox, StatusBadge } from '../components/design-system'
+import { TONES, type Tone } from '../theme/tokens'
 
 function hasMarkdown(str: string): boolean {
   return /^#{1,6}\s|^\s*[-*+]\s|^\s*\d+\.\s|\*\*|__|`{1,3}|^\s*>\s|\[.*\]\(.*\)/m.test(str)
 }
+
+// AI 中心能力卡片（统一 IconBox）
+const CAPABILITY_CARDS: { icon: any; tone: Tone; label: string; desc: string }[] = [
+  { icon: FileText,      tone: 'blue',   label: '日报搜索', desc: '语义搜索日报' },
+  { icon: Building2,     tone: 'purple', label: '客户查询', desc: '客户详情+动态' },
+  { icon: Briefcase,     tone: 'orange', label: '项目分析', desc: 'AI评估+建议' },
+  { icon: CalendarCheck, tone: 'green',  label: '会议纪要', desc: '搜索会议记录' },
+  { icon: Globe,         tone: 'cyan',   label: '联网搜索', desc: 'Tavily实时查询' },
+  { icon: TrendingUp,    tone: 'pink',   label: '日报总结', desc: '今日工作概览' },
+  { icon: Clock,         tone: 'orange', label: '定时任务', desc: '自动化调度' },
+  { icon: Search,        tone: 'gray',   label: '全局搜索', desc: '跨模块检索' },
+]
 
 interface Message {
   role: 'user' | 'assistant'
@@ -163,26 +177,27 @@ export default function AIPage() {
       `}>
         {sidebarOpen && (
           <div className="flex flex-col h-full">
-            <div className="p-4 flex items-center justify-between">
-              <span className="text-sm font-medium text-gray-400 flex items-center gap-2">
-                <MessageSquare size={14} /> 历史对话
-              </span>
+            <div className="p-4 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <IconBox icon={MessageSquare} size="sm" tone="purple" variant="soft" />
+                <span className="text-sm font-medium text-gray-800 dark:text-gray-300">历史对话</span>
+              </div>
               <button
                 onClick={() => setSidebarOpen(false)}
-                className="text-gray-600 hover:text-gray-400"
+                className="p-1 rounded text-gray-500 hover:text-gray-800 dark:text-gray-600 dark:hover:text-gray-400"
               >
                 <PanelLeftClose size={14} />
               </button>
             </div>
             <button
               onClick={createNewConversation}
-              className="mx-3 mb-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-hover text-xs text-gray-300 hover:text-white hover:bg-border border border-border transition-colors"
+              className="mx-3 mb-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-hover text-xs text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-accent-blue/10 hover:border-accent-blue/30 border border-border transition-colors"
             >
               <Plus size={14} /> 新对话
             </button>
             <div className="flex-1 overflow-y-auto px-2 space-y-1">
               {conversations.length === 0 ? (
-                <p className="text-xs text-gray-600 text-center py-8">暂无对话记录</p>
+                <p className="text-xs text-gray-500 dark:text-gray-600 text-center py-8">暂无对话记录</p>
               ) : (
                 conversations.map((c) => (
                   <div
@@ -195,15 +210,15 @@ export default function AIPage() {
                     }`}
                   >
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs text-gray-300 truncate">{c.title || '新对话'}</p>
-                      <p className="text-[10px] text-gray-600 mt-0.5">
+                      <p className="text-xs text-gray-800 dark:text-gray-300 truncate">{c.title || '新对话'}</p>
+                      <p className="text-[10px] text-gray-500 dark:text-gray-600 mt-0.5">
                         {c.message_count} 条消息 · {new Date(c.updated_at).toLocaleDateString()}
                       </p>
                     </div>
                     <button
                       onClick={(e) => { e.stopPropagation(); deleteConversation(c.id) }}
                       disabled={deletingId === c.id}
-                      className="opacity-0 group-hover:opacity-100 p-1 rounded text-gray-600 hover:text-red-400 transition-all"
+                      className="opacity-0 group-hover:opacity-100 p-1 rounded text-gray-500 hover:text-red-500 dark:text-gray-600 dark:hover:text-red-400 transition-all"
                     >
                       {deletingId === c.id ? (
                         <Loader2 size={12} className="animate-spin" />
@@ -223,54 +238,46 @@ export default function AIPage() {
       <div className="flex-1 flex flex-col min-w-0">
         {/* 顶部栏 */}
         <div className="flex items-center justify-between gap-2 mb-3 max-md:mb-2">
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-3 min-w-0">
             {!sidebarOpen && (
               <button
                 onClick={() => setSidebarOpen(true)}
-                className="p-1.5 rounded-lg bg-bg-card border border-border text-gray-400 hover:text-white shrink-0"
+                className="p-1.5 rounded-lg bg-bg-card border border-border text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white shrink-0"
               >
                 <PanelLeft size={16} />
               </button>
             )}
+            <IconBox icon={Sparkles} size="md" tone="purple" variant="solid" />
             <div className="min-w-0">
-              <h2 className="text-lg max-md:text-base font-bold text-white truncate flex items-center gap-1.5">
-                <span className="text-sm bg-gradient-to-r from-violet-500 to-purple-500 bg-clip-text text-transparent font-extrabold">AI</span>
-                中心
-              </h2>
-              <p className="text-xs text-gray-500 mt-0.5 hidden sm:block">智能助手 · 搜索日报客户项目会议 · AI 分析 · 联网查询 · 自动任务</p>
+              <h2 className="text-lg max-md:text-base font-bold text-gray-900 dark:text-white truncate">AI 中心</h2>
+              <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5 hidden sm:block">智能助手 · 搜索日报客户项目会议 · AI 分析 · 联网查询 · 自动任务</p>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-bg-hover border border-border shrink-0">
-            <span className={`w-1.5 h-1.5 rounded-full ${activeModel.model_name ? 'bg-[#10B981]' : 'bg-gray-600'}`} />
-            <span className="text-[10px] max-md:text-[9px] text-gray-400">{modelLabel}</span>
-          </div>
+          {activeModel.model_name ? (
+            <StatusBadge variant="success" title="当前激活模型">{modelLabel}</StatusBadge>
+          ) : (
+            <StatusBadge variant="warning" title="未配置通用对话模型">未配置模型</StatusBadge>
+          )}
         </div>
 
         {/* 聊天区域 */}
         <div className="flex-1 overflow-y-auto mb-4 space-y-4">
           {messages.length === 0 && (
             <div className="text-center py-12">
-              <Sparkles size={40} className="mx-auto text-[#8B5CF6] mb-4" />
-              <p className="text-gray-300 text-lg font-medium mb-2">你好！我是 WorkTrack AI 助手</p>
-              <p className="text-xs text-gray-500 mb-8">我可以帮你完成以下工作</p>
+              <div className="flex justify-center mb-4">
+                <IconBox icon={Sparkles} size="xl" tone="purple" variant="solid" />
+              </div>
+              <p className="text-gray-800 dark:text-gray-300 text-lg font-medium mb-2">你好！我是 WorkTrack AI 助手</p>
+              <p className="text-xs text-gray-500 dark:text-gray-500 mb-8">我可以帮你完成以下工作</p>
               {/* 能力卡片 */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 max-w-xl mx-auto">
-                {[
-                  { icon: FileText, color: 'text-blue-400', bg: 'bg-blue-500/10', label: '日报搜索', desc: '语义搜索日报' },
-                  { icon: Building2, color: 'text-purple-400', bg: 'bg-purple-500/10', label: '客户查询', desc: '客户详情+动态' },
-                  { icon: Briefcase, color: 'text-amber-400', bg: 'bg-amber-500/10', label: '项目分析', desc: 'AI评估+建议' },
-                  { icon: CalendarCheck, color: 'text-green-400', bg: 'bg-green-500/10', label: '会议纪要', desc: '搜索会议记录' },
-                  { icon: Globe, color: 'text-cyan-400', bg: 'bg-cyan-500/10', label: '联网搜索', desc: 'Tavily实时查询' },
-                  { icon: TrendingUp, color: 'text-pink-400', bg: 'bg-pink-500/10', label: '日报总结', desc: '今日工作概览' },
-                  { icon: Clock, color: 'text-orange-400', bg: 'bg-orange-500/10', label: '定时任务', desc: '自动化调度' },
-                  { icon: Search, color: 'text-gray-400', bg: 'bg-gray-500/10', label: '全局搜索', desc: '跨模块检索' },
-                ].map((cap, i) => (
-                  <div key={i} className="p-3 rounded-xl bg-bg-hover border border-border/50 hover:border-border transition-colors">
-                    <div className={`w-8 h-8 rounded-lg ${cap.bg} flex items-center justify-center mx-auto mb-2`}>
-                      <cap.icon size={16} className={cap.color} />
+                {CAPABILITY_CARDS.map((cap, i) => (
+                  <div key={i} className="p-3 rounded-xl bg-bg-hover border border-border/50 hover:border-accent-blue/40 hover:bg-accent-blue/5 dark:hover:bg-accent-blue/10 transition-colors">
+                    <div className="flex justify-center mb-2">
+                      <IconBox icon={cap.icon} size="md" tone={cap.tone} variant="soft" />
                     </div>
-                    <p className="text-xs font-medium text-gray-300">{cap.label}</p>
-                    <p className="text-[10px] text-gray-600 mt-0.5">{cap.desc}</p>
+                    <p className="text-xs font-medium text-gray-800 dark:text-gray-300">{cap.label}</p>
+                    <p className="text-[10px] text-gray-500 dark:text-gray-600 mt-0.5">{cap.desc}</p>
                   </div>
                 ))}
               </div>
@@ -281,7 +288,7 @@ export default function AIPage() {
               <div
                 className={`max-w-[85%] max-md:max-w-[92%] px-3.5 py-2.5 max-md:px-3 max-md:py-2 rounded-2xl text-sm max-md:text-[13px] ${
                   msg.role === 'user'
-                    ? 'bg-accent-blue text-white rounded-br-md'
+                    ? 'bg-accent-blue text-[#fff] rounded-br-md'
                     : 'bg-bg-hover text-gray-300 rounded-bl-md border border-border markdown-body'
                 }`}
               >
@@ -297,11 +304,9 @@ export default function AIPage() {
           ))}
           {loading && (
             <div className="flex justify-start">
-              <div className="px-4 py-3 rounded-2xl rounded-bl-md bg-bg-hover border border-border">
-                <div className="flex items-center gap-2">
-                  <Zap size={14} className="text-accent-blue animate-pulse" />
-                  <span className="text-sm text-gray-500">思考中...</span>
-                </div>
+              <div className="px-4 py-3 rounded-2xl rounded-bl-md bg-bg-hover border border-border flex items-center gap-2">
+                <IconBox icon={Zap} size="sm" tone="blue" variant="bare" className="animate-pulse" />
+                <span className="text-sm text-gray-500 dark:text-gray-500">思考中...</span>
               </div>
             </div>
           )}
@@ -311,18 +316,18 @@ export default function AIPage() {
         {/* 快捷指令 */}
         <div className="flex items-center gap-2 max-md:gap-1.5 mb-2 overflow-x-auto scrollbar-none">
           {[
-            { icon: Search, label: '/搜索', color: 'text-blue-400' },
-            { icon: TrendingUp, label: '/总结', color: 'text-pink-400' },
-            { icon: Building2, label: '/客户', color: 'text-purple-400' },
-            { icon: Briefcase, label: '/项目', color: 'text-amber-400' },
-            { icon: Globe, label: '/搜索公司', color: 'text-cyan-400' },
+            { icon: Search,    label: '/搜索',     tone: 'blue' as Tone },
+            { icon: TrendingUp,label: '/总结',     tone: 'pink' as Tone },
+            { icon: Building2, label: '/客户',     tone: 'purple' as Tone },
+            { icon: Briefcase, label: '/项目',     tone: 'orange' as Tone },
+            { icon: Globe,     label: '/搜索公司', tone: 'cyan' as Tone },
           ].map((cmd, i) => (
             <button
               key={i}
               onClick={() => setInput(cmd.label + ' ')}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-bg-hover text-[10px] text-gray-400 hover:text-white hover:bg-border whitespace-nowrap border border-border shrink-0"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-bg-hover text-[10px] text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-accent-blue/10 hover:border-accent-blue/30 whitespace-nowrap border border-border shrink-0"
             >
-              <cmd.icon size={10} className={cmd.color} />
+              <IconBox icon={cmd.icon} size="sm" tone={cmd.tone} variant="bare" />
               {cmd.label}
             </button>
           ))}
@@ -334,12 +339,12 @@ export default function AIPage() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
             placeholder="输入消息，Enter 发送..."
-            className="flex-1 px-4 py-3 max-md:px-3 max-md:py-2.5 rounded-xl bg-bg-card border border-border text-sm max-md:text-[13px] text-gray-300 outline-none focus:border-accent-blue placeholder-gray-600"
+            className="flex-1 px-4 py-3 max-md:px-3 max-md:py-2.5 rounded-xl bg-bg-card border border-border text-sm max-md:text-[13px] text-gray-800 dark:text-gray-300 outline-none focus:border-accent-blue placeholder-gray-400 dark:placeholder-gray-600"
           />
           <button
             onClick={sendMessage}
             disabled={loading || !input.trim()}
-            className="p-3 max-md:p-2.5 rounded-xl bg-accent-blue text-white hover:bg-accent-blue/85 disabled:opacity-50 transition-colors"
+            className="p-3 max-md:p-2.5 rounded-xl bg-accent-blue text-[#fff] hover:bg-accent-blue/85 disabled:opacity-50 transition-colors"
           >
             <Send size={18} />
           </button>

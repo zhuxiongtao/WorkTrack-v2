@@ -2,12 +2,23 @@ from sqlmodel import create_engine, SQLModel, Session, select
 from app.config import settings
 import os
 
-# 确保数据目录存在（ChromaDB 等仍需要本地数据目录）
 data_dir = settings.effective_data_root
 if not os.path.exists(data_dir):
     os.makedirs(data_dir, exist_ok=True)
 
-engine = create_engine(settings.database_url, echo=False)
+_connect_args = {}
+_engine_kwargs = {}
+if settings.database_url.startswith("postgresql"):
+    # Windows 上的 embedded PG (pgserver) 只接受 GMT 作为 session timezone
+    _connect_args = {"options": "-c timezone=GMT"}
+    _engine_kwargs = {
+        "pool_size": 10,
+        "max_overflow": 20,
+        "pool_recycle": 1800,
+        "pool_pre_ping": True,
+    }
+
+engine = create_engine(settings.database_url, echo=False, connect_args=_connect_args, **_engine_kwargs)
 
 
 def init_db():
@@ -201,6 +212,7 @@ PERMISSION_DEFS = [
     ("task:delete", "删除任务", "task", "delete"),
     # 运行日志
     ("log:read", "查看日志", "log", "read"),
+    ("log:clear", "清空日志", "log", "clear"),
     # 运维监控
     ("monitor:read", "查看运维监控", "monitor", "read"),
     # 数据管理
@@ -236,7 +248,7 @@ ROLE_DEFS = {
             "settings:read", "settings:edit",
             "dashboard:read",
             "task:read", "task:create", "task:edit", "task:delete",
-            "log:read",
+            "log:read", "log:clear",
             "monitor:read",
             "data:export", "data:import",
             # 管理总览与分享

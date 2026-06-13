@@ -2,9 +2,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import type { UserListParams, UserCreatePayload, UserUpdatePayload, RoleCreatePayload, RoleUpdatePayload, DepartmentCreatePayload, DepartmentUpdatePayload, UserData, PaginatedResponse } from '../services/types'
-import { fetchUsers, fetchSimpleUsers, createUser, updateUser, toggleUserActive, setUserStatus, resetUserPassword, deleteUser } from '../services/userService'
+import { fetchUsers, fetchSimpleUsers, createUser, updateUser, toggleUserActive, setUserStatus, resetUserPassword, deleteUser, batchUserAction, fetchUserDirectRoles, setUserDirectRoles } from '../services/userService'
 import { fetchRoles, fetchPermissions, createRole, updateRole, deleteRole } from '../services/roleService'
-import { fetchDepartmentTree, createDepartment, updateDepartment, deleteDepartment, fetchDepartmentsFlat, fetchDepartmentRoles, setDepartmentRoles } from '../services/departmentService'
+import { fetchDepartmentTree, createDepartment, updateDepartment, deleteDepartment, moveDepartment, fetchDepartmentsFlat, fetchDepartmentRoles, setDepartmentRoles } from '../services/departmentService'
 
 // ===== 用户查询 =====
 export function useUserListQuery(params: UserListParams) {
@@ -174,6 +174,28 @@ export function useDeleteUserMutation() {
   })
 }
 
+export function useBatchUserActionMutation() {
+  const { fetchWithAuth } = useAuth()
+  const queryClient = useQueryClient()
+  const { toast } = useToast()
+  return useMutation({
+    mutationFn: (payload: { user_ids: number[]; action: 'enable' | 'disable' | 'resign' | 'set_department' | 'reset_password'; department_id?: number | null }) =>
+      batchUserAction(fetchWithAuth, payload),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      const labels: Record<string, string> = {
+        enable: '已批量启用',
+        disable: '已批量停用',
+        resign: '已批量标记为离职',
+        set_department: '已批量调整部门',
+        reset_password: '已批量重置密码',
+      }
+      toast(`${labels[data.action] || '已完成'} ${data.affected} 个用户`, 'success')
+    },
+    onError: (err: Error) => toast(err.message, 'error'),
+  })
+}
+
 // ===== 角色变更 =====
 export function useCreateRoleMutation() {
   const { fetchWithAuth } = useAuth()
@@ -261,6 +283,21 @@ export function useDeleteDepartmentMutation() {
   })
 }
 
+export function useMoveDepartmentMutation() {
+  const { fetchWithAuth } = useAuth()
+  const queryClient = useQueryClient()
+  const { toast } = useToast()
+  return useMutation({
+    mutationFn: ({ deptId, newParentId }: { deptId: number; newParentId: number | null }) =>
+      moveDepartment(fetchWithAuth, deptId, newParentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['departments'] })
+      toast('部门已调整到新上级', 'success')
+    },
+    onError: (err: Error) => toast(err.message, 'error'),
+  })
+}
+
 // ===== 部门角色 =====
 export function useDepartmentRolesQuery(deptId: number | null) {
   const { fetchWithAuth } = useAuth()
@@ -282,6 +319,33 @@ export function useSetDepartmentRolesMutation() {
       queryClient.invalidateQueries({ queryKey: ['departments', variables.deptId, 'roles'] })
       queryClient.invalidateQueries({ queryKey: ['departments'] })
       toast('部门角色已成功更新', 'success')
+    },
+    onError: (err: Error) => toast(err.message, 'error'),
+  })
+}
+
+// ===== 用户直接分配角色 =====
+export function useUserDirectRolesQuery(userId: number | null) {
+  const { fetchWithAuth } = useAuth()
+  return useQuery({
+    queryKey: ['users', userId, 'roles'],
+    queryFn: () => fetchUserDirectRoles(fetchWithAuth, userId!),
+    enabled: userId !== null,
+    staleTime: 30_000,
+  })
+}
+
+export function useSetUserDirectRolesMutation() {
+  const { fetchWithAuth } = useAuth()
+  const queryClient = useQueryClient()
+  const { toast } = useToast()
+  return useMutation({
+    mutationFn: ({ userId, roleIds }: { userId: number; roleIds: number[] }) =>
+      setUserDirectRoles(fetchWithAuth, userId, roleIds),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      queryClient.invalidateQueries({ queryKey: ['users', variables.userId, 'roles'] })
+      toast('已更新该用户直接分配的角色', 'success')
     },
     onError: (err: Error) => toast(err.message, 'error'),
   })

@@ -20,6 +20,18 @@ _RBAC_CACHE_MAX = 10000
 _rbac_cache: dict[tuple[int, str], tuple[bool, float]] = {}
 _rbac_cache_ttl = 60
 
+
+def invalidate_rbac_cache(user_id: int | None = None) -> None:
+    """清理 RBAC 缓存。
+    user_id=None 时清空全部（角色/权限/部门角色变更时调用）。
+    user_id=int 时仅清该用户（该用户角色/部门调整时调用）。"""
+    if user_id is None:
+        _rbac_cache.clear()
+    else:
+        keys_to_delete = [k for k in _rbac_cache if k[0] == user_id]
+        for k in keys_to_delete:
+            del _rbac_cache[k]
+
 # ===== 密码哈希 =====
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -231,10 +243,6 @@ def has_permission(user: User, permission_code: str, db: Session) -> bool:
     """
     if user.is_admin:
         return True
-
-    if permission_code in _LEGACY_PERM_MAP:
-        if _LEGACY_PERM_MAP[permission_code](user):
-            return True
 
     if permission_code in _LEGACY_PERM_MAP:
         if _LEGACY_PERM_MAP[permission_code](user):

@@ -53,7 +53,7 @@ function StatCard({ icon: Icon, label, value, sub, color = 'blue' }: { icon: typ
   return (
     <div className="rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 shadow-sm hover:shadow-md transition-shadow">
       <div className="flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${colors[color] || colors.blue} flex items-center justify-center text-white shadow-sm`}>
+        <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${colors[color] || colors.blue} flex items-center justify-center text-[#fff] shadow-sm`}>
           <Icon size={18} />
         </div>
         <div>
@@ -128,7 +128,7 @@ export default function MonitorPage() {
         <h2 className="text-sm font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
           <Briefcase size={14} /> 业务概览
         </h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           <StatCard icon={Users} label="用户" value={b.users.total} sub={`${b.users.active} 活跃`} color="blue" />
           <StatCard icon={Users} label="客户" value={b.customers.total} color="green" />
           <StatCard icon={FileText} label="日报" value={b.reports.total} sub={`${b.reports.submitted} 已提交 / ${b.reports.draft} 草稿`} color="purple" />
@@ -161,7 +161,7 @@ export default function MonitorPage() {
         <h2 className="text-sm font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
           <Server size={14} /> 系统资源
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <StatCard icon={Cpu} label="CPU 使用率" value={`${s.cpu_percent}%`} color={s.cpu_percent > 80 ? 'rose' : 'blue'} />
           <StatCard icon={MemoryStick} label="内存使用率" value={`${s.memory.percent.toFixed(1)}%`} sub={`${formatBytes(s.memory.used)} / ${formatBytes(s.memory.total)}`} color={s.memory.percent > 80 ? 'rose' : 'amber'} />
           <StatCard icon={HardDrive} label="磁盘使用率" value={`${s.disk.percent.toFixed(1)}%`} sub={`${formatBytes(s.disk.used)} / ${formatBytes(s.disk.total)}`} color={s.disk.percent > 80 ? 'rose' : 'green'} />
@@ -178,7 +178,7 @@ export default function MonitorPage() {
         <h2 className="text-sm font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
           <HardDrive size={14} /> 存储分布
         </h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <StatCard icon={Database} label="数据库" value={formatBytes(st.database_bytes)} color="blue" />
           <StatCard icon={HardDrive} label="数据目录" value={formatBytes(st.data_bytes)} color="purple" />
           <StatCard icon={HardDrive} label="上传文件" value={formatBytes(st.uploads_bytes)} color="amber" />

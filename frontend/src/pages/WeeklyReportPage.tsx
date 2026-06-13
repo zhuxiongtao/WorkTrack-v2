@@ -2,9 +2,11 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Loader2, Calendar, ChevronDown, ChevronRight, FileText, Sparkles, X, Edit3, Save, Send } from 'lucide-react'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
-import MarkdownRenderer from '../components/MarkdownRenderer'
+import { useUnsavedGuard } from '../hooks/useUnsavedGuard'
+import MarkdownRenderer, { stripMarkdown } from '../components/MarkdownRenderer'
 import RichTextEditor from '../components/RichTextEditor'
 import TeamViewSwitcher from '../components/TeamViewSwitcher'
+import { PageHeader, EmptyState } from '../components/design-system'
 
 interface ReportItem {
   id: number; date: string; title: string; snippet: string; ai_summary: string; has_summary: boolean
@@ -61,12 +63,25 @@ export default function WeeklyReportPage() {
   // 周报编辑
   const [editingSummary, setEditingSummary] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
+  const [editInitial, setEditInitial] = useState('') // 必须在 startEditSummary 之前声明
   const [savingSummary, setSavingSummary] = useState(false)
 
   const startEditSummary = (weekStart: string, currentText: string) => {
     setEditingSummary(weekStart)
     setEditText(currentText)
+    setEditInitial(currentText)
     setExpandedSummaries(prev => { const n = new Set(prev); n.add(weekStart); return n })
+  }
+
+  // 周报摘要编辑是否被修改
+  const isEditDirty = !!editingSummary && editText !== editInitial
+  const { requestClose: requestCancelEdit, Dialog: EditUnsavedDialog } = useUnsavedGuard(isEditDirty)
+  const cancelEdit = async () => {
+    if (await requestCancelEdit()) {
+      setEditingSummary(null)
+      setEditText('')
+      setEditInitial('')
+    }
   }
 
   const saveEditedSummary = async (weekStart: string, _weekEnd: string, status: 'draft' | 'submitted' = 'draft') => {
@@ -82,6 +97,8 @@ export default function WeeklyReportPage() {
         w.week_start === weekStart ? { ...w, weekly_summary: editText } : w
       ))
       setEditingSummary(null)
+      setEditText('')
+      setEditInitial('')
     } catch { showToast('保存请求失败', 'error') }
     finally { setSavingSummary(false) }
   }
@@ -188,12 +205,13 @@ export default function WeeklyReportPage() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-8 max-md:mb-4">
-        <div className="flex items-center gap-4 max-md:gap-2 flex-wrap">
-          <div>
-            <h2 className="text-2xl max-md:text-xl font-bold text-white">周报</h2>
-            <p className="text-sm text-gray-500 mt-1">{totalWeeks} 周记录</p>
-          </div>
+      <PageHeader
+        icon={FileText}
+        title="周报"
+        description="按周自动聚合日报，AI 一键总结每周成果"
+        tone="purple"
+        stats={[{ label: '周记录', value: totalWeeks }]}
+        right={
           <TeamViewSwitcher
             memberList={memberList}
             viewMode={viewMode}
@@ -201,17 +219,19 @@ export default function WeeklyReportPage() {
             selectedUserIds={selectedUserIds}
             onSelectedUserIdsChange={setSelectedUserIds}
           />
-        </div>
-      </div>
+        }
+      />
 
       {loading ? (
         <div className="text-center py-20 text-gray-500"><Loader2 size={28} className="mx-auto animate-spin mb-3" />加载中...</div>
       ) : weeks.length === 0 ? (
-        <div className="text-center py-20">
-          <Calendar size={48} className="mx-auto text-gray-600 mb-4" />
-          <p className="text-gray-500 mb-3">暂无周报数据</p>
-          <p className="text-xs text-gray-600">先写几篇日报，这里会自动按周聚合展示</p>
-        </div>
+        <EmptyState
+          icon={FileText}
+          title="暂无周报数据"
+          description="先写几篇日报，这里会自动按周聚合展示"
+          tone="purple"
+          className="mb-8"
+        />
       ) : (
         <div className="space-y-6">
           {yearGroups.map(([year, yearWeeks]) => {
@@ -254,6 +274,13 @@ export default function WeeklyReportPage() {
                         <span className="text-[10px] text-gray-600 bg-bg-hover px-1.5 py-0.5 rounded-full">
                           {week.report_count} 篇日报
                         </span>
+                        {week.weekly_summary_status === 'submitted' ? (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 font-bold border border-emerald-500/15">已提交</span>
+                        ) : hasSummary ? (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500 font-bold border border-amber-500/15">草稿</span>
+                        ) : (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-500/10 text-gray-400 font-medium border border-gray-500/15">待总结</span>
+                        )}
                       </div>
                     </div>
                   </button>
@@ -331,7 +358,7 @@ export default function WeeklyReportPage() {
                                     showToast(err.detail || '提交失败', 'error')
                                   }
                                 }}
-                                className="px-2.5 py-1.5 mr-2 rounded-lg bg-accent-blue text-white text-xs font-medium hover:bg-blue-600 flex items-center gap-1"
+                                className="px-2.5 py-1.5 mr-2 rounded-lg bg-accent-blue text-[#fff] text-xs font-medium hover:bg-blue-600 flex items-center gap-1"
                               >
                                 <Send size={11} />提交
                               </button>
@@ -361,13 +388,13 @@ export default function WeeklyReportPage() {
                                   <button
                                     onClick={() => saveEditedSummary(week.week_start, week.week_end, 'submitted')}
                                     disabled={savingSummary}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-blue text-white text-xs font-medium hover:bg-blue-600 disabled:opacity-50"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-blue text-[#fff] text-xs font-medium hover:bg-blue-600 disabled:opacity-50"
                                   >
                                     {savingSummary ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
                                     提交上级
                                   </button>
                                   <button
-                                    onClick={() => setEditingSummary(null)}
+                                    onClick={cancelEdit}
                                     className="px-3 py-1.5 rounded-lg bg-bg-hover text-xs text-gray-400 hover:text-white border border-border"
                                   >
                                     取消
@@ -411,13 +438,13 @@ export default function WeeklyReportPage() {
                               <button
                                 onClick={() => saveEditedSummary(week.week_start, week.week_end, 'submitted')}
                                 disabled={savingSummary}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-blue text-white text-xs font-medium hover:bg-blue-600 disabled:opacity-50"
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-blue text-[#fff] text-xs font-medium hover:bg-blue-600 disabled:opacity-50"
                               >
                                 {savingSummary ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
                                 提交上级
                               </button>
                               <button
-                                onClick={() => setEditingSummary(null)}
+                                onClick={cancelEdit}
                                 className="px-3 py-1.5 rounded-lg bg-bg-hover text-xs text-gray-400 hover:text-white border border-border"
                               >
                                 取消
@@ -461,7 +488,7 @@ export default function WeeklyReportPage() {
                                   {r.has_summary && <Sparkles size={11} className="text-[#8B5CF6] flex-shrink-0" />}
                                 </div>
                                 {r.ai_summary ? (
-                                  <p className="text-xs text-gray-300 line-clamp-2 leading-relaxed">{r.ai_summary}</p>
+                                  <p className="text-xs text-gray-300 line-clamp-2 leading-relaxed">{stripMarkdown(r.ai_summary)}</p>
                                 ) : (
                                   <p className="text-xs text-gray-600 italic">暂无 AI 摘要，点击查看详情</p>
                                 )}
@@ -508,6 +535,9 @@ export default function WeeklyReportPage() {
           </div>
         </div>
       )}
+
+      {/* 周报摘要编辑未保存提示 */}
+      {EditUnsavedDialog}
     </div>
   )
 }

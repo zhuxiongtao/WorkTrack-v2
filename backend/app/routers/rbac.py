@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlmodel import Session, select, or_
 
-from app.auth import get_current_user, has_permission, get_user_permissions
+from app.auth import get_current_user, has_permission, get_user_permissions, invalidate_rbac_cache
 from app.database import get_session
 from app.models.rbac import Permission, Role, RolePermission, UserRole, GroupRole
 from app.models.user import User
@@ -47,27 +47,29 @@ def list_roles(db: Session = Depends(get_session),
     if not has_permission(current_user, "user:manage_roles", db):
         raise HTTPException(status_code=403, detail="无权限查看角色")
     roles = db.exec(select(Role).order_by(Role.created_at)).all()
-    result = []
-    for role in roles:
-        perm_codes = [
-            r for r in
-            db.exec(
-                select(Permission.code)
-                .join(RolePermission, RolePermission.permission_id == Permission.id)
-                .where(RolePermission.role_id == role.id)
-            ).all()
-        ]
-        result.append({
-            "id": role.id,
-            "name": role.name,
-            "code": role.code,
-            "description": role.description,
-            "is_system": role.is_system,
-            "user_id": role.user_id,
-            "permission_codes": perm_codes,
-            "created_at": role.created_at.isoformat() if role.created_at else None,
-        })
-    return result
+    role_ids = [r.id for r in roles]
+    perm_by_role: dict[int, list[str]] = {rid: [] for rid in role_ids}
+    if role_ids:
+        rows = db.exec(
+            select(RolePermission.role_id, Permission.code)
+            .join(Permission, Permission.id == RolePermission.permission_id)
+            .where(RolePermission.role_id.in_(role_ids))
+        ).all()
+        for role_id, code in rows:
+            perm_by_role.setdefault(role_id, []).append(code)
+    return [
+        {
+            "id": r.id,
+            "name": r.name,
+            "code": r.code,
+            "description": r.description,
+            "is_system": r.is_system,
+            "user_id": r.user_id,
+            "permission_codes": perm_by_role.get(r.id, []),
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in roles
+    ]
 
 
 @router.post("/roles", status_code=201)
@@ -94,6 +96,7 @@ def create_role(data: RoleCreate, db: Session = Depends(get_session),
             db.add(RolePermission(role_id=role.id, permission_id=perm.id))
     db.commit()
     db.refresh(role)
+    invalidate_rbac_cache()
     return {"id": role.id, "name": role.name, "code": role.code}
 
 
@@ -127,6 +130,7 @@ def update_role(role_id: int, data: RoleUpdate, db: Session = Depends(get_sessio
     db.add(role)
     db.commit()
     db.refresh(role)
+    invalidate_rbac_cache()
     perm_codes = [
         r for r in
         db.exec(
@@ -164,6 +168,7 @@ def delete_role(role_id: int, db: Session = Depends(get_session),
         db.delete(dr)
     db.delete(role)
     db.commit()
+    invalidate_rbac_cache()
 
 
 # ===== 查询用户有效权限 =====

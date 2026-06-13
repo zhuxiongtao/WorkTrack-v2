@@ -33,6 +33,11 @@ def execute_task(task_id: int):
             elif task.action_type == "ai_analyze_project":
                 params = json.loads(task.action_params or "{}")
                 _action_analyze_project(db, params.get("project_id"))
+            elif task.action_type == "fetch_ai_news":
+                from app.services.news_fetcher import fetch_ai_news
+                result = fetch_ai_news()
+                if not result.get("success"):
+                    raise Exception(result.get("error", "fetch_ai_news failed"))
             write_log("info", "task", f"任务执行成功: {task.name}", db=db)
         except Exception as e:
             write_log("error", "task", f"任务执行失败: {task.name}", details=str(e), db=db)

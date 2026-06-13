@@ -1,8 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Plus, X, Save, Trash2, Loader2, Key, Globe, Cpu, Settings2, ListChecks, Sparkles, Brain, Eye, EyeOff, Mic, MessageSquare, Search, ChevronDown, Home, RotateCcw, Edit3, Server, User, Package, MapPin, Activity, Cloud, Palette, Upload, Copy, Terminal, Zap, Building2, Pencil, AlertTriangle } from 'lucide-react'
+import { Plus, X, Save, Trash2, Loader2, Key, Globe, Cpu, Settings2, ListChecks, Sparkles, Brain, Eye, EyeOff, Mic, MessageSquare, Search, ChevronDown, Home, RotateCcw, Edit3, Server, User, Package, MapPin, Activity, Cloud, Palette, Upload, Copy, Terminal, Zap, Pencil, AlertTriangle, Sliders, Layers, Megaphone, RefreshCw, CheckCircle2, Power } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useSearchParams } from 'react-router-dom'
+import ModelDetailDrawer from '../components/ModelDetailDrawer'
+import TaskOverrideModal from '../components/TaskOverrideModal'
+import { IconBox, StatusBadge, SectionHeader, TASK_GROUP_ICONS, SUBTASK_ICONS } from '../components/design-system'
+import RichTextEditor from '../components/RichTextEditor'
 
 interface Provider {
   id: number
@@ -21,6 +25,15 @@ interface ProviderModelItem {
   id: number
   model_name: string
   model_type: string
+  // P1 多模态：模型可执行的任务类型列表
+  supported_task_types: string[]
+  // P1 任务级「需要能力」：模型的能力标签（与后端 ProviderModel 字段一致）
+  supports_function_calling?: boolean
+  supports_vision?: boolean
+  supports_json_mode?: boolean
+  supports_thinking?: boolean
+  supports_streaming?: boolean
+  supports_system_prompt?: boolean
 }
 
 interface FetchedModel {
@@ -37,14 +50,55 @@ interface TaskConfig {
   provider_id: number | null
   provider_name: string | null
   model_name: string
+  user_id: number | null
+  override_temperature: number | null
+  override_top_p: number | null
+  override_max_tokens: number | null
+  override_frequency_penalty: number | null
+  override_presence_penalty: number | null
+  override_stop: string | null
+  override_thinking_mode: string | null
+  override_thinking_budget: number | null
+  override_response_format: string | null
+  override_json_schema: string | null
+  override_extra_params_json: string | null
+  preset_id: number | null
 }
 
-const TASK_TYPES = [
-  { key: 'chat', label: '对话模型', icon: MessageSquare, desc: '日报总结、会议分析、AI 对话' },
-  { key: 'embedding', label: '嵌入模型', icon: Brain, desc: '语义搜索、向量索引' },
-  { key: 'vision', label: '视觉模型', icon: Eye, desc: '图片分析（预留）' },
-  { key: 'speech_to_text', label: '语音转文字', icon: Mic, desc: '录音转文字' },
-  { key: 'web_search', label: '联网搜索', icon: Search, desc: 'Tavily 联网查询' },
+interface Preset {
+  id: number
+  name: string
+  description: string
+  is_system: boolean
+  user_id: number | null
+  temperature: number | null
+  top_p: number | null
+  max_tokens: number | null
+  frequency_penalty: number | null
+  presence_penalty: number | null
+  stop: string | null
+  thinking_mode: string | null
+  thinking_budget: number | null
+  response_format: string | null
+  json_schema: string | null
+  extra_params_json: string | null
+}
+
+// 任务组：按功能性质聚类。同一组的所有 task 共享同一个模型配置。
+const TASK_GROUPS: {
+  id: string
+  label: string
+  desc: string
+  icon: any
+  color: string
+  taskKeys: string[]
+  compatibleTypes: string[]
+}[] = [
+  { id: 'chat', label: '通用对话', desc: 'AI 助手、在线问答、自由聊天', icon: TASK_GROUP_ICONS.chat.icon, color: '#3B82F6', taskKeys: ['chat'], compatibleTypes: ['chat'] },
+  { id: 'summary', label: '内容总结', desc: '日报 / 周报 / 会议纪要 — 3 任务共享', icon: TASK_GROUP_ICONS.summary.icon, color: '#10B981', taskKeys: ['daily_summary', 'weekly_summary', 'meeting_organize'], compatibleTypes: ['chat'] },
+  { id: 'extract', label: '结构化抽取', desc: '会议抽取 / 合同解析 / 项目分析 / 公司信息 — 4 任务共享', icon: TASK_GROUP_ICONS.extract.icon, color: '#A78BFA', taskKeys: ['meeting_extract', 'contract_parse', 'project_analysis', 'company_info'], compatibleTypes: ['chat'] },
+  { id: 'insight', label: '业务洞察', desc: '周 / 月 / 季 综合业务洞察共享', icon: TASK_GROUP_ICONS.insight.icon, color: '#F59E0B', taskKeys: ['insight_week', 'insight_month', 'insight_quarter'], compatibleTypes: ['chat'] },
+  { id: 'multimodal', label: '多模态 / 专用模型', desc: '语音转写 / 图像理解 / 向量化 — 各需不同类型模型', icon: TASK_GROUP_ICONS.multimodal.icon, color: '#EC4899', taskKeys: ['speech_to_text', 'vision', 'embedding'], compatibleTypes: [] },
 ]
 
 
@@ -64,12 +118,237 @@ const TYPE_COLORS: Record<string, string> = {
 }
 const TYPE_LABEL: Record<string, string> = { chat: '对话', embedding: '嵌入', speech_to_text: 'ASR', vision: '视觉', web_search: '搜索' }
 
-// Task type -> allowed model types (for filtering in task config)
-const TASK_COMPATIBLE_TYPES: Record<string, string[]> = {
-  chat: ['chat', 'vision'],       // vision models also support chat
-  embedding: ['embedding'],
-  vision: ['vision'],
-  speech_to_text: ['speech_to_text'],
+// P1 多模态：检查模型是否支持某个 task_type（向后兼容老数据：fallback 到 model_type）
+const modelSupports = (m: ProviderModelItem, taskType: string): boolean => {
+  if (Array.isArray(m.supported_task_types) && m.supported_task_types.length > 0) {
+    return m.supported_task_types.includes(taskType)
+  }
+  // 老数据兜底：基于 model_type 字段
+  return m.model_type === taskType
+}
+
+// P1 多模态：检查模型是否支持组内任一 task_type
+const modelSupportsAnyOf = (m: ProviderModelItem, taskTypes: string[]): boolean => {
+  if (!taskTypes || taskTypes.length === 0) return true
+  return taskTypes.some((t) => modelSupports(m, t))
+}
+
+// P1 任务级「需要能力」：检查模型是否满足全部勾选的能力
+// - 未勾选（caps 为空）一律返回 true（不约束）
+// - 支持乐观默认：streaming/system_prompt 字段为 null/undefined 时视为支持
+const modelMatchesCaps = (m: ProviderModelItem, caps: string[]): boolean => {
+  if (!caps || caps.length === 0) return true
+  for (const c of caps) {
+    switch (c) {
+      case 'function_calling': if (!m.supports_function_calling) return false; break
+      case 'vision':          if (!m.supports_vision)          return false; break
+      case 'json_mode':       if (!m.supports_json_mode)       return false; break
+      case 'thinking':        if (!m.supports_thinking)        return false; break
+      case 'streaming':       if (m.supports_streaming === false) return false; break
+      case 'system_prompt':   if (m.supports_system_prompt === false) return false; break
+      default: break
+    }
+  }
+  return true
+}
+
+// ==================== 系统公告 & AI 资讯 管理 Tab ====================
+type ToastFn = (msg: string, type?: 'success' | 'error' | 'info' | 'warning') => void
+
+function AnnouncementTab({
+  fetchWithAuth, showToast,
+}: {
+  fetchWithAuth: (url: string, init?: RequestInit) => Promise<Response>
+  showToast: ToastFn
+}) {
+  const [content, setContent] = useState('')
+  const [enabled, setEnabled] = useState(false)
+  const [publishedAt, setPublishedAt] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [fetchResult, setFetchResult] = useState<{ inserted: number; updated: number; total: number } | null>(null)
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetchWithAuth('/api/v1/news/announcement')
+      if (res.ok) {
+        const a = await res.json()
+        setContent(a.content || '')
+        setEnabled(!!a.enabled)
+        setPublishedAt(a.published_at)
+      }
+    } catch {
+      showToast('加载公告失败', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }, [fetchWithAuth, showToast])
+
+  useEffect(() => { load() }, [load])
+
+  const handleSave = async () => {
+    if (enabled && !content.trim()) {
+      showToast('已启用状态下公告内容不能为空', 'warning')
+      return
+    }
+    setSaving(true)
+    try {
+      const res = await fetchWithAuth('/api/v1/news/announcement', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content, enabled }),
+      })
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}))
+        throw new Error(e.detail || `保存失败 (${res.status})`)
+      }
+      const a = await res.json()
+      setContent(a.content || '')
+      setEnabled(!!a.enabled)
+      setPublishedAt(a.published_at)
+      showToast(enabled ? '公告已发布' : '公告已保存', 'success')
+    } catch (e: any) {
+      showToast(e.message || '保存失败', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleFetchNow = async () => {
+    setRefreshing(true)
+    try {
+      const res = await fetchWithAuth('/api/v1/news/fetch-now', { method: 'POST' })
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}))
+        throw new Error(e.detail || `抓取失败 (${res.status})`)
+      }
+      const r = await res.json()
+      setFetchResult({ inserted: r.inserted || 0, updated: r.updated || 0, total: r.total || 0 })
+      showToast(`抓取完成：新增 ${r.inserted}，更新 ${r.updated}，共 ${r.total} 条`, 'success')
+    } catch (e: any) {
+      showToast(e.message || '抓取失败', 'error')
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="text-center py-20 text-gray-500">
+        <Loader2 size={24} className="mx-auto animate-spin mb-2" />
+        加载中...
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* ===== AI 资讯抓取卡片 ===== */}
+      <div className="p-5 max-md:p-4 rounded-xl bg-bg-card border border-border">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-base font-medium text-gray-900 dark:text-white flex items-center gap-2">
+            <Sparkles size={18} className="text-cyan-400" /> AI 资讯流
+          </h3>
+          <button
+            onClick={handleFetchNow}
+            disabled={refreshing}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25 text-xs font-medium disabled:opacity-50 transition-colors"
+          >
+            <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
+            {refreshing ? '抓取中...' : '立即抓取'}
+          </button>
+        </div>
+        <p className="text-xs text-gray-500 mb-3">
+          数据源：<a href="https://aihot.virxact.com" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">aihot.virxact.com</a> 每日 RSS，定时任务每 2 小时自动抓取；可点击"立即抓取"手动触发。
+        </p>
+        {fetchResult && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/10 text-emerald-300 text-xs">
+            <CheckCircle2 size={12} />
+            上次抓取：新增 <b>{fetchResult.inserted}</b>，更新 <b>{fetchResult.updated}</b>，共 <b>{fetchResult.total}</b> 条
+          </div>
+        )}
+      </div>
+
+      {/* ===== 公告编辑器 ===== */}
+      <div className="p-5 max-md:p-4 rounded-xl bg-bg-card border border-border">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-base font-medium text-gray-900 dark:text-white flex items-center gap-2">
+            <Megaphone size={18} className="text-amber-400" /> 全频道系统公告
+          </h3>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <span className="text-xs text-gray-500">{enabled ? '已发布' : '已停用'}</span>
+            <button
+              type="button"
+              onClick={() => setEnabled(!enabled)}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${enabled ? 'bg-emerald-500' : 'bg-gray-500/40'}`}
+            >
+              <span
+                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${enabled ? 'translate-x-5' : 'translate-x-1'}`}
+              />
+            </button>
+          </label>
+        </div>
+        <p className="text-xs text-gray-500 mb-3 flex items-center gap-1">
+          <Power size={10} />
+          启用后所有登录用户登录时即可在 Dashboard 顶部看到此公告（高亮琥珀色置顶条）。
+          {publishedAt && <span className="text-gray-600">· 上次发布：{new Date(publishedAt).toLocaleString('zh-CN')}</span>}
+        </p>
+
+        <RichTextEditor
+          value={content}
+          onChange={setContent}
+          placeholder="支持富文本：版本更新、企业内部通知、活动公告... 留空则不发布"
+          className="min-h-[280px]"
+        />
+
+        <div className="flex items-center gap-3 mt-4">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-2 px-5 py-2 rounded-lg bg-[#10B981] text-white text-sm font-medium hover:bg-emerald-600 disabled:opacity-50 transition-colors"
+          >
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+            {saving ? '保存中...' : (enabled ? '保存并发布' : '保存（停用）')}
+          </button>
+          <span className="text-[10px] text-gray-500">公告为富文本，最多 50000 字符</span>
+        </div>
+      </div>
+
+      {/* ===== 实时预览 ===== */}
+      <div className="p-5 max-md:p-4 rounded-xl bg-bg-card border border-border">
+        <h3 className="text-base font-medium text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+          <Megaphone size={16} className="text-amber-400" /> Dashboard 实时预览
+        </h3>
+        <div className="space-y-2">
+          <div
+            className={`px-3 py-1.5 rounded-lg border ${enabled && content.trim()
+              ? 'bg-gradient-to-r from-amber-500/15 via-amber-500/8 to-amber-500/15 border-amber-500/25'
+              : 'bg-bg-hover border-border opacity-50'}`}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <Megaphone size={11} className="text-amber-400" />
+              <span className="text-[10px] font-bold text-amber-300">公告</span>
+              {!enabled && <span className="text-[10px] text-gray-500">（停用，不会显示）</span>}
+            </div>
+            <div
+              className="text-[11px] text-amber-100 truncate"
+              dangerouslySetInnerHTML={{
+                __html: content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200) || '（暂无内容）',
+              }}
+            />
+          </div>
+          <div className="px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/5">
+            <div className="flex items-center gap-2 mb-1">
+              <Sparkles size={11} className="text-cyan-400" />
+              <span className="text-[10px] font-bold text-cyan-300">AI 资讯</span>
+            </div>
+            <div className="text-[11px] text-gray-500">滚动条（30 条最新资讯，hover 暂停，点击跳转源链接）</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function SettingsPage() {
@@ -88,6 +367,7 @@ export default function SettingsPage() {
     ...(canAccessModels ? ['models' as const] : []),
     ...(canUseAI ? ['prompts' as const] : []),
     ...(canEditSettings ? ['system' as const] : []),
+    ...(canEditSettings ? ['announcement' as const] : []),
     'account' as const,
   ]
   const resolveInitialTab = () => {
@@ -111,7 +391,8 @@ export default function SettingsPage() {
   const TABS = [
     ...(canAccessModels ? [{ key: 'models', label: '模型管理', icon: Cpu, desc: '供应商与任务模型配置' }] : []),
     ...(canUseAI ? [{ key: 'prompts', label: 'AI 提示词', icon: Edit3, desc: '自定义 AI 输出风格' }] : []),
-    ...(canEditSettings ? [{ key: 'system', label: '系统配置', icon: Settings2, desc: '字段选项与行业分类' }] : []),
+    ...(canEditSettings ? [{ key: 'system', label: '系统配置', icon: Settings2, desc: '字段选项管理' }] : []),
+    ...(canEditSettings ? [{ key: 'announcement', label: '系统公告', icon: Megaphone, desc: '全频道公告与 AI 资讯' }] : []),
     { key: 'account', label: '个人账户', icon: User, desc: '个人信息、首页与密码' },
     { key: 'about', label: '关于', icon: Server, desc: '系统运行状态' },
   ]
@@ -134,13 +415,22 @@ export default function SettingsPage() {
   const [form, setForm] = useState({ name: '', base_url: '', api_key: '', project_id: '', location: '' })
   const [testingModelId, setTestingModelId] = useState<number | null>(null)
   const [testResults, setTestResults] = useState<Record<number, { success: boolean; message: string; reply?: string; elapsed?: number }>>({})
-  const [editingTypeModelId, setEditingTypeModelId] = useState<number | null>(null)
   const [fetchingModels, setFetchingModels] = useState<number | null>(null)
 
   const [providerModels, setProviderModels] = useState<Record<number, ProviderModelItem[]>>({})
   const [expandedDropdown, setExpandedDropdown] = useState<number | null>(null)
   const [modelSearch, setModelSearch] = useState('')
   const [addModelType, setAddModelType] = useState('auto')
+
+  // 模型参数抽屉
+  const [detailDrawer, setDetailDrawer] = useState<{ open: boolean; providerId: number | null; providerName: string; modelId: number | null; modelName: string | null }>({
+    open: false, providerId: null, providerName: '', modelId: null, modelName: null,
+  })
+
+  // 任务参数覆盖弹窗
+  const [overrideModal, setOverrideModal] = useState<{ open: boolean; taskType: string; taskLabel: string }>({
+    open: false, taskType: '', taskLabel: '',
+  })
 
   // 品牌自定义
   const [branding, setBranding] = useState({ logo_url: '', site_title: 'WorkTrack' })
@@ -174,22 +464,18 @@ export default function SettingsPage() {
 
   useEffect(() => { loadMcpConfig() }, [loadMcpConfig])
 
-  // 点击空白区域关闭类型下拉和添加模型下拉
-  const typeDropdownRef = useRef<HTMLDivElement>(null)
+  // 点击空白区域关闭添加模型下拉
   const addModelDropdownRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (editingTypeModelId === null && expandedDropdown === null) return
+    if (expandedDropdown === null) return
     const handler = (e: MouseEvent) => {
-      if (editingTypeModelId !== null && typeDropdownRef.current && !typeDropdownRef.current.contains(e.target as Node)) {
-        setEditingTypeModelId(null)
-      }
       if (expandedDropdown !== null && addModelDropdownRef.current && !addModelDropdownRef.current.contains(e.target as Node)) {
         setExpandedDropdown(null); setModelSearch('')
       }
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [editingTypeModelId, expandedDropdown])
+  }, [expandedDropdown])
 
   const loadProviders = useCallback(() => {
     fetch('/api/v1/settings/providers')
@@ -248,6 +534,7 @@ export default function SettingsPage() {
     await fetchWithAuth(`/api/v1/settings/providers/${id}`, { method: 'DELETE' })
     setProviderModels((prev) => { const n = { ...prev }; delete n[id]; return n })
     loadProviders()
+    loadTaskConfigs()
     showToast('供应商已删除', 'success')
   }
 
@@ -291,6 +578,7 @@ export default function SettingsPage() {
     try {
       await fetch(`/api/v1/settings/providers/${providerId}/models/${modelId}`, { method: 'DELETE' })
       loadProviderModels(providerId)
+      loadTaskConfigs()
       showToast('模型已移除', 'success')
     } catch { /* noop */ }
   }
@@ -309,19 +597,6 @@ export default function SettingsPage() {
     } finally { setTestingModelId(null) }
   }
 
-  const updateModelType = async (providerId: number, modelId: number, newType: string) => {
-    setEditingTypeModelId(null)
-    try {
-      const res = await fetch(`/api/v1/settings/providers/${providerId}/models/${modelId}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model_type: newType }),
-      })
-      if (res.ok) {
-        loadProviderModels(providerId)
-      }
-    } catch { /* noop */ }
-  }
-
   const getAvailableModels = (p: Provider): FetchedModel[] => {
     try { return JSON.parse(p.supported_models_json || '[]') }
     catch { return [] }
@@ -338,15 +613,121 @@ export default function SettingsPage() {
     fetch('/api/v1/settings/task-models').then((r) => r.json()).then((d) => setTaskConfigs(d as Record<string, TaskConfig>)).catch(() => {})
   }, [])
   useEffect(() => { loadTaskConfigs() }, [loadTaskConfigs])
-  const saveTaskConfig = async (taskType: string, providerId: number | null, modelName: string) => {
-    setTaskSaving(taskType)
+  const saveTaskConfig = async (taskTypes: string | string[], providerId: number | null, modelName: string) => {
+    const list = Array.isArray(taskTypes) ? taskTypes : [taskTypes]
+    setTaskSaving(list[0])
     try {
-      await fetch('/api/v1/settings/task-models', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ task_type: taskType, provider_id: providerId, model_name: modelName }),
-      })
+      // 并发保存组内所有 task
+      await Promise.all(list.map((taskType) => {
+        const existing = taskConfigs[taskType]
+        return fetch('/api/v1/settings/task-models', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            task_type: taskType,
+            provider_id: providerId,
+            model_name: modelName,
+            override_temperature: existing?.override_temperature ?? null,
+            override_top_p: existing?.override_top_p ?? null,
+            override_max_tokens: existing?.override_max_tokens ?? null,
+            override_frequency_penalty: existing?.override_frequency_penalty ?? null,
+            override_presence_penalty: existing?.override_presence_penalty ?? null,
+            override_stop: existing?.override_stop ?? null,
+            override_thinking_mode: existing?.override_thinking_mode ?? null,
+            override_thinking_budget: existing?.override_thinking_budget ?? null,
+            override_response_format: existing?.override_response_format ?? null,
+            override_json_schema: existing?.override_json_schema ?? null,
+            override_extra_params_json: existing?.override_extra_params_json ?? null,
+            preset_id: existing?.preset_id ?? null,
+          }),
+        })
+      }))
       loadTaskConfigs()
     } finally { setTaskSaving(null) }
+  }
+
+  // ===== 参数预设 =====
+  const [presets, setPresets] = useState<Preset[]>([])
+  const [presetsLoading, setPresetsLoading] = useState(false)
+  const [presetEditor, setPresetEditor] = useState<{ open: boolean; preset: Preset | null }>({ open: false, preset: null })
+  const [presetForm, setPresetForm] = useState({ name: '', description: '', temperature: '', top_p: '', max_tokens: '', thinking_mode: '', thinking_budget: '', response_format: '' })
+  const [presetSaving, setPresetSaving] = useState(false)
+
+  const loadPresets = useCallback(() => {
+    setPresetsLoading(true)
+    fetch('/api/v1/settings/model-presets')
+      .then((r) => r.json())
+      .then((d) => setPresets(Array.isArray(d) ? d : []))
+      .catch(() => {})
+      .finally(() => setPresetsLoading(false))
+  }, [])
+  useEffect(() => { loadPresets() }, [loadPresets])
+
+  // 打开预设编辑器（修复 P1 bug：编辑时回填表单）
+  const openPresetEditor = (p: Preset | null) => {
+    if (p) {
+      setPresetForm({
+        name: p.name || '',
+        description: p.description || '',
+        temperature: p.temperature == null ? '' : String(p.temperature),
+        top_p: p.top_p == null ? '' : String(p.top_p),
+        max_tokens: p.max_tokens == null ? '' : String(p.max_tokens),
+        thinking_mode: p.thinking_mode || '',
+        thinking_budget: p.thinking_budget == null ? '' : String(p.thinking_budget),
+        response_format: p.response_format || '',
+      })
+    } else {
+      setPresetForm({ name: '', description: '', temperature: '', top_p: '', max_tokens: '', thinking_mode: '', thinking_budget: '', response_format: '' })
+    }
+    setPresetEditor({ open: true, preset: p })
+  }
+
+
+  const handleSavePreset = async () => {
+    if (!presetForm.name.trim()) { showToast('请填写预设名称', 'warning'); return }
+    setPresetSaving(true)
+    try {
+      const payload: Record<string, any> = {
+        name: presetForm.name.trim(),
+        description: presetForm.description.trim(),
+        temperature: presetForm.temperature === '' ? null : Number(presetForm.temperature),
+        top_p: presetForm.top_p === '' ? null : Number(presetForm.top_p),
+        max_tokens: presetForm.max_tokens === '' ? null : Number(presetForm.max_tokens),
+        thinking_mode: presetForm.thinking_mode || null,
+        thinking_budget: presetForm.thinking_budget === '' ? null : Number(presetForm.thinking_budget),
+        response_format: presetForm.response_format || null,
+      }
+      const isEdit = !!presetEditor.preset
+      const url = isEdit ? `/api/v1/settings/model-presets/${presetEditor.preset!.id}` : '/api/v1/settings/model-presets'
+      const res = await fetch(url, {
+        method: isEdit ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.detail || '保存失败')
+      }
+      showToast(isEdit ? '预设已更新' : '预设已创建', 'success')
+      setPresetEditor({ open: false, preset: null })
+      loadPresets()
+    } catch (e: any) {
+      showToast(e.message || '保存失败', 'error')
+    } finally { setPresetSaving(false) }
+  }
+
+  const handleDeletePreset = async (p: Preset) => {
+    if (!await showConfirm(`确定删除预设「${p.name}」？引用该预设的任务会回退到模型默认参数。`)) return
+    try {
+      const res = await fetch(`/api/v1/settings/model-presets/${p.id}`, { method: 'DELETE' })
+      if (!res.ok && res.status !== 204) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.detail || '删除失败')
+      }
+      showToast('预设已删除', 'success')
+      loadPresets()
+    } catch (e: any) {
+      showToast(e.message || '删除失败', 'error')
+    }
   }
   const getActiveProviders = () => {
     if (canEditSettings) return providers.filter((p) => p.is_active && p.api_key)
@@ -471,33 +852,6 @@ export default function SettingsPage() {
   const loadFieldOptions = () => { fetch('/api/v1/settings/field-options').then((r) => r.json()).then((d) => setFieldOptions(d as FieldOption[])) }
   useEffect(() => { loadFieldOptions() }, [])
 
-  // 行业标准化分类
-  const [industryCats, setIndustryCats] = useState('')
-  const [industryCatsSaving, setIndustryCatsSaving] = useState(false)
-  const loadIndustryCats = useCallback(() => {
-    fetchWithAuth('/api/v1/settings/industry-categories')
-      .then(r => r.json())
-      .then(d => setIndustryCats((d.categories || []).join('\n')))
-      .catch(() => {})
-  }, [fetchWithAuth])
-  useEffect(() => { loadIndustryCats() }, [loadIndustryCats])
-  const saveIndustryCats = async () => {
-    setIndustryCatsSaving(true)
-    try {
-      const res = await fetchWithAuth('/api/v1/settings/industry-categories', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ categories: industryCats }),
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: '保存失败' }))
-        throw new Error(err.detail || '保存失败')
-      }
-      showToast('行业分类已保存', 'success')
-    } catch (e: any) {
-      showToast(e.message || '保存失败', 'error')
-    }
-    finally { setIndustryCatsSaving(false) }
-  }
   useEffect(() => {
     fetch('/api/v1/settings/preferences')
       .then((r) => r.json())
@@ -529,18 +883,25 @@ export default function SettingsPage() {
     } finally { setHomePageSaving(false) }
   }
 
-  const presets = [
+  const providerPresets = [
     { name: 'OpenAI', base_url: 'https://api.openai.com/v1' },
     { name: 'DeepSeek', base_url: 'https://api.deepseek.com/v1' },
-    { name: 'Gemini', base_url: 'https://generativelanguage.googleapis.com/v1beta/openai' },
+    { name: 'Gemini', base_url: 'https://generativelanguage.googleapis.com/v1beta/' },
     { name: 'Vertex AI', base_url: 'https://aiplatform.googleapis.com/v1', project_id: '', location: 'global' },
     { name: 'Anthropic', base_url: 'https://api.anthropic.com/v1' },
     { name: 'MiniMax', base_url: 'https://api.minimaxi.com/v1' },
     { name: '硅基流动', base_url: 'https://api.siliconflow.cn/v1' },
     { name: '通义千问', base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1' },
+    { name: '智谱GLM', base_url: 'https://open.bigmodel.cn/api/paas/v4/' },
+    { name: '文心一言', base_url: 'https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/' },
+    { name: '月之暗面', base_url: 'https://api.moonshot.cn/v1' },
+    { name: '零一万物', base_url: 'https://api.lingyiwanwu.com/v1' },
+    { name: '百川', base_url: 'https://api.baichuan-ai.com/v1' },
+    { name: '豆包', base_url: 'https://ark.cn-beijing.volces.com/api/v3/' },
     { name: 'Groq', base_url: 'https://api.groq.com/openai/v1' },
     { name: 'xAI Grok', base_url: 'https://api.x.ai/v1' },
     { name: 'Together', base_url: 'https://api.together.xyz/v1' },
+    { name: '小米MiMo', base_url: 'https://api.xiaomimimo.com/v1' },
   ]
 
   return (
@@ -564,7 +925,7 @@ export default function SettingsPage() {
                     max-md:flex max-md:items-center max-md:gap-1.5 max-md:px-3 max-md:py-1.5 max-md:rounded-lg max-md:text-xs
                     md:w-full md:text-left md:px-4 md:py-3 md:rounded-xl
                     ${isActive
-                      ? 'bg-accent-blue text-white shadow-lg shadow-blue-500/20'
+                      ? 'bg-accent-blue text-[#fff] shadow-lg shadow-blue-500/20'
                       : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 md:hover:bg-bg-card border border-transparent md:hover:border-border max-md:bg-bg-card max-md:border-border'
                     }`}
                 >
@@ -585,10 +946,14 @@ export default function SettingsPage() {
         <>
 
       {/* 模型供应商 */}
-      <div className="mb-10">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-medium text-gray-900 dark:text-white flex items-center gap-2"><Cpu size={18} className="text-[#3B82F6]" /> 模型供应商</h3>
-          {canManageModels && <button onClick={openCreate} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-blue text-white text-sm hover:bg-accent-blue/85"><Plus size={14} /> 添加供应商</button>}
+      <div>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <Cpu size={15} className="text-[#3B82F6] shrink-0" />
+            <h3 className="text-[13px] font-semibold text-gray-900 dark:text-white whitespace-nowrap">模型供应商</h3>
+            <span className="text-[11px] text-gray-500 truncate">配置 AI 模型来源、API Key、模型清单</span>
+          </div>
+          {canManageModels && <button onClick={openCreate} className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-accent-blue text-[#fff] text-xs hover:bg-accent-blue/85 shrink-0"><Plus size={12} /> 添加供应商</button>}
         </div>
 
         {loading ? (
@@ -599,7 +964,7 @@ export default function SettingsPage() {
             <p className="text-gray-600 dark:text-gray-400 text-sm mb-1">尚未配置模型供应商</p>
             <p className="text-gray-600 text-xs mb-4">添加 AI 模型供应商以启用智能整理功能</p>
             <div className="flex flex-wrap justify-center gap-2">
-              {presets.map((p) => (
+              {providerPresets.map((p) => (
                 <button key={p.name} onClick={() => { setForm({ ...form, name: p.name, base_url: p.base_url, project_id: (p as any).project_id || '', location: (p as any).location || '' }); setShowForm(true) }}
                   className="px-3 py-2 rounded-lg bg-bg-hover border border-border text-xs text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:border-[#3B82F6]/50 transition-all">+ {p.name}</button>
               ))}
@@ -616,8 +981,8 @@ export default function SettingsPage() {
                 : unconfiguredModels
 
               return (
-                <div key={p.id} className="rounded-xl bg-bg-card border border-border">
-                  <div className="p-4">
+                <div key={p.id} className="rounded-lg bg-bg-card border border-border">
+                  <div className="px-3.5 py-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-3 mb-1.5 flex-wrap">
@@ -657,67 +1022,56 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  {/* 模型列表 */}
-                  <div className="px-4 pb-3">
-                    <span className="text-xs text-gray-500">已配置 {(providerModels[p.id] || []).length} 个模型</span>
+                  {/* 模型列表 - 紧凑行布局 */}
+                  <div className="px-3.5 pb-2.5">
+                    <div className="flex items-center justify-between mb-1.5 mt-1">
+                      <span className="text-[11px] text-gray-500 font-medium tracking-wide uppercase">已配置 {(providerModels[p.id] || []).length} 个模型</span>
+                    </div>
                     {(providerModels[p.id] || []).length === 0 ? (
-                      <p className="text-xs text-gray-600 py-2">暂无模型，点击「添加模型」输入名称</p>
+                      <p className="text-[11px] text-gray-600 py-2 px-1">暂无模型，点击「添加模型」输入名称</p>
                     ) : (
-                      <div className="space-y-1 my-2">
+                      <div className="space-y-px">
                         {(providerModels[p.id] || []).map((m) => {
                           const tr = testResults[m.id]
+                          const supList = Array.isArray(m.supported_task_types) && m.supported_task_types.length > 0
+                            ? m.supported_task_types
+                            : [m.model_type]
+                          // 把所有能力去重后拼成内联小字（主类型已在 supList 中，不重复）
+                          const allLabels = Array.from(new Set(supList)).map((tt) => TYPE_LABEL[tt] || tt)
                           return (
-                            <div key={m.id} className="group flex items-center gap-1.5 px-3 py-2 rounded-lg bg-bg-input">
-                              <span className="text-xs text-gray-700 dark:text-gray-300 font-mono truncate flex-1 min-w-0">{m.model_name}</span>
-                              {/* 类型标签 - 可点击修改（需要编辑权限） */}
-                              <div className="relative shrink-0 min-w-[56px] flex justify-center" ref={editingTypeModelId === m.id ? typeDropdownRef : undefined}>
-                                {canEditProvider(p) ? (
-                                  <button
-                                    title="点击修改模型类型"
-                                    onClick={() => setEditingTypeModelId(editingTypeModelId === m.id ? null : m.id)}
-                                    className={`text-[10px] px-2 py-0.5 rounded-full cursor-pointer hover:ring-1 hover:ring-white/20 hover:brightness-125 transition-all flex items-center gap-0.5 ${TYPE_COLORS[m.model_type] || TYPE_COLORS.chat}`}>
-                                    {TYPE_LABEL[m.model_type] || m.model_type}
-                                    <Pencil size={8} className="opacity-0 group-hover:opacity-60 transition-opacity" />
-                                  </button>
-                                ) : (
-                                  <span className={`text-[10px] px-2 py-0.5 rounded-full flex items-center gap-0.5 ${TYPE_COLORS[m.model_type] || TYPE_COLORS.chat}`}>
-                                    {TYPE_LABEL[m.model_type] || m.model_type}
-                                  </span>
-                                )}
-                                {canEditProvider(p) && editingTypeModelId === m.id && (
-                                  <div className="absolute top-full left-0 mt-1 z-40 rounded-lg bg-bg-hover border border-[#3B82F6]/50 shadow-xl overflow-hidden min-w-[72px]">
-                                    {MODEL_TYPE_OPTIONS.map((opt) => (
-                                      <button key={opt.key} onClick={() => updateModelType(p.id, m.id, opt.key)}
-                                        className={`w-full text-left px-3 py-1.5 text-[11px] hover:bg-border transition-colors ${m.model_type === opt.key ? 'text-[#3B82F6]' : 'text-gray-400'}`}>
-                                        {opt.label}
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                              {/* 测试按钮 + 删除 */}
-                              <div className={`flex items-center gap-1 shrink-0 ${canEditProvider(p) ? 'w-[108px]' : 'w-auto'} justify-end`}>
-                                {tr && (
-                                  <span className={`text-[10px] truncate max-w-[90px] flex items-center gap-0.5 ${tr.success ? 'text-green-400' : 'text-red-400'}`} title={`${tr.message || ''} | 延时: ${tr.elapsed}ms`}>
-                                    {tr.success ? (
-                                      <><span className="text-xs">✅</span>{tr.reply ? <span className="truncate">"{tr.reply}"</span> : <span>{tr.elapsed}ms</span>}</>
-                                    ) : (
-                                      <><span className="text-xs">❌</span><span className="truncate">失败</span></>
-                                    )}
-                                    {tr.success && <span className="text-[9px] text-gray-500 opacity-60">{tr.elapsed}ms</span>}
-                                  </span>
-                                )}
-                                {canEditProvider(p) && (
-                                  <>
-                                    <button onClick={() => testModel(p.id, m.id)} disabled={testingModelId === m.id}
-                                      className="opacity-0 group-hover:opacity-100 px-2 py-0.5 rounded text-[10px] text-gray-500 hover:text-[#10B981] border border-border disabled:opacity-50 shrink-0">
-                                      {testingModelId === m.id ? <Loader2 size={10} className="animate-spin" /> : '测试'}
-                                    </button>
-                                    <button onClick={() => removeModel(p.id, m.id)}
-                                      className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-600 hover:text-red-400 shrink-0"><Trash2 size={10} /></button>
-                                  </>
-                                )}
-                              </div>
+                            <div key={m.id} className="group flex items-center gap-2 px-2 py-1 rounded-md hover:bg-bg-hover transition-colors cursor-pointer"
+                              onClick={() => canEditProvider(p) && setDetailDrawer({ open: true, providerId: p.id, providerName: p.name, modelId: m.id, modelName: m.model_name })}>
+                              {/* 模型名 */}
+                              <span className="text-[11px] text-gray-700 dark:text-gray-300 font-mono truncate flex-1 min-w-0">{m.model_name}</span>
+                              {/* 能力内联说明（单一来源、不再 chip 化） */}
+                              {allLabels.length > 0 && (
+                                <span className="hidden md:inline text-[10px] text-gray-500 dark:text-gray-400 shrink-0 truncate max-w-[180px]" title={allLabels.join(' · ')}>
+                                  · {allLabels.join(' · ')}
+                                </span>
+                              )}
+                              {/* 测试状态点 */}
+                              {tr && (
+                                <span
+                                  title={tr.success ? `✅ ${tr.elapsed}ms${tr.reply ? ` - "${tr.reply}"` : ''}` : `❌ ${tr.message || '失败'}`}
+                                  className={`w-1.5 h-1.5 rounded-full shrink-0 ${tr.success ? 'bg-green-400' : 'bg-red-400'}`}
+                                />
+                              )}
+                              {/* 测试按钮 */}
+                              {canEditProvider(p) && (
+                                <button onClick={(e) => { e.stopPropagation(); testModel(p.id, m.id) }} disabled={testingModelId === m.id}
+                                  className="opacity-0 group-hover:opacity-100 px-1.5 py-px rounded text-[10px] text-gray-500 hover:text-[#10B981] shrink-0"
+                                  title="测试连通性">
+                                  {testingModelId === m.id ? <Loader2 size={10} className="animate-spin" /> : '测试'}
+                                </button>
+                              )}
+                              {/* 删除按钮 */}
+                              {canEditProvider(p) && (
+                                <button onClick={(e) => { e.stopPropagation(); removeModel(p.id, m.id) }}
+                                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-600 hover:text-red-400 shrink-0"
+                                  title="删除模型">
+                                  <Trash2 size={10} />
+                                </button>
+                              )}
                             </div>
                           )
                         })}
@@ -730,8 +1084,8 @@ export default function SettingsPage() {
                       <button onClick={() => {
                         const isOpen = expandedDropdown === p.id
                         setExpandedDropdown(isOpen ? null : p.id); setModelSearch(''); setAddModelType('auto')
-                        // 首次展开时自动拉取模型列表
-                        if (!isOpen && availableModels.length === 0 && p.api_key) {
+                        // 每次展开时重新拉取模型列表，确保获取最新模型
+                        if (!isOpen && p.api_key) {
                           handleFetchModels(p.id)
                         }
                       }}
@@ -805,77 +1159,231 @@ export default function SettingsPage() {
         )}
       </div>
 
-      {/* 任务模型配置 */}
-      <div>
-        <h3 className="text-base font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2"><Sparkles size={18} className="text-[#F59E0B]" /> 任务模型配置</h3>
-        <p className="text-xs text-gray-500 mb-4 dark:text-gray-400">为不同 AI 任务指定使用的模型供应商和具体模型</p>
+      {/* 参数预设模板 */}
+      <div className="mt-6">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <Layers size={15} className="text-[#A78BFA] shrink-0" />
+            <h3 className="text-[13px] font-semibold text-gray-900 dark:text-white whitespace-nowrap">参数预设模板</h3>
+            <span className="text-[11px] text-gray-500 truncate">常用参数组合一键引用</span>
+          </div>
+          {canManageModels && (
+            <button onClick={() => openPresetEditor(null)}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#A78BFA] text-white text-xs hover:bg-purple-600 shrink-0">
+              <Plus size={12} />新建预设
+            </button>
+          )}
+        </div>
+
+        {presetsLoading ? (
+          <div className="p-6 text-center text-gray-500 text-sm"><Loader2 size={16} className="inline animate-spin mr-2" />加载中...</div>
+        ) : presets.length === 0 ? (
+          <div className="p-6 rounded-xl bg-bg-card border border-dashed border-border text-center">
+            <Layers size={24} className="mx-auto text-gray-600 mb-2" />
+            <p className="text-xs text-gray-500">暂无预设模板</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2.5">
+            {presets.map((p) => {
+              const params: string[] = []
+              if (p.temperature != null) params.push(`temp=${p.temperature}`)
+              if (p.top_p != null) params.push(`top_p=${p.top_p}`)
+              if (p.max_tokens != null) params.push(`max=${p.max_tokens}`)
+              if (p.thinking_mode) params.push(`think=${p.thinking_mode}`)
+              if (p.response_format && p.response_format !== 'text') params.push(`fmt=${p.response_format}`)
+              return (
+                <div key={p.id} className="p-3 rounded-lg bg-bg-card border border-border group">
+                  <div className="flex items-start justify-between gap-2 mb-1.5">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        {p.is_system ? (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 shrink-0">系统</span>
+                        ) : (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 shrink-0">个人</span>
+                        )}
+                        <h4 className="text-sm font-medium text-gray-900 dark:text-white truncate">{p.name}</h4>
+                      </div>
+                      {p.description && <p className="text-[11px] text-gray-500 line-clamp-2">{p.description}</p>}
+                    </div>
+                    {!p.is_system && canManageModels && (
+                      <div className="flex items-center gap-0.5 shrink-0">
+                        <button onClick={() => openPresetEditor(p)}
+                          title="编辑"
+                          className="p-1 rounded text-gray-500 hover:text-[#3B82F6] opacity-0 group-hover:opacity-100">
+                          <Pencil size={11} />
+                        </button>
+                        <button onClick={() => handleDeletePreset(p)}
+                          title="删除"
+                          className="p-1 rounded text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100">
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  {params.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2 pt-2 border-t border-border/40">
+                      {params.map((pa, i) => (
+                        <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-bg-input text-gray-400 font-mono">{pa}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* 任务模型配置 - 紧凑卡片 */}
+      <div className="mt-6">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <Sparkles size={15} className="text-[#F59E0B] shrink-0" />
+            <h3 className="text-[13px] font-semibold text-gray-900 dark:text-white whitespace-nowrap">任务模型配置</h3>
+            <span className="text-[11px] text-gray-500 truncate">为不同 AI 任务组指定模型，同组共享 · 参数差异由覆盖或预设控制</span>
+          </div>
+        </div>
         {getActiveProviders().length === 0 ? (
           <div className="p-6 rounded-xl bg-bg-card border border-dashed border-border text-center">
             <Settings2 size={24} className="mx-auto text-gray-600 mb-2" /><p className="text-xs text-gray-500">请先添加并启用至少一个模型供应商</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {TASK_TYPES.map((task) => {
-              // 联网搜索独立处理（不通过供应商选择模型）
-              if (task.key === 'web_search') return null
-              const cfg = taskConfigs[task.key]
-              const spId = cfg?.provider_id
-              const sp = spId ? providers.find((p) => p.id === spId) : null
-              // 按任务类型过滤模型
-              const allModels = providerModels[spId || 0] || []
-              const compatibleTypes = TASK_COMPATIBLE_TYPES[task.key] || []
-              const filteredModels = compatibleTypes.length > 0
-                ? allModels.filter((m) => compatibleTypes.includes(m.model_type))
-                : allModels
-              const showFallback = filteredModels.length === 0 && allModels.length > 0
-              // 检查当前选中模型的类型是否匹配
-              const selectedModel = cfg?.model_name ? allModels.find((m) => m.model_name === cfg.model_name) : null
-              const typeMismatch = selectedModel && compatibleTypes.length > 0 && !compatibleTypes.includes(selectedModel.model_type)
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-2.5">
+            {TASK_GROUPS.map((group) => {
+              const GroupIcon = group.icon
+              const isMultimodal = group.id === 'multimodal'
+              const subIcons: Record<string, any> = { speech_to_text: Mic, vision: Eye, embedding: Brain }
+              const subLabels: Record<string, string> = { speech_to_text: '语音转写', vision: '图像理解', embedding: '向量化' }
+              // 提取所有 sub-tasks 的 task_keys（普通组是 1 个，多模态是 3 个）
+              const rowTasks = isMultimodal
+                ? group.taskKeys.map((tk) => ({ key: tk, label: subLabels[tk] || tk, icon: subIcons[tk] || Sparkles, isShared: false }))
+                : [{ key: group.taskKeys[0], label: group.label, icon: GroupIcon, isShared: true }]
+              // 整体高度统计：已选/未选状态
+              const fullyConfiguredCount = group.taskKeys.filter((tk) => taskConfigs[tk]?.provider_id && taskConfigs[tk]?.model_name).length
               return (
-                <div key={task.key} className="p-3.5 max-md:p-3 rounded-xl bg-bg-card border border-border">
-                  <div className="flex items-start gap-2.5 max-md:gap-2">
-                    <task.icon size={20} className="text-[#F59E0B] mt-0.5 shrink-0 max-md:size-[16px]" />
+                <div key={group.id} className="rounded-lg bg-bg-card border border-border overflow-hidden hover:border-[#3B82F6]/30 transition-colors" style={{ borderColor: `${group.color}25` }}>
+                  <div className="px-3 py-2.5 flex items-center gap-2.5">
+                    <IconBox icon={GroupIcon} size="md" tone={
+                      group.id === 'chat' ? 'blue' :
+                      group.id === 'summary' ? 'green' :
+                      group.id === 'extract' ? 'purple' :
+                      group.id === 'insight' ? 'orange' : 'pink'
+                    } variant="soft" />
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap"><span className="text-sm font-medium text-gray-900 dark:text-white max-md:text-xs">{task.label}</span><span className="text-xs text-gray-500 dark:text-gray-600 max-md:hidden">{task.desc}</span></div>
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-wrap">
-                        <select value={spId || ''} onChange={(e) => saveTaskConfig(task.key, e.target.value ? Number(e.target.value) : null, '')}
-                          className="px-3 py-1.5 rounded-lg bg-bg-input border border-border text-xs text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6] sm:min-w-[140px]">
-                          <option value="">选择供应商</option>
-                          {getActiveProviders().map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
-                        {sp && allModels.length > 0 && (
-                          <select value={cfg?.model_name || ''} onChange={(e) => saveTaskConfig(task.key, spId, e.target.value)}
-                            className="px-3 py-1.5 rounded-lg bg-bg-input border border-border text-xs text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6] sm:min-w-[200px]">
-                            <option value="">选择模型</option>
-                            {filteredModels.map((m) => (
-                              <option key={m.model_name} value={m.model_name}>
-                                {m.model_name} ({TYPE_LABEL[m.model_type] || m.model_type})
-                              </option>
-                            ))}
-                            {showFallback && (
-                              <optgroup label="-- 无匹配类型，全部模型 --">
-                                {allModels.map((m) => (
-                                  <option key={m.model_name} value={m.model_name}>
-                                    {m.model_name} ({TYPE_LABEL[m.model_type] || m.model_type})
-                                  </option>
-                                ))}
-                              </optgroup>
-                            )}
-                          </select>
-                        )}
-                        {cfg?.model_name && (
-                          typeMismatch ? (
-                            <span className="text-xs text-amber-400 flex items-center gap-1">
-                              <AlertTriangle size={12} className="shrink-0" />
-                              <span>{cfg.provider_name ? `${cfg.provider_name} / ` : ''}{cfg.model_name} (类型: {TYPE_LABEL[selectedModel?.model_type || ''] || selectedModel?.model_type}，可能不适用)</span>
-                            </span>
-                          ) : (
-                            <span className="text-xs text-[#10B981]">{cfg.provider_name ? `${cfg.provider_name} / ` : ''}{cfg.model_name}</span>
-                          )
-                        )}
-                        {taskSaving === task.key && <Loader2 size={14} className="animate-spin text-gray-400" />}
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-semibold text-gray-900 dark:text-white">{group.label}</span>
+                        <span className="text-[10px] text-gray-500 truncate">{group.desc}</span>
                       </div>
                     </div>
+                    {/* 整体完成度指示 */}
+                    <StatusBadge
+                      variant={fullyConfiguredCount === group.taskKeys.length ? 'success' : fullyConfiguredCount > 0 ? 'info' : 'neutral'}
+                      noIcon
+                    >
+                      {fullyConfiguredCount}/{group.taskKeys.length}
+                    </StatusBadge>
+                  </div>
+                  <div className="px-3 pb-2.5 space-y-1">
+                    {rowTasks.map((rt) => {
+                      const tk = rt.key
+                      const cfg = taskConfigs[tk]
+                      const spId = cfg?.provider_id
+                      const sp = spId ? providers.find((p) => p.id === spId) : null
+                      const providerDeleted = spId && !sp
+                      const allModels = providerModels[spId || 0] || []
+                      // P1: 任务级「需要能力」列表
+                      const requiredCaps: string[] = Array.isArray(cfg?.required_capabilities) ? cfg!.required_capabilities : []
+                      // 多模态组：按单 task 过滤；普通组：按组内任一 task 过滤
+                      const filteredModels = isMultimodal
+                        ? allModels.filter((m) => modelSupports(m, tk) && modelMatchesCaps(m, requiredCaps))
+                        : (group.compatibleTypes.length > 0
+                          ? allModels.filter((m) => modelSupportsAnyOf(m, group.compatibleTypes) && modelMatchesCaps(m, requiredCaps))
+                          : allModels.filter((m) => modelMatchesCaps(m, requiredCaps)))
+                      const showFallback = filteredModels.length === 0 && allModels.length > 0
+                      const selectedModel = cfg?.model_name ? allModels.find((m) => m.model_name === cfg.model_name) : null
+                      const modelDeleted = cfg?.model_name && sp && allModels.length > 0 && !selectedModel
+                      // 修复：非多模态组用 compatibleTypes 判定（模型只要支持组内任一类型即可），多模态组用具体 task
+                      const typeMismatch = selectedModel && (isMultimodal
+                        ? !modelSupports(selectedModel, tk)
+                        : !modelSupportsAnyOf(selectedModel, group.compatibleTypes))
+                      // P1: 已选模型是否满足 required_capabilities
+                      const capsMismatch = selectedModel && !modelMatchesCaps(selectedModel, requiredCaps)
+                      const RowIcon = rt.icon
+                      const c = cfg
+                      const hasOverride = c && (c.override_temperature != null || c.override_max_tokens != null || c.override_thinking_mode != null || c.preset_id != null || (Array.isArray(c.required_capabilities) && c.required_capabilities.length > 0))
+                      return (
+                        <div key={tk} className="flex items-center gap-1.5 group/row">
+                          {/* 行首小标签 */}
+                          <span className="flex items-center gap-1 text-[11px] text-gray-500 shrink-0 w-[78px] truncate">
+                            <RowIcon size={11} className="shrink-0" style={{ color:
+                              tk === 'speech_to_text' ? '#06B6D4' :
+                              tk === 'vision' ? '#8B5CF6' :
+                              tk === 'embedding' ? '#3B82F6' :
+                              group.color
+                            }} />{rt.label}
+                          </span>
+                          {/* 供应商 select */}
+                          <select
+                            value={spId || ''}
+                            onChange={(e) => {
+                              const v = e.target.value ? Number(e.target.value) : null
+                              if (isMultimodal) saveTaskConfig(tk, v, '')
+                              else saveTaskConfig(group.taskKeys, v, '')
+                            }}
+                            className="w-[120px] px-2 py-1 rounded-md bg-bg-input border border-border text-[11px] text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6] shrink-0">
+                            <option value="">供应商…</option>
+                            {getActiveProviders().map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          </select>
+                          {/* 模型 select（选了供应商且有模型才出现） */}
+                          {spId && allModels.length > 0 && (
+                            <select
+                              value={cfg?.model_name || ''}
+                              onChange={(e) => {
+                                if (isMultimodal) saveTaskConfig(tk, spId, e.target.value)
+                                else saveTaskConfig(group.taskKeys, spId, e.target.value)
+                              }}
+                              className="flex-1 min-w-[140px] max-w-[260px] px-2 py-1 rounded-md bg-bg-input border border-border text-[11px] text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6] truncate">
+                              <option value="">模型…</option>
+                              {filteredModels.map((m) => (
+                                <option key={m.model_name} value={m.model_name}>
+                                  {m.model_name} · {TYPE_LABEL[m.model_type] || m.model_type}
+                                </option>
+                              ))}
+                              {showFallback && (
+                                <optgroup label="-- 无匹配类型 --">
+                                  {allModels.map((m) => (
+                                    <option key={m.model_name} value={m.model_name}>
+                                      {m.model_name} · {TYPE_LABEL[m.model_type] || m.model_type}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              )}
+                            </select>
+                          )}
+                          {/* 类型不匹配警告 / 能力不匹配警告 / 已选状态 */}
+                          {cfg?.model_name && !providerDeleted && !modelDeleted && (
+                            typeMismatch ? (
+                              <StatusBadge variant="warning" title="此模型不支持该任务类型">类型不匹配</StatusBadge>
+                            ) : capsMismatch ? (
+                              <StatusBadge variant="danger" title={`此模型不满足任务要求的能力: ${requiredCaps.join(', ')}`}>能力不足</StatusBadge>
+                            ) : (
+                              <StatusBadge variant="success" title="已配置">已配置</StatusBadge>
+                            )
+                          )}
+                          {/* 加载中 */}
+                          {taskSaving === tk && <Loader2 size={12} className="animate-spin text-gray-400 shrink-0" />}
+                          {/* 覆盖参数按钮（最右，常驻显示避免触屏用户发现不了） */}
+                          {cfg?.model_name && canManageModels && (
+                            <button onClick={() => setOverrideModal({ open: true, taskType: tk, taskLabel: isMultimodal ? `${group.label}/${rt.label}` : `${group.label}` })}
+                              title={hasOverride ? '已配置覆盖参数，点击修改' : '为此任务配置参数覆盖'}
+                              className={`ml-auto flex items-center gap-1 px-1.5 py-1 rounded text-[10px] border shrink-0 transition-colors ${hasOverride ? 'text-[#F59E0B] border-[#F59E0B]/60 bg-[#F59E0B]/10' : 'text-gray-500 hover:text-amber-300 border-border bg-bg-hover'}`}>
+                              <Sliders size={10} />
+                              {hasOverride && <span className="w-1 h-1 rounded-full bg-[#F59E0B] shrink-0" />}
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               )
@@ -1049,10 +1557,14 @@ export default function SettingsPage() {
       </>
       )}
 
+      {/* ==================== 系统公告 & AI 资讯 ==================== */}
+      {activeTab === 'announcement' && canEditSettings && (
+        <AnnouncementTab fetchWithAuth={fetchWithAuth} showToast={showToast} />
+      )}
+
       {/* ==================== 系统配置 ==================== */}
       {activeTab === 'system' && (
         <>
-
       {/* 品牌自定义 */}
       {canEditSettings && (
         <div className="mb-10 p-5 max-md:p-4 rounded-xl bg-bg-card border border-border">
@@ -1172,7 +1684,7 @@ export default function SettingsPage() {
                 }
               }}
               disabled={brandSaving}
-              className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-[#3B82F6] text-white text-sm font-medium hover:bg-blue-600 disabled:opacity-50 transition-colors"
+              className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-[#3B82F6] text-[#fff] text-sm font-medium hover:bg-blue-600 disabled:opacity-50 transition-colors"
             >
               {brandSaving && <Loader2 size={14} className="animate-spin" />}
               <Save size={14} />{brandSaving ? '保存中...' : '保存品牌设置'}
@@ -1530,31 +2042,6 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
-
-      {/* 行业标准化分类 */}
-      <div className="mt-6">
-        <h3 className="text-base font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2"><Building2 size={18} className="text-[#3B82F6]" /> 行业标准化分类</h3>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">获取客户信息时，AI 会将公司自动归类到以下标准行业之一。每行一个行业名称，用换行分隔。</p>
-        <div className="p-4 max-md:p-3 rounded-xl bg-bg-card border border-border">
-          <textarea
-            value={industryCats}
-            onChange={(e) => setIndustryCats(e.target.value)}
-            className="w-full h-48 p-4 max-md:p-3 rounded-lg bg-bg-input border border-border text-sm text-gray-800 dark:text-gray-300 outline-none focus:border-[#3B82F6] resize-none placeholder-gray-400 dark:placeholder-gray-600 font-mono leading-relaxed transition-colors"
-            placeholder="每行一个行业分类名称..."
-          />
-          <div className="flex items-center justify-between mt-3">
-            <button
-              onClick={saveIndustryCats}
-              disabled={industryCatsSaving}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#3B82F6] text-white text-sm font-medium hover:bg-blue-600 disabled:opacity-50 transition-all shadow-lg shadow-blue-500/20"
-            >
-              {industryCatsSaving && <Loader2 size={14} className="animate-spin" />}
-              <Save size={14} />{industryCatsSaving ? '保存中…' : '保存行业分类'}
-            </button>
-            <p className="text-[10px] text-gray-500 dark:text-gray-600">修改后，新获取的客户信息将按此分类映射</p>
-          </div>
-        </div>
-      </div>
       </>
       )}
 
@@ -1659,7 +2146,7 @@ export default function SettingsPage() {
                     }
                   }}
                   disabled={profileSaving}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-blue text-white text-sm hover:bg-accent-blue/85 disabled:opacity-50"
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-blue text-[#fff] text-sm hover:bg-accent-blue/85 disabled:opacity-50"
                 >
                   {profileSaving && <Loader2 size={14} className="animate-spin" />}
                   <Save size={14} />{profileSaving ? '保存中...' : '保存'}
@@ -1695,7 +2182,7 @@ export default function SettingsPage() {
                 <button
                   onClick={handleSaveHomePage}
                   disabled={homePageSaving}
-                  className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-accent-blue text-white text-sm hover:bg-accent-blue/85 disabled:opacity-50 sm:w-auto"
+                  className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-accent-blue text-[#fff] text-sm hover:bg-accent-blue/85 disabled:opacity-50 sm:w-auto"
                 >
                   {homePageSaving && <Loader2 size={14} className="animate-spin" />}
                   {homePageSaving ? '保存中...' : '保存'}
@@ -1778,7 +2265,7 @@ export default function SettingsPage() {
                     }
                   }}
                   disabled={passwordSaving}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 disabled:opacity-50"
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500 text-[#fff] text-sm font-medium hover:bg-amber-600 disabled:opacity-50"
                 >
                   {passwordSaving && <Loader2 size={14} className="animate-spin" />}
                   <Key size={14} />{passwordSaving ? '修改中...' : '修改密码'}
@@ -1830,7 +2317,7 @@ export default function SettingsPage() {
                 <>
                   <p className="text-xs text-gray-500 mb-3">选择预置供应商自动填充，或手动填写下方信息</p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 mb-5">
-                    {presets.map((p) => (
+                    {providerPresets.map((p) => (
                       <button key={p.name} onClick={() => setForm({ ...form, name: p.name, base_url: p.base_url, project_id: (p as any).project_id || '', location: (p as any).location || '' })}
                         className="px-2 py-2 rounded-lg bg-bg-input border border-border text-xs text-gray-400 hover:text-white hover:border-[#3B82F6]/50 hover:bg-bg-hover transition-all truncate">
                         {p.name}
@@ -1880,8 +2367,135 @@ export default function SettingsPage() {
                 </div>
               </div>
               <button onClick={handleSave} disabled={saving || !form.name.trim() || (!form.base_url.trim() && !form.project_id.trim())}
-                className="w-full mt-6 py-2.5 rounded-xl bg-[#3B82F6] text-white text-sm font-semibold hover:bg-blue-600 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors">
+                className="w-full mt-6 py-2.5 rounded-xl bg-[#3B82F6] text-[#fff] text-sm font-semibold hover:bg-blue-600 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors">
                 {saving && <Loader2 size={16} className="animate-spin" />}<Save size={16} />{saving ? '保存中...' : '保存'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 模型参数抽屉 */}
+      <ModelDetailDrawer
+        providerId={detailDrawer.providerId || 0}
+        providerName={detailDrawer.providerName}
+        modelId={detailDrawer.modelId}
+        modelName={detailDrawer.modelName}
+        open={detailDrawer.open && detailDrawer.providerId != null && detailDrawer.modelId != null}
+        onClose={() => setDetailDrawer({ open: false, providerId: null, providerName: '', modelId: null, modelName: null })}
+        onSaved={() => providers.forEach((p) => loadProviderModels(p.id))}
+        canEdit={true}
+      />
+
+      {/* 任务参数覆盖弹窗 */}
+      {overrideModal.open && (() => {
+        // P1: 把当前任务绑定的模型传给弹窗，用于能力 chips 红/绿勾对照
+        const cfg = taskConfigs[overrideModal.taskType]
+        const spId = cfg?.provider_id
+        const mn = cfg?.model_name
+        const models = spId ? (providerModels[spId] || []) : []
+        const selectedModel = (spId && mn) ? models.find((m) => m.model_name === mn) || null : null
+        return (
+          <TaskOverrideModal
+            taskType={overrideModal.taskType}
+            taskLabel={overrideModal.taskLabel}
+            current={cfg || null}
+            selectedModel={selectedModel}
+            onClose={() => setOverrideModal({ open: false, taskType: '', taskLabel: '' })}
+            onSaved={loadTaskConfigs}
+            canEdit={canManageModels}
+          />
+        )
+      })()}
+
+      {/* 预设编辑器弹窗 */}
+      {presetEditor.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setPresetEditor({ open: false, preset: null })}>
+          <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-bg-card border border-border shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="sticky top-0 bg-bg-card border-b border-border px-5 py-4 flex items-center justify-between z-10">
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <Layers size={18} className="text-[#A78BFA]" />
+                {presetEditor.preset ? '编辑预设' : '新建参数预设'}
+              </h3>
+              <button onClick={() => setPresetEditor({ open: false, preset: null })} className="p-1.5 rounded-lg hover:bg-bg-hover text-gray-500">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1.5">预设名称 <span className="text-red-400">*</span></label>
+                <input value={presetForm.name} onChange={(e) => setPresetForm({ ...presetForm, name: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-700 dark:text-gray-300 outline-none focus:border-[#A78BFA]"
+                  placeholder="如：JSON 严格提取" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1.5">描述</label>
+                <input value={presetForm.description} onChange={(e) => setPresetForm({ ...presetForm, description: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-700 dark:text-gray-300 outline-none focus:border-[#A78BFA]"
+                  placeholder="如：低温度+JSON 输出，用于数据抽取" />
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1.5">Temperature</label>
+                  <input type="number" value={presetForm.temperature} step={0.05} min={0} max={2}
+                    onChange={(e) => setPresetForm({ ...presetForm, temperature: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-xs text-gray-700 dark:text-gray-300 outline-none focus:border-[#A78BFA] font-mono"
+                    placeholder="0.1" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1.5">Top P</label>
+                  <input type="number" value={presetForm.top_p} step={0.05} min={0} max={1}
+                    onChange={(e) => setPresetForm({ ...presetForm, top_p: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-xs text-gray-700 dark:text-gray-300 outline-none focus:border-[#A78BFA] font-mono"
+                    placeholder="0.95" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1.5">Max Tokens</label>
+                  <input type="number" value={presetForm.max_tokens} step={100} min={1}
+                    onChange={(e) => setPresetForm({ ...presetForm, max_tokens: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-xs text-gray-700 dark:text-gray-300 outline-none focus:border-[#A78BFA] font-mono"
+                    placeholder="4000" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1.5">Thinking Mode</label>
+                  <select value={presetForm.thinking_mode} onChange={(e) => setPresetForm({ ...presetForm, thinking_mode: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-xs text-gray-700 dark:text-gray-300 outline-none focus:border-[#A78BFA]">
+                    <option value="">不设置</option>
+                    <option value="off">关闭</option>
+                    <option value="low">低</option>
+                    <option value="medium">中</option>
+                    <option value="high">高</option>
+                    <option value="auto">自动</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1.5">Thinking Budget</label>
+                  <input type="number" value={presetForm.thinking_budget} step={100} min={0}
+                    onChange={(e) => setPresetForm({ ...presetForm, thinking_budget: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-xs text-gray-700 dark:text-gray-300 outline-none focus:border-[#A78BFA] font-mono"
+                    placeholder="2000" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1.5">Response Format</label>
+                <select value={presetForm.response_format} onChange={(e) => setPresetForm({ ...presetForm, response_format: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-xs text-gray-700 dark:text-gray-300 outline-none focus:border-[#A78BFA]">
+                  <option value="">不设置</option>
+                  <option value="text">纯文本</option>
+                  <option value="json_object">JSON 对象</option>
+                  <option value="json_schema">JSON Schema</option>
+                </select>
+              </div>
+            </div>
+            <div className="sticky bottom-0 bg-bg-card border-t border-border px-5 py-3 flex items-center justify-end gap-2">
+              <button onClick={() => setPresetEditor({ open: false, preset: null })}
+                className="px-4 py-2 rounded-lg bg-bg-hover text-xs text-gray-400 hover:text-white border border-border">取消</button>
+              <button onClick={handleSavePreset} disabled={presetSaving || !presetForm.name.trim()}
+                className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-[#A78BFA] text-white text-sm font-medium hover:bg-purple-600 disabled:opacity-50">
+                {presetSaving && <Loader2 size={14} className="animate-spin" />}
+                <Save size={14} />{presetSaving ? '保存中...' : '保存预设'}
               </button>
             </div>
           </div>

@@ -17,4 +17,6 @@ class Customer(SQLModel, table=True):
     recent_news: Optional[str] = None       # 近期动向
     logo_url: Optional[str] = None          # 公司Logo URL
     website: Optional[str] = None           # 公司官网/产品官网
+    ai_initiatives: Optional[str] = None     # AI 领域动向（基于真实联网搜索）
+    ai_evidence: Optional[str] = None        # AI 动向的来源映射 JSON: [{"text":..., "url":..., "domain":...}, ...]
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

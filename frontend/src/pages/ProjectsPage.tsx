@@ -1,22 +1,35 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { Plus, X, Trash2, Loader2, Briefcase, Edit3, Save, Calendar, User, Building2, Activity, Search, Link2, ExternalLink, Pin, Cloud, Sparkles, RefreshCw, Tag, Filter, ChevronDown, FileText, Target, CheckCircle2 } from 'lucide-react'
-import SearchableSelect from '../components/SearchableSelect'
-import FileUpload from '../components/FileUpload'
+import { useSearchParams, useNavigate } from 'react-router-dom'
+import { Plus, X, Trash2, Loader2, Briefcase, Edit3, Save, Calendar, User, Building2, Activity, Search, Link2, ExternalLink, Pin, Cloud, Sparkles, RefreshCw, Tag, Filter, ChevronDown, FileText, Target, CheckCircle2, Zap, BarChart3, Hash, LayoutGrid, List, TrendingUp, Clock, Wrench } from 'lucide-react'
 import MarkdownRenderer from '../components/MarkdownRenderer'
-import RichTextEditor from '../components/RichTextEditor'
 import TeamViewSwitcher from '../components/TeamViewSwitcher'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
+import { ProjectFormModal } from '../components/projects/ProjectFormModal'
+import { ProjectCard, ProjectRow, formatAmount } from '../components/projects/ProjectCard'
+import { PageHeader } from '../components/design-system'
 
 interface Project {
   id: number; name: string; opportunity_amount: number | null; deal_amount: number | null; currency: string; customer_name: string; customer_id: number | null
   product: string | null; project_scenario: string | null
-  sales_person: string | null; status: string; progress: string | null
+  sales_person: string | null; tech_support_person: string | null; status: string; progress: string | null
   analysis: string | null
   cloud_provider: string | null
   files_json?: string | null
   start_date: string | null; termination_date: string | null; deadline: string | null; created_at: string; updated_at: string
+  upstream_channels: string | null
+  models: string | null
+  monthly_call_volume: string | null
+  usage_scenario: string | null
+  contract_period: string | null
+  contract_count?: number
+}
+
+interface LinkedContract {
+  id: number; title: string; contract_no: string; status: string
+  contract_amount: number | null; currency: string
+  sign_date: string | null; start_date: string | null; end_date: string | null
+  party_a: string; party_b: string
 }
 
 interface MeetingLink {
@@ -30,6 +43,7 @@ interface FieldOption {
 export default function ProjectsPage() {
   const { hasPermission } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
   const { confirm: showConfirm, toast: showToast } = useToast()
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
@@ -40,6 +54,8 @@ export default function ProjectsPage() {
   // 成员筛选（供主管、老板一键跨用户审查，支持零延迟切换数据）+ 团队视图
   const [memberList, setMemberList] = useState<any[]>([])
   const [viewMode, setViewMode] = useState<'personal' | 'team'>('personal')
+  const [viewLayout, setViewLayout] = useState<'card' | 'list'>(() => (localStorage.getItem('projectsViewLayout') as 'card' | 'list') || 'card')
+  useEffect(() => { localStorage.setItem('projectsViewLayout', viewLayout) }, [viewLayout])
   const [selectedUserIds, setSelectedUserIds] = useState<number[]>([])
   const [options, setOptions] = useState<Record<string, string[]>>({})
   const [searchText, setSearchText] = useState('')
@@ -49,6 +65,7 @@ export default function ProjectsPage() {
   const [filterOpen, setFilterOpen] = useState(false)
   const [modalProject, setModalProject] = useState<Project | null>(null)
   const [linkedMeetings, setLinkedMeetings] = useState<MeetingLink[]>([])
+  const [linkedContracts, setLinkedContracts] = useState<LinkedContract[]>([])
   const [allMeetings, setAllMeetings] = useState<MeetingLink[]>([])
   const [selectedMeetingIds, setSelectedMeetingIds] = useState<Set<number>>(new Set())
 
@@ -58,14 +75,7 @@ export default function ProjectsPage() {
   const [quickDate, setQuickDate] = useState(new Date().toISOString().slice(0, 10))
   const [quickSaving, setQuickSaving] = useState(false)
   const [analyzingId, setAnalyzingId] = useState<number | null>(null)
-
-  const [selectedClouds, setSelectedClouds] = useState<string[]>([])
-  const [selectedProducts, setSelectedProducts] = useState<string[]>([])
-
-  const [form, setForm] = useState({
-    name: '', opportunity_amount: '', deal_amount: '', currency: 'CNY', customer_name: '', customer_id: 0, product: '', project_scenario: '', sales_person: '',
-    status: '', progress: '', cloud_provider: '', files_json: null as string | null, start_date: '', termination_date: '', deadline: '',
-  })
+  const [analysisOpen, setAnalysisOpen] = useState(false)
 
   // 客户列表（用于关联选择）
   const [customers, setCustomers] = useState<{ id: number; name: string }[]>([])
@@ -79,8 +89,16 @@ export default function ProjectsPage() {
       url += '?user_ids=' + memberList.map((m: any) => m.id).join(',')
     }
     fetch(url)
-      .then((res) => res.json()).then((data) => { setProjects(Array.isArray(data) ? data : []); setLoading(false) })
-      .catch(() => setLoading(false))
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setProjects(data)
+        } else {
+          console.warn('[loadProjects] non-array response:', data)
+        }
+        setLoading(false)
+      })
+      .catch((e) => { console.error('[loadProjects] error:', e); setLoading(false) })
   }, [selectedUserIds, viewMode, memberList])
 
   const loadOptions = () => {
@@ -124,6 +142,17 @@ export default function ProjectsPage() {
     }
   }
 
+  const loadLinkedContracts = async (pid: number) => {
+    try {
+      const res = await fetch(`/api/v1/projects/${pid}/contracts`)
+      if (!res.ok) { setLinkedContracts([]); return }
+      const data = await res.json()
+      setLinkedContracts(Array.isArray(data) ? data : [])
+    } catch {
+      setLinkedContracts([])
+    }
+  }
+
   // 1. 首次加载下拉选择员工集合（供主管和 Boss一键切换审查）
   useEffect(() => {
     fetch('/api/v1/users/simple')
@@ -154,25 +183,12 @@ export default function ProjectsPage() {
 
   const openCreate = () => {
     setEditingId(null)
-    setForm({ name: '', opportunity_amount: '', deal_amount: '', currency: 'CNY', customer_name: '', customer_id: 0, product: '', project_scenario: '', sales_person: '',
-      status: (options.project_status?.length ? options.project_status[0] : ''), progress: '', cloud_provider: '', files_json: null, start_date: '', termination_date: '', deadline: '' })
-    setSelectedClouds([])
-    setSelectedProducts([])
     setSelectedMeetingIds(new Set())
     setShowForm(true)
   }
 
   const openEdit = (p: Project) => {
     setEditingId(p.id)
-    setForm({
-      name: p.name, opportunity_amount: String(p.opportunity_amount || ''), deal_amount: String(p.deal_amount || ''), currency: p.currency || 'CNY', customer_name: p.customer_name, customer_id: p.customer_id || 0,
-      product: p.product || '', project_scenario: p.project_scenario || '',
-      sales_person: p.sales_person || '', status: p.status, progress: p.progress || '',
-      cloud_provider: p.cloud_provider || '', files_json: p.files_json || null,
-      start_date: p.start_date?.slice(0, 10) || '', termination_date: p.termination_date?.slice(0, 10) || '', deadline: p.deadline?.slice(0, 10) || '',
-    })
-    setSelectedClouds(p.cloud_provider ? p.cloud_provider.split(',').map(s => s.trim()).filter(Boolean) : [])
-    setSelectedProducts(p.product ? p.product.split(',').map(s => s.trim()).filter(Boolean) : [])
     loadLinkedMeetings(p.id)
     setShowForm(true)
   }
@@ -180,6 +196,7 @@ export default function ProjectsPage() {
   const openDetail = (p: Project) => {
     setModalProject(p)
     loadLinkedMeetings(p.id)
+    loadLinkedContracts(p.id)
   }
 
   const closeDetail = () => { setModalProject(null); setQuickProgressOpen(false); setQuickText(''); setQuickDate(new Date().toISOString().slice(0, 10)) }
@@ -225,67 +242,6 @@ export default function ProjectsPage() {
       }
     } catch { /* ignore */ }
     finally { setAnalyzingId(null) }
-  }
-
-  /** 图片上传到服务器，供 RichTextEditor 使用 */
-  const progressImageUpload = useCallback(async (file: File): Promise<string> => {
-    const formData = new FormData()
-    formData.append('file', file)
-    const res = await fetch('/api/v1/files/upload', {
-      method: 'POST',
-      body: formData,
-    })
-    if (!res.ok) throw new Error('Upload failed')
-    const uploaded = await res.json() as { url: string }
-    return uploaded.url
-  }, [])
-
-  const handleSave = async () => {
-    if (!form.name.trim()) return
-    setSaving(true)
-    try {
-      const body: Record<string, unknown> = { ...form }
-      body.cloud_provider = selectedClouds.join(',')
-      body.product = selectedProducts.join(',')
-      // 处理商机金额和成交价格
-      delete body.opportunity_amount
-      delete body.deal_amount
-      body.opportunity_amount = form.opportunity_amount ? parseFloat(form.opportunity_amount) : null
-      body.deal_amount = form.deal_amount ? parseFloat(form.deal_amount) : null
-      if (!body.customer_id) body.customer_id = null
-      if (!body.start_date) delete body.start_date
-      if (!body.termination_date) delete body.termination_date
-      if (!body.deadline) delete body.deadline
-      body.meeting_ids = Array.from(selectedMeetingIds)
-      if (editingId) {
-        const res = await fetch(`/api/v1/projects/${editingId}`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-        })
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}))
-          showToast(err.detail || `更新失败 (${res.status})`, 'error')
-          return
-        }
-        setShowForm(false)
-        loadProjects()
-        showToast('项目已更新', 'success')
-      } else {
-        const res = await fetch('/api/v1/projects', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-        })
-        const data = await res.json()
-        if (!res.ok) {
-          showToast(data.detail || `创建失败 (${res.status})`, 'error')
-          return
-        }
-        setShowForm(false)
-        loadProjects()
-        showToast('项目创建成功', 'success')
-        if (data.id) analyzeProject(data.id)
-      }
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : '操作失败，请检查网络', 'error')
-    } finally { setSaving(false) }
   }
 
   const handleDelete = async (id: number) => {
@@ -352,40 +308,60 @@ export default function ProjectsPage() {
   const hasActiveFilter = selectedProduct || selectedStatus || selectedScenario
   const clearAllFilters = () => { setSelectedProduct(''); setSelectedStatus(''); setSelectedScenario('') }
 
-  // 状态→顶条颜色映射（用于卡片3D效果）
-  const TOP_BAR_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#F97316', '#EC4899', '#14B8A6', '#6366F1']
-  const getTopBarColor = (status: string): string => {
-    let hash = 0
-    for (let i = 0; i < status.length; i++) { hash = ((hash << 5) - hash) + status.charCodeAt(i); hash |= 0 }
-    return TOP_BAR_COLORS[Math.abs(hash) % TOP_BAR_COLORS.length]
-  }
-
   const inputClass = "w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6] transition-colors"
   const labelClass = "block text-xs text-gray-400 mb-1.5"
 
   return (
     <div>
       {/* 顶部标题行 */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold text-white">项目管理</h2>
-            <span className="text-xs text-gray-500 bg-bg-hover px-2 py-0.5 rounded-full">{projects.length}</span>
-          </div>
-          <TeamViewSwitcher
-            memberList={memberList}
-            viewMode={viewMode}
-            onViewModeChange={setViewMode}
-            selectedUserIds={selectedUserIds}
-            onSelectedUserIdsChange={setSelectedUserIds}
-          />
-        </div>
-        {hasPermission('project:create') && (
-          <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#3B82F6] text-white text-sm font-medium hover:bg-blue-600 transition-all shadow-lg shadow-blue-500/20">
-            <Plus size={16} /><span>新建项目</span>
-          </button>
-        )}
-      </div>
+      <PageHeader
+        icon={Briefcase}
+        title="项目管理"
+        description="管理您负责的所有项目，跟进进度并推动成交"
+        tone="blue"
+        stats={[{ label: '项目', value: projects.length }]}
+        right={
+          <>
+            {/* 视图切换：列表 / 卡片 */}
+            <div className="flex items-center p-0.5 rounded-lg bg-bg-hover/60 border border-border">
+              <button
+                onClick={() => setViewLayout('card')}
+                title="卡片视图"
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-all ${
+                  viewLayout === 'card'
+                    ? 'bg-bg-card text-gray-900 dark:text-white shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                <LayoutGrid size={12} />卡片
+              </button>
+              <button
+                onClick={() => setViewLayout('list')}
+                title="列表视图"
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-all ${
+                  viewLayout === 'list'
+                    ? 'bg-bg-card text-gray-900 dark:text-white shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                <List size={12} />列表
+              </button>
+            </div>
+            <TeamViewSwitcher
+              memberList={memberList}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+              selectedUserIds={selectedUserIds}
+              onSelectedUserIdsChange={setSelectedUserIds}
+            />
+            {hasPermission('project:create') && (
+              <button onClick={openCreate} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#3B82F6] text-[#fff] text-xs font-bold hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 transition-all cursor-pointer">
+                <Plus size={14} strokeWidth={2.5} /><span>新建项目</span>
+              </button>
+            )}
+          </>
+        }
+      />
 
       {/* 一体化搜索+筛选栏 */}
       <div className="relative mb-6">
@@ -555,106 +531,50 @@ export default function ProjectsPage() {
           <p className="text-gray-500 mb-3">暂无项目</p>
           <button onClick={openCreate} className="text-sm text-[#3B82F6] hover:underline">创建第一个项目</button>
         </div>
+      ) : viewLayout === 'card' ? (
+        <>
+          {/* 项目卡片网格（现代设计）*/}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3">
+            {filtered.map((p) => (
+              <ProjectCard
+                key={p.id}
+                project={p}
+                onOpen={() => openDetail(p)}
+                onOpenCustomer={(cid) => navigate(`/customers?customer=${cid}`)}
+              />
+            ))}
+          </div>
+        </>
       ) : (
         <>
-          {/* 项目卡片网格（等大卡片 + 3D 立体效果） */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filtered.map((p) => {
-              const barColor = getTopBarColor(p.status)
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => openDetail(p)}
-                  className="group/card relative flex flex-col text-left rounded-2xl bg-gradient-to-b from-bg-card to-bg-card/80 border border-border/80
-                             hover:border-[#3B82F6]/50 hover:shadow-xl hover:shadow-blue-500/5 hover:-translate-y-1
-                             transition-all duration-300 ease-out"
-                  style={{ borderTopWidth: '3px', borderTopColor: barColor + '60' }}
-                >
-                  {/* 卡片内容 */}
-                  <div className="p-4 md:p-5 flex flex-col flex-1">
-                    {/* 标题 + 状态 */}
-                    <div className="flex items-start justify-between gap-2 mb-3">
-                      <h4 className="text-sm font-bold text-white truncate leading-tight">{p.name}</h4>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full border flex-shrink-0 ${getStatusColor(p.status)}`}>{p.status}</span>
-                    </div>
-
-                    {/* 信息行 */}
-                    <div className="space-y-2 text-xs flex-1">
-                      {p.customer_name && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); if (p.customer_id) window.open(`/customers?customer=${p.customer_id}`, '_blank') }}
-                          className="flex items-center gap-2 text-gray-400 group-hover/card:text-gray-300 hover:text-[#3B82F6] transition-colors cursor-pointer w-full text-left"
-                          disabled={!p.customer_id}
-                        >
-                          <Building2 size={11} className="text-gray-500 flex-shrink-0" />
-                          <span className="truncate">{p.customer_name}</span>
-                          {p.customer_id && <ExternalLink size={10} className="text-gray-600 flex-shrink-0 opacity-0 group-hover/card:opacity-100 transition-opacity" />}
-                        </button>
-                      )}
-                      {p.product && (
-                        <div className="flex items-center gap-2 text-gray-400 group-hover/card:text-gray-300 transition-colors">
-                          <Pin size={11} className="text-gray-500 flex-shrink-0" />
-                          <span className="truncate">{p.product.split(',').map(s => s.trim()).filter(Boolean).join(' / ')}</span>
-                        </div>
-                      )}
-                      {p.project_scenario && (
-                        <div className="flex items-center gap-2 text-gray-400 group-hover/card:text-gray-300 transition-colors">
-                          <Tag size={11} className="text-gray-500 flex-shrink-0" />
-                          <span className="truncate">{p.project_scenario}</span>
-                        </div>
-                      )}
-                      {p.cloud_provider && (
-                        <div className="flex items-center gap-2 text-gray-400 group-hover/card:text-gray-300 transition-colors">
-                          <Cloud size={11} className="text-gray-500 flex-shrink-0" />
-                          <span className="truncate">{p.cloud_provider.split(',').map(s => s.trim()).filter(Boolean).join(' / ')}</span>
-                        </div>
-                      )}
-                      {p.sales_person && (
-                        <div className="flex items-center gap-2 text-gray-400 group-hover/card:text-gray-300 transition-colors">
-                          <User size={11} className="text-gray-500 flex-shrink-0" />
-                          <span className="truncate">{p.sales_person}</span>
-                        </div>
-                      )}
-                      {p.opportunity_amount && (
-                        <div className="flex items-center gap-2 text-blue-400/90 group-hover/card:text-blue-400 transition-colors">
-                          <Target size={11} className="flex-shrink-0" />
-                          <span className="text-xs font-medium truncate">商机 ¥{p.opportunity_amount.toLocaleString()} 万</span>
-                        </div>
-                      )}
-                      {p.deal_amount && (
-                        <div className="flex items-center gap-2 text-emerald-400/90 group-hover/card:text-emerald-400 transition-colors">
-                          <CheckCircle2 size={11} className="flex-shrink-0" />
-                          <span className="text-xs font-medium truncate">成交 ¥{p.deal_amount.toLocaleString()} 万</span>
-                        </div>
-                      )}
-                      {(p.start_date || p.deadline || p.termination_date) && (
-                        <div className="flex items-center gap-2 text-gray-500 group-hover/card:text-gray-400 transition-colors">
-                          <Calendar size={11} className="flex-shrink-0" />
-                          <span>{p.start_date ? new Date(p.start_date).toLocaleDateString('zh-CN') : '—'}</span>
-                          {p.termination_date && <span className="text-red-400">→ 终止 {new Date(p.termination_date).toLocaleDateString('zh-CN')}</span>}
-                          {p.deadline && <span className="text-gray-600">→ {new Date(p.deadline).toLocaleDateString('zh-CN')}</span>}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* 底部摘要 */}
-                    {(p.analysis || p.progress) && (
-                      <div className="mt-3 pt-3 border-t border-border/50">
-                        {p.analysis ? (
-                          <div className="text-[11px] text-gray-500 line-clamp-2 leading-relaxed">
-                            <MarkdownRenderer content={p.analysis} className="text-[11px] text-gray-500 leading-relaxed" />
-                          </div>
-                        ) : p.progress ? (
-                          <div className="text-[11px] text-gray-500 line-clamp-2 leading-relaxed">
-                            <MarkdownRenderer content={p.progress} className="text-[11px] text-gray-500 leading-relaxed" />
-                          </div>
-                        ) : null}
-                      </div>
-                    )}
-                  </div>
-                </button>
-              )
-            })}
+          {/* 项目列表视图（紧凑表格）*/}
+          <div className="rounded-xl border border-border bg-bg-card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[1100px]">
+                <thead className="bg-bg-hover/50 text-[11px] text-gray-500 uppercase tracking-wider">
+                  <tr>
+                    <th className="text-left px-4 py-2.5 font-medium whitespace-nowrap">项目</th>
+                    <th className="text-left px-4 py-2.5 font-medium whitespace-nowrap">客户 / 销售</th>
+                    <th className="text-left px-4 py-2.5 font-medium whitespace-nowrap">状态</th>
+                    <th className="text-right px-4 py-2.5 font-medium whitespace-nowrap">商机</th>
+                    <th className="text-right px-4 py-2.5 font-medium whitespace-nowrap">成交</th>
+                    <th className="text-left px-4 py-2.5 font-medium whitespace-nowrap">产品 / 渠道</th>
+                    <th className="text-left px-4 py-2.5 font-medium whitespace-nowrap">合同</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/40">
+                  {filtered.map((p) => (
+                    <ProjectRow
+                      key={p.id}
+                      project={p}
+                      onOpen={() => openDetail(p)}
+                      onOpenCustomer={(cid) => navigate(`/customers?customer=${cid}`)}
+                      onOpenContracts={(pid) => navigate(`/contracts?project=${pid}`)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </>
       )}
@@ -672,10 +592,10 @@ export default function ProjectsPage() {
                   {(modalProject.opportunity_amount || modalProject.deal_amount) && (
                     <div className="flex items-center gap-3 text-[11px] flex-shrink-0">
                       {modalProject.opportunity_amount && (
-                        <span className="text-blue-400/80 font-medium">商机 ¥{modalProject.opportunity_amount.toLocaleString()} 万</span>
+                        <span className="text-blue-400/80 font-medium">商机 {(() => { const a = formatAmount(modalProject.opportunity_amount, modalProject.currency); return `${a.symbol}${a.display}` })()}</span>
                       )}
                       {modalProject.deal_amount && (
-                        <span className="text-emerald-400/80 font-medium">成交 ¥{modalProject.deal_amount.toLocaleString()} 万</span>
+                        <span className="text-emerald-400/80 font-medium">成交 {(() => { const a = formatAmount(modalProject.deal_amount, modalProject.currency); return `${a.symbol}${a.display}` })()}</span>
                       )}
                     </div>
                   )}
@@ -704,12 +624,37 @@ export default function ProjectsPage() {
                   )}
                   {modalProject.sales_person && (
                     <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 bg-bg-input px-2 py-0.5 rounded-md border border-border">
-                      <User size={10} className="text-gray-500" />{modalProject.sales_person}
+                      <User size={10} className="text-gray-500" />销售 {modalProject.sales_person}
+                    </span>
+                  )}
+                  {modalProject.tech_support_person && (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 bg-bg-input px-2 py-0.5 rounded-md border border-border">
+                      <Wrench size={10} className="text-gray-500" />技术支持 {modalProject.tech_support_person}
                     </span>
                   )}
                   {modalProject.cloud_provider && (
                     <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 bg-bg-input px-2 py-0.5 rounded-md border border-border">
                       <Cloud size={10} className="text-gray-500" />{modalProject.cloud_provider.split(',').map(s => s.trim()).filter(Boolean).join(' / ')}
+                    </span>
+                  )}
+                  {modalProject.upstream_channels && (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-cyan-300 bg-cyan-500/10 px-2 py-0.5 rounded-md border border-cyan-500/30">
+                      <Activity size={10} className="text-cyan-400" />{modalProject.upstream_channels.split(',').map(s => s.trim()).filter(Boolean).join(' / ')}
+                    </span>
+                  )}
+                  {modalProject.models && (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-purple-300 bg-purple-500/10 px-2 py-0.5 rounded-md border border-purple-500/30 font-mono">
+                      <Zap size={10} className="text-purple-400" />{modalProject.models.split(',').map(s => s.trim()).filter(Boolean).join(' / ')}
+                    </span>
+                  )}
+                  {modalProject.monthly_call_volume && (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-cyan-300 bg-cyan-500/10 px-2 py-0.5 rounded-md border border-cyan-500/30">
+                      <BarChart3 size={10} className="text-cyan-400" />{modalProject.monthly_call_volume}/月
+                    </span>
+                  )}
+                  {modalProject.contract_period && (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 bg-bg-input px-2 py-0.5 rounded-md border border-border">
+                      <Hash size={10} className="text-gray-500" />{modalProject.contract_period}
                     </span>
                   )}
                   {(modalProject.start_date || modalProject.deadline || modalProject.termination_date) && (
@@ -736,15 +681,21 @@ export default function ProjectsPage() {
             </div>
 
             <div className="p-4 md:p-6 space-y-4">
-              {/* AI 项目分析 */}
+              {/* AI 项目分析（默认收起） */}
               <div className="rounded-xl bg-bg-input border border-border overflow-hidden">
-                <div className="px-4 py-3 border-b border-border flex items-center gap-2 bg-bg-card/50">
+                <button
+                  onClick={() => setAnalysisOpen(!analysisOpen)}
+                  className="w-full px-4 py-3 flex items-center gap-2 bg-bg-card/50 hover:bg-bg-hover/30 transition-colors text-left"
+                >
                   <Sparkles size={14} className="text-[#F59E0B]" />
                   <span className="text-xs font-medium text-gray-300">AI 项目分析</span>
+                  {modalProject.analysis && (
+                    <span className="text-[10px] text-gray-500 ml-1">({modalProject.analysis.slice(0, 40).replace(/[#*\n]/g, '').trim()}…)</span>
+                  )}
                   <button
-                    onClick={() => analyzeProject(modalProject.id)}
+                    onClick={(e) => { e.stopPropagation(); analyzeProject(modalProject.id) }}
                     disabled={analyzingId === modalProject.id}
-                    className="ml-auto flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-lg border border-transparent text-gray-500 hover:text-gray-300 hover:border-border transition-colors disabled:opacity-50"
+                    className="ml-auto mr-2 flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-lg border border-transparent text-gray-500 hover:text-gray-300 hover:border-border transition-colors disabled:opacity-50"
                   >
                     {analyzingId === modalProject.id ? (
                       <Loader2 size={11} className="animate-spin" />
@@ -753,27 +704,30 @@ export default function ProjectsPage() {
                     )}
                     {analyzingId === modalProject.id ? '分析中...' : '刷新'}
                   </button>
-                </div>
-                <div className="p-4">
-                  {modalProject.analysis ? (
-                    <MarkdownRenderer content={modalProject.analysis} className="text-sm text-gray-300 leading-relaxed" />
-                  ) : analyzingId === modalProject.id ? (
-                    <div className="flex items-center gap-2 text-sm text-gray-500 py-2">
-                      <Loader2 size={14} className="animate-spin text-[#F59E0B]" />
-                      AI 正在分析项目，请稍候...
-                    </div>
-                  ) : (
-                    <div className="text-center py-3">
-                      <p className="text-sm text-gray-600 mb-2">暂无 AI 分析</p>
-                      <button
-                        onClick={() => analyzeProject(modalProject.id)}
-                        className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-[#F59E0B]/10 text-[#F59E0B] hover:bg-[#F59E0B]/20 transition-colors"
-                      >
-                        <Sparkles size={12} />生成分析
-                      </button>
-                    </div>
-                  )}
-                </div>
+                  <ChevronDown size={14} className={`text-gray-500 transition-transform ${analysisOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {analysisOpen && (
+                  <div className="p-4">
+                    {modalProject.analysis ? (
+                      <MarkdownRenderer content={modalProject.analysis} className="text-sm text-gray-300 leading-relaxed" />
+                    ) : analyzingId === modalProject.id ? (
+                      <div className="flex items-center gap-2 text-sm text-gray-500 py-2">
+                        <Loader2 size={14} className="animate-spin text-[#F59E0B]" />
+                        AI 正在分析项目，请稍候...
+                      </div>
+                    ) : (
+                      <div className="text-center py-3">
+                        <p className="text-sm text-gray-600 mb-2">暂无 AI 分析</p>
+                        <button
+                          onClick={() => analyzeProject(modalProject.id)}
+                          className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-[#F59E0B]/10 text-[#F59E0B] hover:bg-[#F59E0B]/20 transition-colors"
+                        >
+                          <Sparkles size={12} />生成分析
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Hero: 跟进记录 */}
@@ -818,7 +772,7 @@ export default function ProjectsPage() {
                         <button
                           onClick={handleQuickProgress}
                           disabled={quickSaving || !quickText.trim()}
-                          className="flex items-center gap-1.5 text-xs px-4 py-1.5 rounded-lg bg-[#3B82F6] text-white hover:bg-blue-600 disabled:opacity-50 transition-all"
+                          className="flex items-center gap-1.5 text-xs px-4 py-1.5 rounded-lg bg-[#3B82F6] text-[#fff] hover:bg-blue-600 disabled:opacity-50 transition-all"
                         >
                           {quickSaving && <Loader2 size={11} className="animate-spin" />}
                           {quickSaving ? '保存中...' : '保存'}
@@ -922,6 +876,46 @@ export default function ProjectsPage() {
                 </div>
               </div>
 
+              {/* 关联合同 */}
+              <div className="pt-4 mt-2 border-t border-border/50">
+                <div className="flex items-center gap-2 mb-2">
+                  <FileText size={12} className="text-emerald-400" />
+                  <span className="text-[11px] font-medium text-gray-400">关联合同</span>
+                  <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full">{linkedContracts.length}</span>
+                  <button
+                    onClick={() => navigate(`/contracts?project=${modalProject.id}`)}
+                    className="ml-auto text-[10px] text-[#3B82F6] hover:underline"
+                  >查看全部 →</button>
+                </div>
+                {linkedContracts.length === 0 ? (
+                  <p className="text-[11px] text-gray-600 py-1">暂无，去合同页创建时可关联到本项目</p>
+                ) : (
+                  <div className="space-y-1">
+                    {linkedContracts.map((c) => {
+                      const amt = c.contract_amount != null ? formatAmount(c.contract_amount, c.currency) : null
+                      return (
+                        <button
+                          key={c.id}
+                          onClick={() => { window.open(`/contracts?contract=${c.id}`, '_blank') }}
+                          className="w-full text-left flex items-center gap-2 text-[11px] text-gray-300 px-2 py-1.5 rounded-md bg-bg-input/40 hover:bg-bg-hover hover:text-[#3B82F6] transition-colors group/contract"
+                        >
+                          <FileText size={10} className="text-emerald-400 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium truncate">{c.title}</div>
+                            <div className="text-[10px] text-gray-500 flex items-center gap-1.5 mt-0.5">
+                              {c.contract_no && <span>NO. {c.contract_no}</span>}
+                              {c.sign_date && <span>· 签订 {new Date(c.sign_date).toLocaleDateString('zh-CN')}</span>}
+                              {amt?.hasValue && <span className="text-emerald-400 font-semibold">· {amt.symbol}{amt.display} {amt.unit}</span>}
+                            </div>
+                          </div>
+                          <ExternalLink size={9} className="text-gray-700 flex-shrink-0 group-hover/contract:text-[#3B82F6]" />
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
               {/* 关联会议 */}
               <div className="pt-4 mt-2 border-t border-border/50">
                 <div className="flex items-center gap-2 mb-2">
@@ -979,193 +973,68 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {/* 创建/编辑项目弹窗 */}
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowForm(false)}>
-          <div className="w-full max-w-lg mx-0 md:mx-2 p-4 md:p-6 rounded-none md:rounded-2xl bg-bg-card border border-border shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-bold text-white">{editingId ? '编辑项目' : '新建项目'}</h3>
-              <button onClick={() => setShowForm(false)} className="text-gray-500 hover:text-white transition-colors"><X size={20} /></button>
-            </div>
-
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className={labelClass}>项目名称 *</label>
-                  <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    className={inputClass} placeholder="输入项目名称" autoFocus />
-                </div>
-                <div className="col-span-1 md:col-span-2">
-                  <label className={labelClass}>客户名称</label>
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <SearchableSelect
-                        options={customers.map(c => ({ id: c.id, label: c.name }))}
-                        value={form.customer_id || 0}
-                        onChange={(val) => {
-                          const cid = val as number
-                          if (cid) {
-                            const c = customers.find(c => c.id === cid)
-                            setForm({ ...form, customer_id: cid, customer_name: c?.name || '' })
-                          } else {
-                            setForm({ ...form, customer_id: 0, customer_name: '' })
-                          }
-                        }}
-                        placeholder="选择客户..."
-                        searchPlaceholder="搜索客户..."
-                        emptyText="无匹配客户"
-                      />
-                    </div>
-                    <input value={form.customer_name} onChange={(e) => setForm({ ...form, customer_name: e.target.value, customer_id: 0 })}
-                      className={`${inputClass} w-40`} placeholder="手动输入" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className={labelClass}>开始时间</label>
-                  <input type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })}
-                    className={inputClass} />
-                </div>
-                <div>
-                  <label className={labelClass}>终止时间</label>
-                  <input type="date" value={form.termination_date} onChange={(e) => setForm({ ...form, termination_date: e.target.value })}
-                    className={inputClass} />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className={labelClass}>涉及产品</label>
-                  <SearchableSelect
-                    multiple
-                    options={(options.product || []).map(v => ({ id: v, label: v }))}
-                    value={selectedProducts}
-                    onChange={(val) => setSelectedProducts(val as string[])}
-                    placeholder="选择涉及产品..."
-                    searchPlaceholder="搜索产品..."
-                    emptyText="无匹配选项"
-                  />
-                </div>
-                <div>
-                  <label className={labelClass}>项目场景</label>
-                  {options.project_scenario?.length ? (
-                    <select value={form.project_scenario} onChange={(e) => setForm({ ...form, project_scenario: e.target.value })}
-                      className={inputClass}>
-                      <option value="">不选择</option>
-                      {options.project_scenario.map((v) => <option key={v} value={v}>{v}</option>)}
-                    </select>
-                  ) : (
-                    <input value={form.project_scenario} onChange={(e) => setForm({ ...form, project_scenario: e.target.value })}
-                      className={inputClass} placeholder="输入项目场景" />
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className={labelClass}>销售</label>
-                  {options.sales_person?.length ? (
-                    <select value={form.sales_person} onChange={(e) => setForm({ ...form, sales_person: e.target.value })}
-                      className={inputClass}>
-                      <option value="">不选择</option>
-                      {options.sales_person.map((v) => <option key={v} value={v}>{v}</option>)}
-                    </select>
-                  ) : (
-                    <input value={form.sales_person} onChange={(e) => setForm({ ...form, sales_person: e.target.value })}
-                      className={inputClass} placeholder="输入销售姓名" />
-                  )}
-                </div>
-                <div>
-                  <label className={labelClass}>状态</label>
-                  {options.project_status?.length ? (
-                    (() => {
-                      const opts = [...options.project_status]
-                      if (form.status && !opts.includes(form.status)) opts.unshift(form.status)
-                      return (
-                    <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}
-                      className={inputClass}>
-                      <option value="">不选择</option>
-                      {opts.map((v) => <option key={v} value={v}>{v}</option>)}
-                    </select>
-                      )
-                    })()
-                  ) : (
-                    <input value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}
-                      className={inputClass} placeholder="输入项目状态" />
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className={labelClass}>商机金额（万）</label>
-                  <input type="number" step="0.01" min="0" value={form.opportunity_amount} onChange={(e) => setForm({ ...form, opportunity_amount: e.target.value })}
-                    className={inputClass} placeholder="输入商机金额" />
-                </div>
-                <div>
-                  <label className={labelClass}>成交价格（万）</label>
-                  <input type="number" step="0.01" min="0" value={form.deal_amount} onChange={(e) => setForm({ ...form, deal_amount: e.target.value })}
-                    className={inputClass} placeholder="输入成交价格" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className={labelClass}>供应商</label>
-                  <SearchableSelect
-                    multiple
-                    options={(options.cloud || []).map(v => ({ id: v, label: v }))}
-                    value={selectedClouds}
-                    onChange={(val) => setSelectedClouds(val as string[])}
-                    placeholder="选择供应商..."
-                    searchPlaceholder="搜索供应商..."
-                    emptyText="无匹配选项"
-                  />
-                </div>
-                <div>
-                  <label className={labelClass}>关联会议</label>
-                  <SearchableSelect
-                    multiple
-                    options={allMeetings.map(m => ({ id: m.id, label: m.title, sub: new Date(m.meeting_date).toLocaleDateString('zh-CN') }))}
-                    value={Array.from(selectedMeetingIds)}
-                    onChange={(val) => setSelectedMeetingIds(new Set(val as number[]))}
-                    placeholder="选择关联会议..."
-                    searchPlaceholder="搜索会议..."
-                    emptyText="无匹配会议"
-                  />
-                </div>
-              </div>
-
-              {editingId && (
-                <div>
-                  <label className={labelClass}>进展记录</label>
-                  <RichTextEditor
-                    value={form.progress || ''}
-                    onChange={(v) => setForm({ ...form, progress: v })}
-                    placeholder="记录项目进展、备注等信息..."
-                    uploadFn={progressImageUpload}
-                    className="min-h-[150px]"
-                  />
-                </div>
-              )}
-
-            </div>
-
-            <div className="mt-3">
-              <label className={labelClass}>附件</label>
-              <FileUpload filesJson={form.files_json} onChange={(v) => setForm({ ...form, files_json: v })} />
-            </div>
-
-            <button onClick={handleSave} disabled={saving || !form.name.trim()}
-              className="w-full mt-5 py-2.5 rounded-xl bg-[#3B82F6] text-white text-sm font-medium hover:bg-blue-600 disabled:opacity-50 flex items-center justify-center gap-2 transition-all">
-              {saving && <Loader2 size={16} className="animate-spin" />}
-              <Save size={16} />{saving ? '保存中...' : editingId ? '更新项目' : '创建项目'}
-            </button>
-          </div>
-        </div>
-      )}
+      {/* 创建/编辑项目弹窗 - MaaS 平台版本 */}
+      <ProjectFormModal
+        isOpen={showForm}
+        onClose={() => { setShowForm(false); setEditingId(null) }}
+        editingProject={editingId ? projects.find(p => p.id === editingId) : null}
+        isSubmitting={saving}
+        onSubmit={async (body) => {
+          if (!body.name || !String(body.name).trim()) {
+            showToast('请填写项目名称', 'warning')
+            return
+          }
+          console.log('[ProjectForm] PUT body keys:', Object.keys(body).sort())
+          setSaving(true)
+          try {
+            if (editingId) {
+              const res = await fetch(`/api/v1/projects/${editingId}`, {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+              })
+              console.log('[ProjectForm] PUT response status:', res.status)
+              if (!res.ok) {
+                const err = await res.json().catch(() => ({}))
+                console.error('[ProjectForm] PUT error body:', err)
+                showToast(err.detail || `更新失败 (${res.status})`, 'error')
+                return
+              }
+              // 兼容：如果响应体不是 JSON（后端可能返回了非 JSON 错误体），用 res.text() 兜底
+              const text = await res.text()
+              let updated: any = null
+              try { updated = text ? JSON.parse(text) : null } catch (e) { console.error('[ProjectForm] JSON parse error:', e, 'raw text:', text.slice(0, 200)) }
+              console.log('[ProjectForm] PUT updated contract_period:', updated?.contract_period)
+              // 即使后端响应解析失败，也用客户端 body 合并到 local state，避免视觉上"保存无效"
+              if (updated && typeof updated === 'object') {
+                setProjects(prev => prev.map(p => p.id === editingId ? { ...p, ...updated } : p))
+              } else {
+                // 兜底：用客户端 body 合并
+                setProjects(prev => prev.map(p => p.id === editingId ? {
+                  ...p, ...body,
+                  updated_at: new Date().toISOString(),
+                } : p))
+              }
+              setShowForm(false); setEditingId(null); loadProjects()
+              showToast('项目已更新', 'success')
+            } else {
+              const res = await fetch('/api/v1/projects', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+              })
+              const data = await res.json()
+              if (!res.ok) {
+                showToast(data.detail || `创建失败 (${res.status})`, 'error')
+                return
+              }
+              setShowForm(false); setEditingId(null); loadProjects()
+              showToast('项目创建成功', 'success')
+              if (data.id) analyzeProject(data.id)
+            }
+          } catch (e) {
+            showToast(e instanceof Error ? e.message : '操作失败，请检查网络', 'error')
+          } finally {
+            setSaving(false)
+          }
+        }}
+      />
     </div>
   )
 }

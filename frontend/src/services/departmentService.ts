@@ -62,6 +62,22 @@ export async function deleteDepartment(
   }
 }
 
+export async function moveDepartment(
+  fetchWithAuth: FetchWithAuth,
+  deptId: number,
+  newParentId: number | null,
+): Promise<DepartmentFlat> {
+  const res = await fetchWithAuth(`/api/v1/users/departments/${deptId}/move`, {
+    method: 'PATCH',
+    body: JSON.stringify({ parent_id: newParentId }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: '移动失败' }))
+    throw new Error(err.detail || '移动部门失败')
+  }
+  return res.json()
+}
+
 export async function fetchReportChain(
   fetchWithAuth: FetchWithAuth,
   userId: number,

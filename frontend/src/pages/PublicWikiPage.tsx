@@ -251,7 +251,7 @@ export default function PublicWikiPage() {
             <button
               type="submit"
               disabled={verifying || !inputPass.trim()}
-              className="w-full py-2.5 bg-accent-blue text-white text-xs font-bold rounded-xl hover:bg-blue-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-1 cursor-pointer shadow-sm"
+              className="w-full py-2.5 bg-accent-blue text-[#fff] text-xs font-bold rounded-xl hover:bg-blue-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-1 cursor-pointer shadow-sm"
             >
               {verifying ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
               确认提取文档

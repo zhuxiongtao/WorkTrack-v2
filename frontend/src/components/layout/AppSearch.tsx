@@ -1,5 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Search, X, Sparkles } from 'lucide-react'
+import { MENU_CATEGORIES } from './menuConfig'
 
 export interface SearchResult {
   id: number | string
@@ -18,15 +20,44 @@ const typeColor: Record<string, string> = {
   project: 'text-amber-400 bg-amber-500/10',
   meeting: 'text-green-400 bg-green-500/10',
   customer: 'text-purple-400 bg-purple-500/10',
+  module: 'text-cyan-400 bg-cyan-500/10',
 }
 
 function AppSearch() {
+  const navigate = useNavigate()
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [searching, setSearching] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
   const searchRef = useRef<HTMLDivElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  // 本地菜单索引：用于"功能模块"搜索（按 label/categoryTitle/to 匹配）
+  const menuIndex = useMemo(() => {
+    const out: SearchResult[] = []
+    for (const cat of MENU_CATEGORIES) {
+      for (const it of cat.items) {
+        out.push({
+          id: it.to,
+          title: it.label,
+          snippet: `${cat.title} · ${it.to}`,
+          type: 'module',
+          label: '功能模块',
+        })
+      }
+    }
+    return out
+  }, [])
+
+  const localMatchMenu = (q: string): SearchResult[] => {
+    const lower = q.toLowerCase().trim()
+    if (!lower) return []
+    return menuIndex.filter((m) => {
+      const t = (m.title || '').toLowerCase()
+      const s = (m.snippet || '').toLowerCase()
+      return t.includes(lower) || s.includes(lower) || m.id.toLowerCase().includes(lower)
+    })
+  }
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -46,12 +77,21 @@ function AppSearch() {
       setShowDropdown(false)
       return
     }
+    // 1) 本地菜单匹配（同步、零延迟）
+    const menuHits = localMatchMenu(q)
+    if (menuHits.length > 0) {
+      setSearchResults(menuHits.slice(0, 10))
+      setShowDropdown(true)
+    } else {
+      setSearchResults([])
+    }
+    // 2) 后端业务数据搜索（防抖）
     debounceRef.current = setTimeout(async () => {
       setSearching(true)
       try {
         const res = await fetch(`/api/v1/search?q=${encodeURIComponent(q)}`)
         const data = await res.json()
-        const items: SearchResult[] = []
+        const items: SearchResult[] = [...menuHits] // 菜单结果保留
         ;(data.reports || []).forEach((r: { id: number; date: string; snippet: string }) => {
           items.push({ id: r.id, title: r.date, snippet: r.snippet, date: r.date, type: 'report', label: '日报' })
         })
@@ -76,7 +116,8 @@ function AppSearch() {
         setSearchResults(items.slice(0, 15))
         setShowDropdown(true)
       } catch {
-        setSearchResults([])
+        // 后端失败时保留本地菜单结果
+        if (menuHits.length === 0) setSearchResults([])
       } finally {
         setSearching(false)
       }
@@ -86,7 +127,10 @@ function AppSearch() {
   const goToResult = (item: SearchResult) => {
     setShowDropdown(false)
     setSearchQuery('')
-    if (item.type === 'report') window.open(`/reports?highlight=${item.id}`, '_blank')
+    if (item.type === 'module') {
+      // 功能模块：SPA 跳转（不刷新页面）
+      navigate(String(item.id))
+    } else if (item.type === 'report') window.open(`/reports?highlight=${item.id}`, '_blank')
     else if (item.type === 'project') window.open(`/projects?highlight=${item.id}`, '_blank')
     else if (item.type === 'meeting') window.open(`/meetings?highlight=${item.id}`, '_blank')
     else if (item.type === 'customer') window.open(`/customers?highlight=${item.id}`, '_blank')
@@ -98,7 +142,7 @@ function AppSearch() {
         <Search size={14} className="text-gray-500 flex-shrink-0" />
         <input
           type="text"
-          placeholder="搜索..."
+          placeholder="搜索菜单 / 业务数据..."
           value={searchQuery}
           onChange={(e) => handleSearch(e.target.value)}
           onFocus={() => searchResults.length > 0 && setShowDropdown(true)}

@@ -9,6 +9,7 @@ import SetupPage from './pages/SetupPage'
 import AppSidebar from './components/layout/AppSidebar'
 import AppHeader from './components/layout/AppHeader'
 import AppRoutes from './components/layout/AppRoutes'
+import AIFab from './components/AIFab'
 
 function AppContent() {
   const location = useLocation()
@@ -170,6 +171,12 @@ function AppContent() {
           <AppRoutes homePage={homePage} />
         </div>
       </main>
+
+      {/* L2: AI 浮动入口按钮（任意页面 1 键直达，AI 页面自身隐藏） */}
+      <AIFab
+        visible={location.pathname !== '/ai'}
+        canUse={hasPermission('ai:use')}
+      />
         </>
       )}
         </>

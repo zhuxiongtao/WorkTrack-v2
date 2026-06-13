@@ -14,7 +14,7 @@ from app.models.project import Project
 from app.models.user import User
 from app.auth import get_current_user, require_permission, get_visible_user_ids, check_data_access
 from app.schemas import ContractCreate, ContractUpdate, ContractOut
-from app.services.contract_parser import extract_text, extract_text_with_vision_fallback, parse_contract, UPLOAD_DIR, extract_text_from_docx, extract_text_from_legacy_doc
+from app.services.contract_parser import extract_text, extract_text_with_vision_fallback, parse_contract, apply_parse_result, UPLOAD_DIR, extract_text_from_docx, extract_text_from_legacy_doc
 from app.services.vector_store import index_document
 from app.routers.logs import write_log
 
@@ -130,6 +130,9 @@ async def create_contract(
         file_name=file_name,
         file_type=file_type,
         file_size=file_size,
+        # 阶段 1+2：有文件就立刻挂上「解析中」状态，前端可轮询
+        parse_status="parsing" if file_path else "pending",
+        parse_error="",
     )
     db.add(contract)
     db.commit()
@@ -149,6 +152,19 @@ def _auto_parse_contract_safe(contract_id: int, user_id: int):
         _auto_parse_contract(contract_id, user_id, db)
     except Exception as e:
         logging.getLogger(__name__).exception("后台解析合同 #%d 失败: %s", contract_id, e)
+        # 异常兜底：把 status 写为 failed，让前端能感知
+        try:
+            from app.services.contract_parser import apply_parse_result
+            c2 = db.get(Contract, contract_id)
+            if c2 and c2.parse_status == "parsing":
+                c2.parse_status = "failed"
+                c2.parse_error = f"后台任务异常: {str(e)[:300]}"
+                from datetime import datetime, timezone
+                c2.parsed_at = datetime.now(timezone.utc)
+                db.add(c2)
+                db.commit()
+        except Exception as e2:
+            logging.getLogger(__name__).exception("写入失败状态失败: %s", e2)
     finally:
         db.close()
 
@@ -158,39 +174,60 @@ def _auto_parse_contract(contract_id: int, user_id: int, db: Session):
         write_log("info", "contract", f"开始后台解析合同 #{contract_id}", db=db)
         contract = db.get(Contract, contract_id)
         if not contract or not contract.file_path or not os.path.exists(contract.file_path):
+            if contract:
+                contract.parse_status = "failed"
+                contract.parse_error = "文件不存在或路径为空"
+                from datetime import datetime, timezone
+                contract.parsed_at = datetime.now(timezone.utc)
+                db.add(contract)
+                db.commit()
             return
-        raw_text = extract_text_with_vision_fallback(contract.file_path, contract.file_type, db, user_id)
+        try:
+            raw_text = extract_text_with_vision_fallback(contract.file_path, contract.file_type, db, user_id)
+        except Exception as e:
+            from datetime import datetime, timezone
+            contract.parse_status = "failed"
+            contract.parse_error = f"文本提取失败: {str(e)[:300]}"
+            contract.parsed_at = datetime.now(timezone.utc)
+            db.add(contract)
+            db.commit()
+            write_log("warning", "contract", f"合同 #{contract_id} 文本提取失败: {str(e)[:200]}", db=db)
+            return
         if not raw_text:
+            from datetime import datetime, timezone
+            contract.parse_status = "failed"
+            contract.parse_error = "无法提取文件文本内容（可能是扫描件且未配置视觉模型）"
+            contract.parsed_at = datetime.now(timezone.utc)
+            db.add(contract)
+            db.commit()
             write_log("warning", "contract", f"合同 #{contract_id} 无法提取文字内容", db=db)
             return
         contract.raw_text = raw_text
         result = parse_contract(raw_text, db, user_id)
-        if "error" not in result:
-            if result.get("sign_date"):
-                contract.sign_date = result["sign_date"]
-            if result.get("start_date"):
-                contract.start_date = result["start_date"]
-            if result.get("end_date"):
-                contract.end_date = result["end_date"]
-            contract.party_a = result.get("party_a", contract.party_a)
-            contract.party_b = result.get("party_b", contract.party_b)
-            contract.contract_amount = result.get("contract_amount")
-            contract.currency = result.get("currency", contract.currency)
-            contract.payment_terms = result.get("payment_terms")
-            contract.key_clauses = result.get("key_clauses")
-            contract.summary = result.get("summary")
+        # 阶段 1+2：使用新的 apply_parse_result 一站式回填（含 confidence/source_text）
+        apply_parse_result(contract, result)
+        db.add(contract)
+        db.commit()
+        # 写入向量索引
+        if contract.parse_status == "success":
             try:
                 index_document("contracts", str(contract.id),
-                    f"{contract.title} {contract.contract_no} {contract.party_b} {contract.summary or ''}",
+                    f"{contract.title} {contract.contract_no} {contract.party_b} {contract.summary or ''} {contract.key_clauses or ''}",
                     {"user_id": user_id, "customer_id": contract.customer_id, "type": "contract"},
                     db)
             except Exception as e:
                 logger.error("后台索引合同向量失败: %s", e)
-        db.add(contract)
-        db.commit()
-        write_log("info", "contract", f"后台解析合同 #{contract_id} 完成", db=db)
+        write_log("info", "contract", f"后台解析合同 #{contract_id} {contract.parse_status}", db=db)
     except Exception as e:
         try:
+            from datetime import datetime, timezone
+            contract = db.get(Contract, contract_id)
+            if contract:
+                contract.parse_status = "failed"
+                contract.parse_error = f"解析异常: {str(e)[:300]}"
+                contract.parsed_at = datetime.now(timezone.utc)
+                db.add(contract)
+                db.commit()
             write_log("warning", "contract", f"后台解析合同失败: {str(e)[:200]}", db=db)
         except Exception as e2:
             logger.error("写入日志失败: %s", e2)
@@ -240,15 +277,15 @@ def delete_contract(contract_id: int, current_user: User = Depends(require_permi
 
 
 @router.get("/{contract_id}/file")
-def download_contract_file(contract_id: int, preview: bool = Query(False), current_user: User = Depends(require_permission("contract:read")), db: Session = Depends(get_session)):
+def download_contract_file(contract_id: int, preview: bool = Query(False), convert: Optional[str] = Query(None, description="convert=pdf 把 DOC/DOCX 转 PDF"), current_user: User = Depends(require_permission("contract:read")), db: Session = Depends(get_session)):
     from fastapi.responses import FileResponse
+    from urllib.parse import quote
     contract = db.get(Contract, contract_id)
     if not contract or not check_data_access(contract.user_id, current_user, db):
         raise HTTPException(status_code=404, detail="合同不存在")
     if not contract.file_path or not os.path.exists(contract.file_path):
         raise HTTPException(status_code=404, detail="合同文件不存在")
 
-    # 确定 MIME 类型
     ext = (contract.file_type or '').lower()
     media_type_map = {
         '.pdf': 'application/pdf',
@@ -261,19 +298,81 @@ def download_contract_file(contract_id: int, preview: bool = Query(False), curre
     }
     media_type = media_type_map.get(ext)
 
+    def _content_disposition(disp: str, filename: str) -> str:
+        """构建 Content-Disposition，兼容中文文件名（RFC 5987 percent-encoding）"""
+        # 把 filename 全部用 UTF-8 percent-encoding + filename* 形式，老浏览器忽略
+        encoded = quote(filename, safe='')
+        return f"{disp}; filename=\"contract\"; filename*=UTF-8''{encoded}"
+
+    # DOC/DOCX + convert=pdf：实时调 LibreOffice 转 PDF（缓存到 preview_cache/）
+    if convert == "pdf" and ext in (".doc", ".docx"):
+        from app.services.preview_converter import ensure_pdf_preview
+        pdf_path, err = ensure_pdf_preview(
+            contract_id=contract.id,
+            src_path=contract.file_path,
+            file_type=ext,
+            contracts_dir=UPLOAD_DIR,
+        )
+        if not pdf_path:
+            raise HTTPException(status_code=503, detail=err or "DOC/DOCX 转 PDF 失败")
+        download_name = (contract.file_name or "contract") + ".pdf"
+        return FileResponse(
+            pdf_path,
+            filename=download_name,
+            media_type="application/pdf",
+            headers={"Content-Disposition": _content_disposition("inline", download_name)}
+        )
+
     if preview:
-        # 在线预览模式：设置 inline 让浏览器直接打开，避免下载
         return FileResponse(
             contract.file_path,
             filename=contract.file_name,
             media_type=media_type,
-            headers={"Content-Disposition": f"inline; filename={contract.file_name}"}
+            headers={"Content-Disposition": _content_disposition("inline", contract.file_name)}
         )
     return FileResponse(contract.file_path, filename=contract.file_name)
 
 
+@router.get("/{contract_id}/parse-status")
+def get_parse_status(contract_id: int, current_user: User = Depends(require_permission("contract:read")), db: Session = Depends(get_session)):
+    """轻量轮询接口：返回当前合同的解析状态（用于前端 2s 轮询）"""
+    from app.auth import check_data_access, check_share_access
+    contract = db.get(Contract, contract_id)
+    if not contract:
+        raise HTTPException(status_code=404, detail="合同不存在")
+    if not check_data_access(contract.user_id, current_user, db):
+        if not check_share_access("contract", contract_id, current_user, db):
+            raise HTTPException(status_code=403, detail="无权查看该合同")
+    return {
+        "id": contract.id,
+        "parse_status": contract.parse_status or "pending",
+        "parse_error": contract.parse_error or "",
+        "parsed_at": contract.parsed_at.isoformat() if contract.parsed_at else None,
+    }
+
+
+@router.post("/{contract_id}/reparse", response_model=ContractOut)
+def reparse_contract(contract_id: int, background_tasks: BackgroundTasks, current_user: User = Depends(require_permission("contract:parse")), db: Session = Depends(get_session)):
+    """手动重解析：清空旧结果，重新走后台流程"""
+    contract = db.get(Contract, contract_id)
+    if not contract or contract.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="合同不存在")
+    if not contract.file_path or not os.path.exists(contract.file_path):
+        raise HTTPException(status_code=400, detail="合同没有上传文件，无法重新解析")
+    # 重置状态
+    contract.parse_status = "parsing"
+    contract.parse_error = ""
+    contract.parsed_at = None
+    db.add(contract)
+    db.commit()
+    db.refresh(contract)
+    background_tasks.add_task(_auto_parse_contract_safe, contract.id, current_user.id)
+    return contract
+
+
 @router.post("/{contract_id}/parse", response_model=ContractOut)
 def parse_contract_content(contract_id: int, current_user: User = Depends(require_permission("contract:parse")), db: Session = Depends(get_session)):
+    """同步解析（保留以兼容老接口），实际已迁移到上传时自动后台解析"""
     contract = db.get(Contract, contract_id)
     if not contract or contract.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="合同不存在")
@@ -292,30 +391,18 @@ def parse_contract_content(contract_id: int, current_user: User = Depends(requir
             raise HTTPException(status_code=400, detail="合同文件无法提取文字内容")
         contract.raw_text = raw_text
         result = parse_contract(raw_text, db, current_user.id)
-        if "error" not in result:
-            if result.get("sign_date"):
-                contract.sign_date = result["sign_date"]
-            if result.get("start_date"):
-                contract.start_date = result["start_date"]
-            if result.get("end_date"):
-                contract.end_date = result["end_date"]
-            contract.party_a = result.get("party_a", contract.party_a)
-            contract.party_b = result.get("party_b", contract.party_b)
-            contract.contract_amount = result.get("contract_amount")
-            contract.currency = result.get("currency", contract.currency)
-            contract.payment_terms = result.get("payment_terms")
-            contract.key_clauses = result.get("key_clauses")
-            contract.summary = result.get("summary")
-
+        # 阶段 1+2：统一用 apply_parse_result 回填（含 confidence/source_text）
+        apply_parse_result(contract, result)
+        if contract.parse_status == "failed":
+            write_log("warning", "contract", f"合同AI解析失败: {contract.parse_error}", db=db)
+        elif contract.parse_status == "success":
             try:
                 index_document("contracts", str(contract.id),
-                    f"{contract.title} {contract.contract_no} {contract.party_b} {contract.summary or ''}",
+                    f"{contract.title} {contract.contract_no} {contract.party_b} {contract.summary or ''} {contract.key_clauses or ''}",
                     {"user_id": current_user.id, "customer_id": contract.customer_id, "type": "contract"},
                     db)
             except Exception as e:
                 logger.error("索引合同向量失败: %s", e)
-        else:
-            write_log("warning", "contract", f"合同AI解析失败: {result['error']}", db=db)
     except HTTPException:
         raise
     except Exception as e:

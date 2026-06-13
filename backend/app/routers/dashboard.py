@@ -11,7 +11,7 @@ from app.models.meeting_note import MeetingNote
 from app.models.weekly_summary import WeeklySummary
 from app.models.ai_prompt import AIPrompt
 from app.models.user import User
-from app.auth import get_current_user
+from app.auth import get_current_user, require_permission
 from app.routers.settings import DEFAULT_PROMPTS
 from app.services.ai_service import _get_active_provider, _get_client, _extract_message_text
 from app.utils.time import utc_now
@@ -81,7 +81,7 @@ def get_stats(
     start_date: Optional[str] = Query(None, description="开始日期 ISO 格式"),
     end_date: Optional[str] = Query(None, description="结束日期 ISO 格式"),
     preset: Optional[str] = Query(None, description="预设范围: week/month/quarter"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("dashboard:read")),
     db: Session = Depends(get_session),
 ):
     range_start, range_end = _parse_date_range(start_date, end_date, preset)
@@ -299,7 +299,7 @@ def get_stats(
 @router.get("/timeline")
 def get_timeline(
     limit: int = Query(20, ge=1, le=100),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("dashboard:read")),
     db: Session = Depends(get_session),
 ):
     """合并最近动态，按时间倒序"""
@@ -382,7 +382,7 @@ def _resolve_prompt(db: Session, period: str, user_id: int = 0) -> tuple:
 @router.post("/ai-insights")
 def get_ai_insights(
     period: Optional[str] = Query('month', description="洞察周期: week/month/quarter"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("dashboard:read")),
     db: Session = Depends(get_session),
 ):
     """基于当前数据生成 AI 洞察，支持 周度/月度/季度 三个维度"""

@@ -27,5 +27,38 @@ class Contract(SQLModel, table=True):
     raw_text: Optional[str] = None
     status: str = "生效中"
     remarks: Optional[str] = None
+
+    # ===== 阶段 1+2 新增：业务字段 =====
+    # 合同类型：销售/采购/服务/租赁/劳动合同/保密/技术/咨询/其他
+    contract_type: str = ""
+    # 合同期限原文（"自 X 起 3 年"等推算不出的情况保留原文）
+    effective_term: str = ""
+    # 自动续约条款原文（"期满前 30 日未提出书面异议则自动续约 1 年"）
+    auto_renew: str = ""
+    # 违约金条款
+    penalty_clause: str = ""
+    # 验收条款
+    acceptance_terms: str = ""
+    # 付款节点（JSON 字符串：[{"phase":"预付款","percent":30,"condition":"合同签订后"},{"phase":"验收款","percent":60,"condition":"验收合格后"}]）
+    payment_schedule: str = ""
+    # 知识产权归属
+    ip_clause: str = ""
+    # 争议解决（仲裁机构/法院/适用法律）
+    dispute_resolution: str = ""
+    # 适用法律
+    governing_law: str = ""
+    # 通知与送达条款
+    notice_clause: str = ""
+
+    # ===== 解析质量元数据 =====
+    # 解析状态：pending / parsing / success / failed
+    parse_status: str = "pending"
+    # 解析失败时的错误信息
+    parse_error: str = ""
+    # 解析完成时间
+    parsed_at: Optional[datetime] = None
+    # 字段级抽取元数据 JSON：{field: {"confidence": 0-1, "source_text": "原文引用"}}
+    extraction_meta: str = ""
+
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

@@ -216,7 +216,7 @@ export default function SetupPage({ onSetupComplete }: SetupPageProps) {
             <button
               onClick={handleTestDb}
               disabled={testingDb}
-              className="w-full mt-5 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-accent-blue text-white text-sm font-medium hover:bg-accent-blue/90 disabled:opacity-50 transition-all"
+              className="w-full mt-5 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-accent-blue text-[#fff] text-sm font-medium hover:bg-accent-blue/90 disabled:opacity-50 transition-all"
             >
               {testingDb ? (
                 <Loader2 size={18} className="animate-spin" />
@@ -303,7 +303,7 @@ export default function SetupPage({ onSetupComplete }: SetupPageProps) {
             <p className="text-sm text-gray-400 mb-4">正在跳转到登录页面...</p>
             <button
               onClick={() => navigate('/login', { replace: true })}
-              className="px-6 py-2.5 rounded-xl bg-accent-blue text-white text-sm font-medium hover:bg-accent-blue/90 transition-all"
+              className="px-6 py-2.5 rounded-xl bg-accent-blue text-[#fff] text-sm font-medium hover:bg-accent-blue/90 transition-all"
             >
               立即前往登录
             </button>

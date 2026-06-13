@@ -123,3 +123,56 @@ export async function deleteUser(
     throw new Error(err.detail || '删除用户失败')
   }
 }
+
+export type BatchUserAction = 'enable' | 'disable' | 'resign' | 'set_department' | 'reset_password'
+
+export interface BatchUserPayload {
+  user_ids: number[]
+  action: BatchUserAction
+  department_id?: number | null
+}
+
+export async function batchUserAction(
+  fetchWithAuth: FetchWithAuth,
+  payload: BatchUserPayload,
+): Promise<{ affected: number; action: string }> {
+  const res = await fetchWithAuth('/api/v1/users/batch', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: '批量操作失败' }))
+    throw new Error(err.detail || '批量操作失败')
+  }
+  return res.json()
+}
+
+// ===== 用户直接角色分配 =====
+export async function fetchUserDirectRoles(
+  fetchWithAuth: FetchWithAuth,
+  userId: number,
+): Promise<number[]> {
+  const res = await fetchWithAuth(`/api/v1/users/${userId}/roles`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: '获取角色失败' }))
+    throw new Error(err.detail || '获取用户角色失败')
+  }
+  const data = await res.json()
+  return data.role_ids || []
+}
+
+export async function setUserDirectRoles(
+  fetchWithAuth: FetchWithAuth,
+  userId: number,
+  roleIds: number[],
+): Promise<UserData> {
+  const res = await fetchWithAuth(`/api/v1/users/${userId}/roles`, {
+    method: 'PUT',
+    body: JSON.stringify({ role_ids: roleIds }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: '更新角色失败' }))
+    throw new Error(err.detail || '更新用户角色失败')
+  }
+  return res.json()
+}

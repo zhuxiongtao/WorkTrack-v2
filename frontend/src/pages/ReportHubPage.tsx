@@ -14,7 +14,7 @@ export default function ReportHubPage() {
           onClick={() => setTab('daily')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
             tab === 'daily'
-              ? 'bg-accent-blue text-white shadow-lg shadow-accent-blue/20'
+              ? 'bg-accent-blue text-[#fff] shadow-lg shadow-accent-blue/20'
               : 'text-gray-400 hover:text-white'
           }`}
         >
@@ -25,7 +25,7 @@ export default function ReportHubPage() {
           onClick={() => setTab('weekly')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
             tab === 'weekly'
-              ? 'bg-accent-blue text-white shadow-lg shadow-accent-blue/20'
+              ? 'bg-accent-blue text-[#fff] shadow-lg shadow-accent-blue/20'
               : 'text-gray-400 hover:text-white'
           }`}
         >

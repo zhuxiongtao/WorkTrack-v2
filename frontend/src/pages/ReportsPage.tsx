@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Plus, X, Trash2, Loader2, Sparkles, Calendar, ChevronDown, ChevronRight, Upload, Mic, MicOff, Maximize2, Minimize2, Send } from 'lucide-react'
+import { Plus, X, Trash2, Loader2, Sparkles, ChevronDown, ChevronRight, Upload, Mic, MicOff, Maximize2, Minimize2, Send, FileText, List, LayoutGrid } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
-import MarkdownRenderer from '../components/MarkdownRenderer'
+import { useUnsavedGuard } from '../hooks/useUnsavedGuard'
+import MarkdownRenderer, { stripMarkdown } from '../components/MarkdownRenderer'
 import FileUpload from '../components/FileUpload'
 import RichTextEditor from '../components/RichTextEditor'
 import TeamViewSwitcher from '../components/TeamViewSwitcher'
+import { PageHeader, EmptyState } from '../components/design-system'
 
 interface ReportCard {
   id: number; date: string; title: string; snippet: string; ai_summary: string; has_summary: boolean; status?: string
@@ -39,6 +41,12 @@ export default function ReportsPage() {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [layout, setLayout] = useState<'list' | 'grid'>(() => (localStorage.getItem('worktrack_reports_layout') as 'list' | 'grid') || 'list')
+
+  const setLayoutPref = (mode: 'list' | 'grid') => {
+    setLayout(mode)
+    try { localStorage.setItem('worktrack_reports_layout', mode) } catch { /* noop */ }
+  }
   
   // 成员筛选（主管、Boss审查下属汇报）+ 团队视图
   const [memberList, setMemberList] = useState<any[]>([])
@@ -48,6 +56,10 @@ export default function ReportsPage() {
   const [formContent, setFormContent] = useState('')
   const [formDate, setFormDate] = useState('')
   const [formFiles, setFormFiles] = useState<string | null>(null)
+  // 表单初始快照
+  const [formInitial, setFormInitial] = useState<string>('')
+  const isDirty = showForm && JSON.stringify({ c: formContent, d: formDate, f: formFiles }) !== formInitial
+  const { requestClose, Dialog: UnsavedDialog } = useUnsavedGuard(isDirty)
   const [saving, setSaving] = useState(false)
   const [aiLoading, setAiLoading] = useState<number | null>(null)
   const [isMaximized, setIsMaximized] = useState(false)
@@ -214,6 +226,7 @@ export default function ReportsPage() {
     setFormContent('')
     setFormFiles(null)
     setFormDate(new Date().toISOString().slice(0, 10))
+    setFormInitial(JSON.stringify({ c: '', d: new Date().toISOString().slice(0, 10), f: null }))
     setShowForm(true)
   }
 
@@ -222,7 +235,16 @@ export default function ReportsPage() {
     setFormContent(report.content_md)
     setFormFiles(report.files_json || null)
     setFormDate(report.report_date?.slice(0, 10) || '')
+    setFormInitial(JSON.stringify({ c: report.content_md, d: report.report_date?.slice(0, 10) || '', f: report.files_json || null }))
     setShowForm(true)
+  }
+
+  // === 安全关闭 ===
+  const safeClose = async () => {
+    if (await requestClose()) {
+      setShowForm(false)
+      setIsMaximized(false)
+    }
   }
 
   const handleSave = async (statusVal: 'draft' | 'submitted') => {
@@ -285,35 +307,58 @@ export default function ReportsPage() {
   return (
     <div>
       {/* 头部 */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
-        <div className="flex items-center gap-4">
-          <div>
-            <h2 className="text-2xl font-bold text-white">日报</h2>
-            <p className="text-sm text-gray-500 mt-1">{total} 条记录</p>
-          </div>
-          <TeamViewSwitcher
-            memberList={memberList}
-            viewMode={viewMode}
-            onViewModeChange={setViewMode}
-            selectedUserIds={selectedUserIds}
-            onSelectedUserIdsChange={setSelectedUserIds}
-          />
-        </div>
-        {hasPermission('report:create') && (
-          <button onClick={openCreate} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent-blue text-white text-sm font-medium hover:bg-accent-blue/85 transition-all shadow-lg shadow-accent-blue/20 shrink-0">
-            <Plus size={17} /><span>写日报</span>
-          </button>
-        )}
-      </div>
+      <PageHeader
+        icon={FileText}
+        title="日报"
+        description="记录每日工作、回顾成长轨迹"
+        tone="cyan"
+        stats={[{ label: '记录', value: total }]}
+        right={
+          <>
+            <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-bg-hover border border-border shrink-0">
+              <button
+                onClick={() => setLayoutPref('list')}
+                title="列表视图"
+                className={`p-1.5 rounded-md transition-colors ${layout === 'list' ? 'bg-bg-card text-[#3B82F6] shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}
+              >
+                <List size={15} strokeWidth={2.2} />
+              </button>
+              <button
+                onClick={() => setLayoutPref('grid')}
+                title="卡片视图"
+                className={`p-1.5 rounded-md transition-colors ${layout === 'grid' ? 'bg-bg-card text-[#3B82F6] shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}
+              >
+                <LayoutGrid size={15} strokeWidth={2.2} />
+              </button>
+            </div>
+            <TeamViewSwitcher
+              memberList={memberList}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+              selectedUserIds={selectedUserIds}
+              onSelectedUserIdsChange={setSelectedUserIds}
+            />
+            {hasPermission('report:create') && (
+              <button onClick={openCreate} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-accent-blue text-[#fff] text-xs font-bold hover:bg-accent-blue/85 hover:shadow-lg hover:shadow-accent-blue/30 transition-all cursor-pointer shrink-0">
+                <Plus size={14} strokeWidth={2.5} /><span>写日报</span>
+              </button>
+            )}
+          </>
+        }
+      />
 
       {loading ? (
         <div className="text-center py-20 text-gray-500"><Loader2 size={28} className="mx-auto animate-spin mb-3" />加载中...</div>
       ) : grouped.length === 0 ? (
-        <div className="text-center py-20">
-          <Calendar size={48} className="mx-auto text-gray-600 mb-4" />
-          <p className="text-gray-500 mb-3">暂无日报记录</p>
-          <button onClick={openCreate} className="text-sm text-accent-blue hover:underline">写第一篇日报</button>
-        </div>
+        <EmptyState
+          icon={FileText}
+          title="暂无日报记录"
+          description="写下第一篇日报，开启你的成长轨迹记录"
+          actionLabel="写第一篇日报"
+          onAction={openCreate}
+          tone="cyan"
+          className="mb-8"
+        />
       ) : (
         <div className="space-y-6">
           {grouped.map((yearGroup) => (
@@ -344,14 +389,15 @@ export default function ReportsPage() {
                           <span className="text-xs text-gray-600">{monthTotal} 条</span>
                         </div>
                         {/* 统一大小卡片网格 */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                        {layout === 'grid' ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                           {allCards.map((r) => {
                             const d = new Date(r.date)
                             return (
                               <button
                                 key={r.id}
                                 onClick={() => openDetail(r.id)}
-                                className="group/card relative w-full text-left rounded-xl bg-bg-card border border-border/60 hover:border-[#3B82F6]/50 hover:shadow-md hover:shadow-[#3B82F6]/5 transition-all duration-200 flex flex-col overflow-hidden"
+                                className="group/card relative w-full text-left rounded-xl bg-bg-card border border-border/60 hover:border-[#3B82F6]/50 hover:shadow-md hover:shadow-[#3B82F6]/5 transition-all duration-200 flex flex-col overflow-hidden min-h-[120px]"
                                 style={{ borderTopWidth: '3px', borderTopColor: '#3B82F660' }}
                               >
                                 <div className="p-3 flex-1 flex flex-col">
@@ -369,7 +415,7 @@ export default function ReportsPage() {
                                     {r.has_summary && <Sparkles size={10} className="text-[#8B5CF6]" />}
                                   </div>
                                   {r.ai_summary ? (
-                                    <p className="text-[11px] text-gray-400 dark:text-gray-300 line-clamp-3 leading-relaxed flex-1">{r.ai_summary}</p>
+                                    <p className="text-[11px] text-gray-400 dark:text-gray-300 line-clamp-3 leading-relaxed flex-1">{stripMarkdown(r.ai_summary)}</p>
                                   ) : (
                                     <p className="text-[11px] text-gray-500 line-clamp-3 leading-relaxed flex-1 italic">点击查看详情</p>
                                   )}
@@ -378,6 +424,36 @@ export default function ReportsPage() {
                             )
                           })}
                         </div>
+                        ) : (
+                        <div className="rounded-xl bg-bg-card border border-border/60 overflow-hidden divide-y divide-border/50">
+                          {allCards.map((r) => {
+                            const d = new Date(r.date)
+                            return (
+                              <button
+                                key={r.id}
+                                onClick={() => openDetail(r.id)}
+                                className="group/row w-full text-left flex items-center gap-3 px-3 md:px-4 py-2.5 hover:bg-bg-hover-secondary/60 transition-colors"
+                              >
+                                <div className="flex flex-col items-center justify-center w-11 shrink-0 leading-none">
+                                  <span className="text-base font-bold text-gray-300 tabular-nums">{d.getDate()}</span>
+                                  <span className="text-[9px] text-gray-500 mt-0.5">{WEEKDAY_NAMES[d.getDay()]}</span>
+                                </div>
+                                <span className="w-px self-stretch bg-border/60 shrink-0" />
+                                <p className={`flex-1 min-w-0 text-xs leading-relaxed line-clamp-1 ${r.ai_summary ? 'text-gray-400 dark:text-gray-300' : 'text-gray-500 italic'}`}>
+                                  {r.ai_summary ? stripMarkdown(r.ai_summary) : '点击查看详情'}
+                                </p>
+                                {r.has_summary && <Sparkles size={11} className="text-[#8B5CF6] shrink-0" />}
+                                {r.status === 'draft' ? (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 font-bold border border-amber-500/15 shrink-0">草稿</span>
+                                ) : (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 font-bold border border-emerald-500/15 shrink-0">已提交</span>
+                                )}
+                                <ChevronRight size={14} className="text-gray-600 group-hover/row:text-gray-400 shrink-0 transition-colors" />
+                              </button>
+                            )
+                          })}
+                        </div>
+                        )}
                       </div>
                     )
                   })}
@@ -417,7 +493,7 @@ export default function ReportsPage() {
                       closeDetail()
                       loadReports()
                     }}
-                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-accent-blue text-white hover:bg-blue-600 transition-colors border border-transparent shadow-sm font-bold cursor-pointer"
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-accent-blue text-[#fff] hover:bg-blue-600 transition-colors border border-transparent shadow-sm font-bold cursor-pointer"
                   >
                     <Send size={11} /> 提交上级
                   </button>
@@ -494,7 +570,7 @@ export default function ReportsPage() {
 
       {/* 创建/编辑弹窗 */}
       {showForm && (
-        <div className={`fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm`} onClick={() => { setShowForm(false); setIsMaximized(false) }}>
+        <div className={`fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm`} onClick={safeClose}>
           <div className={`w-full md:mx-4 p-4 md:p-6 md:rounded-2xl bg-bg-card border border-border shadow-2xl flex flex-col rounded-t-2xl md:rounded-t-2xl ${
             isMaximized 
               ? 'md:max-w-5xl md:h-[calc(100vh-2rem)] md:max-h-[900px] h-[95dvh]' 
@@ -507,7 +583,7 @@ export default function ReportsPage() {
                 <button onClick={() => setIsMaximized(!isMaximized)} className="p-1.5 rounded-lg hover:bg-bg-hover text-gray-500 hover:text-white transition-colors">
                   {isMaximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
                 </button>
-                <button onClick={() => { setShowForm(false); setIsMaximized(false) }} className="p-1.5 rounded-lg hover:bg-bg-hover text-gray-500 hover:text-white transition-colors"><X size={20} /></button>
+                <button onClick={safeClose} className="p-1.5 rounded-lg hover:bg-bg-hover text-gray-500 hover:text-white transition-colors"><X size={20} /></button>
               </div>
             </div>
 
@@ -578,19 +654,22 @@ export default function ReportsPage() {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button onClick={() => handleSave('draft')} disabled={saving || !formContent.trim()}
-                  className="px-4 py-2.5 rounded-xl bg-bg-hover hover:bg-gray-200 text-xs text-gray-500 hover:text-gray-850 dark:text-gray-400 dark:hover:text-gray-200 border border-gray-200 dark:border-border/30 transition-colors cursor-pointer font-semibold shadow-sm">
+                  className="px-4 py-2.5 rounded-xl bg-bg-hover hover:bg-gray-200 text-xs text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 border border-gray-200 dark:border-border/30 transition-colors cursor-pointer font-semibold shadow-sm">
                   {saving ? <Loader2 size={13} className="animate-spin" /> : '💾 保存草稿'}
                 </button>
                 <button onClick={() => handleSave('submitted')} disabled={saving || !formContent.trim()}
-                  className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-accent-blue text-white text-xs font-bold hover:bg-blue-600 disabled:opacity-50 transition-all cursor-pointer shadow-sm">
+                  className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-accent-blue text-[#fff] text-xs font-bold hover:bg-blue-600 disabled:opacity-50 transition-all cursor-pointer shadow-sm">
                   {saving ? <Loader2 size={13} className="animate-spin" /> : <Send size={12} />}
-                  <span>🚀 提交上级</span>
+                  <span>提交上级</span>
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* 未保存修改确认弹窗 */}
+      {UnsavedDialog}
     </div>
   )
 }

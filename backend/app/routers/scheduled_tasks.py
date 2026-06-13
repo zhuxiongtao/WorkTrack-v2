@@ -29,7 +29,7 @@ def create_task(task: ScheduledTask, current_user: User = Depends(require_permis
 
 
 @router.put("/{task_id}")
-def update_task(task_id: int, data: dict, current_user: User = Depends(require_permission("task:create")),
+def update_task(task_id: int, data: dict, current_user: User = Depends(require_permission("task:edit")),
                 db: Session = Depends(get_session)):
     task = db.get(ScheduledTask, task_id)
     if not task:
@@ -48,7 +48,7 @@ def update_task(task_id: int, data: dict, current_user: User = Depends(require_p
 
 
 @router.delete("/{task_id}", status_code=204)
-def delete_task(task_id: int, current_user: User = Depends(require_permission("task:create")),
+def delete_task(task_id: int, current_user: User = Depends(require_permission("task:delete")),
                 db: Session = Depends(get_session)):
     task = db.get(ScheduledTask, task_id)
     if not task:

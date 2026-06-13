@@ -4,6 +4,17 @@ from pydantic_settings import BaseSettings
 from pathlib import Path
 import os
 
+# 把 backend/.env 内容同步注入到 os.environ，
+# 这样 pydantic-settings 读取后，下游的 os.getenv("DATABASE_URL") 也能拿到，
+# 避免启动时反复弹“默认凭据”告警
+try:
+    from dotenv import load_dotenv
+    _env_path = Path(__file__).resolve().parent.parent / ".env"
+    if _env_path.exists():
+        load_dotenv(_env_path, override=False)
+except Exception:
+    pass
+
 
 class Settings(BaseSettings):
     # 对话模型配置

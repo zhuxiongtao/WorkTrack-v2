@@ -70,7 +70,7 @@ def list_logs(
 
 
 @router.delete("/clear")
-def clear_logs(current_user: User = Depends(require_permission("log:read")),
+def clear_logs(current_user: User = Depends(require_permission("log:clear")),
                db: Session = Depends(get_session)):
     """清空所有日志"""
     db.exec(sa_delete(LogEntry))

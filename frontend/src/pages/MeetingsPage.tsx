@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Plus, Sparkles, X, Trash2, Loader2, Calendar, Mic, Square, Play, Pause, FileText, FileAudio, Link2, Search, Building2, ExternalLink, Edit3, Maximize2, Minimize2, Share2, MessageSquare, Send } from 'lucide-react'
+import { Plus, Sparkles, X, Trash2, Loader2, Calendar, Mic, Square, Play, Pause, FileAudio, Link2, Search, Building2, ExternalLink, Edit3, Share2, MessageSquare, Send, Paperclip } from 'lucide-react'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import SearchableSelect from '../components/SearchableSelect'
 import FileUpload from '../components/FileUpload'
 import RichTextEditor from '../components/RichTextEditor'
+import { useUnsavedGuard } from '../hooks/useUnsavedGuard'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
+import { PageHeader, EmptyState } from '../components/design-system'
 
 interface Meeting {
   id: number; title: string; meeting_date: string; content_md: string; audio_url: string | null; customer_id: number | null; project_id: number | null; user_id: number
@@ -31,9 +33,9 @@ export default function MeetingsPage() {
   const [editingId, setEditingId] = useState<number | null>(null)
   
   const [memberList, setMemberList] = useState<any[]>([])
-  const [isMaximized, setIsMaximized] = useState(false)
-  const [inputMode, setInputMode] = useState<'text' | 'voice'>('text')
   const [form, setForm] = useState({ title: '', content_md: '', project_id: 0, customer_id: 0, meeting_date: new Date().toISOString().slice(0, 16), files_json: null as string | null })
+  // 表单初始快照（用于检测未保存修改）
+  const [formInitial, setFormInitial] = useState<string>('')
   const [saving, setSaving] = useState(false)
   const [aiLoading, setAiLoading] = useState<number | null>(null)
   const [transcribingId, setTranscribingId] = useState<number | null>(null)
@@ -77,6 +79,12 @@ export default function MeetingsPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([])
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('')
+
+  // 表单是否被修改（用于关闭前提示），需在 recordedBlob 声明之后
+  const isDirty = showForm && (
+    JSON.stringify(form) !== formInitial || !!recordedBlob
+  )
+  const { requestClose, Dialog: UnsavedDialog } = useUnsavedGuard(isDirty)
 
   const loadMeetings = useCallback(() => {
     setLoading(true)
@@ -161,12 +169,12 @@ export default function MeetingsPage() {
     }
   }, [recordedUrl])
 
-  // 切换到录音模式时枚举音频设备，优先选 Mac 内置麦克风
+  // 打开表单时枚举音频设备（用于多麦克风场景的选择器）
   useEffect(() => {
-    if (inputMode === 'voice') {
+    if (showForm) {
       enumerateAudioDevices()
     }
-  }, [inputMode])
+  }, [showForm])
 
   const enumerateAudioDevices = async () => {
     try {
@@ -214,20 +222,26 @@ export default function MeetingsPage() {
   // === 录音功能 ===
   const startRecording = async () => {
     try {
-      // 如果还没有设备列表，先枚举（不触发 getUserMedia）
+      // 1) 还没枚举过设备就先枚举（不触发 getUserMedia，仅查询设备列表）
       if (audioDevices.length === 0) {
         await enumerateAudioDevices()
       }
-      // 始终指定具体设备，绝不使用无约束的 { audio: true }
+      // 2) 始终指定具体设备，绝不使用无约束的 { audio: true }
       let deviceId = selectedDeviceId
       if (!deviceId && audioDevices.length > 0) {
         deviceId = audioDevices[0].deviceId
         updateDevicePreference(deviceId)
       }
-      const constraints: MediaStreamConstraints = {
-        audio: deviceId ? { deviceId: { exact: deviceId } } : true
+      // 3) 先尝试指定设备；失败后回退到任意设备（避免 deviceId 失效时直接报错）
+      const constraints: MediaStreamConstraints[] = deviceId
+        ? [{ audio: { deviceId: { exact: deviceId } } }, { audio: true }]
+        : [{ audio: true }]
+      let stream: MediaStream | null = null
+      let lastErr: any = null
+      for (const c of constraints) {
+        try { stream = await navigator.mediaDevices.getUserMedia(c); break } catch (e) { lastErr = e }
       }
-      const stream = await navigator.mediaDevices.getUserMedia(constraints)
+      if (!stream) throw lastErr || new Error('getUserMedia failed')
       // 获取流后刷新设备标签（此时已有权限，标签可见），并记住当前设备
       refreshDeviceLabels()
       if (deviceId) {
@@ -250,7 +264,23 @@ export default function MeetingsPage() {
       setRecording(true)
       setIsPaused(false)
       timerRef.current = setInterval(() => setRecordingTime((t) => t + 1), 1000)
-    } catch { showToast('无法访问麦克风，请检查浏览器权限', 'error') }
+    } catch (err: any) {
+      // 根据错误类型给出具体引导
+      const name = err?.name || ''
+      const msg =
+        name === 'NotAllowedError' || name === 'PermissionDeniedError'
+          ? '麦克风权限被拒绝。请点击地址栏的锁形图标，允许使用麦克风后重试'
+          : name === 'NotFoundError' || name === 'DevicesNotFoundError'
+          ? '未检测到可用的麦克风设备，请检查麦克风是否已连接'
+          : name === 'NotReadableError' || name === 'TrackStartError'
+          ? '麦克风正在被其他应用占用，请关闭后重试'
+          : name === 'OverconstrainedError'
+          ? '当前选择的麦克风不可用，已尝试切换其他设备但仍失败，请刷新页面重试'
+          : name === 'SecurityError'
+          ? '需要 HTTPS 或 localhost 才能使用麦克风'
+          : `无法访问麦克风（${name || '未知错误'}），请检查浏览器权限`
+      showToast(msg, 'error')
+    }
   }
 
   const stopRecording = (): Promise<void> => {
@@ -317,18 +347,29 @@ export default function MeetingsPage() {
   // === 打开新建/编辑 ===
   const openCreate = () => {
     setEditingId(null)
-    setForm({ title: '', content_md: '', project_id: 0, customer_id: 0, meeting_date: new Date().toISOString().slice(0, 16), files_json: null })
-    setInputMode('text')
+    const init = { title: '', content_md: '', project_id: 0, customer_id: 0, meeting_date: new Date().toISOString().slice(0, 16), files_json: null }
+    setForm(init)
+    setFormInitial(JSON.stringify(init))
     cancelRecording()
     setShowForm(true)
   }
 
   const openEdit = (m: Meeting) => {
     setEditingId(m.id)
-    setForm({ title: m.title, content_md: m.content_md, project_id: m.project_id || 0, customer_id: m.customer_id || 0, meeting_date: m.meeting_date?.slice(0, 16) || new Date().toISOString().slice(0, 16), files_json: m.files_json || null })
-    setInputMode('text')
+    const init = { title: m.title, content_md: m.content_md, project_id: m.project_id || 0, customer_id: m.customer_id || 0, meeting_date: m.meeting_date?.slice(0, 16) || new Date().toISOString().slice(0, 16), files_json: m.files_json || null }
+    setForm(init)
+    setFormInitial(JSON.stringify(init))
     cancelRecording()
     setShowForm(true)
+  }
+
+  // === 安全关闭表单（无修改直接关闭，有修改弹确认） ===
+  const safeClose = async () => {
+    if (await requestClose()) {
+      setShowForm(false)
+      setEditingId(null)
+      cancelRecording()
+    }
   }
 
   // === 保存会议（新建 / 编辑）===
@@ -388,8 +429,9 @@ export default function MeetingsPage() {
       }
       setShowForm(false)
       setEditingId(null)
-      setIsMaximized(false)
-      setForm({ title: '', content_md: '', project_id: 0, customer_id: 0, meeting_date: new Date().toISOString().slice(0, 16), files_json: null })
+      const empty = { title: '', content_md: '', project_id: 0, customer_id: 0, meeting_date: new Date().toISOString().slice(0, 16), files_json: null }
+      setForm(empty)
+      setFormInitial(JSON.stringify(empty))
       setRecordedBlob(null)
       recordedBlobRef.current = null
       if (recordedUrl) { URL.revokeObjectURL(recordedUrl); setRecordedUrl('') }
@@ -584,39 +626,56 @@ export default function MeetingsPage() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
-        <div className="flex items-center gap-4">
-          <div>
-            <h2 className="text-2xl font-bold text-white">会议纪要</h2>
-            <p className="text-sm text-gray-500 mt-1">{meetings.length} 条记录</p>
-          </div>
-
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-bg-card border border-border focus-within:border-[#3B82F6] transition-colors">
-            <Search size={15} className="text-gray-500" />
-            <input type="text" placeholder="搜索会议..." value={searchText} onChange={(e) => setSearchText(e.target.value)}
-              className="bg-transparent text-sm text-gray-300 outline-none w-28 sm:w-36 placeholder-gray-600" />
-            {searchText && <button onClick={() => setSearchText('')} className="text-gray-500 hover:text-white"><X size={14} /></button>}
-          </div>
-          {hasPermission('meeting:create') && (
-            <button onClick={openCreate} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#3B82F6] text-white text-sm font-medium hover:bg-blue-600 transition-all shadow-lg shadow-blue-500/20 shrink-0">
-              <Plus size={17} /><span>新建会议</span>
-            </button>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        icon={Calendar}
+        title="会议纪要"
+        description="文本 · 录音转写 · AI 整理"
+        tone="purple"
+        stats={[{ label: '记录', value: meetings.length }]}
+        right={
+          <>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-bg-card border border-border focus-within:border-[#3B82F6] transition-colors">
+              <Search size={14} className="text-gray-500" />
+              <input type="text" placeholder="搜索会议..." value={searchText} onChange={(e) => setSearchText(e.target.value)}
+                className="bg-transparent text-xs text-gray-300 outline-none w-28 sm:w-36 placeholder-gray-600" />
+              {searchText && <button onClick={() => setSearchText('')} className="text-gray-500 hover:text-white"><X size={13} /></button>}
+            </div>
+            {hasPermission('meeting:create') && (
+              <button onClick={openCreate} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#3B82F6] text-[#fff] text-xs font-bold hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 transition-all cursor-pointer shrink-0">
+                <Plus size={14} strokeWidth={2.5} /><span>新建会议</span>
+              </button>
+            )}
+          </>
+        }
+      />
 
       {loading ? (
         <div className="text-center py-20 text-gray-500"><Loader2 size={28} className="mx-auto animate-spin mb-3" />加载中...</div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-20">
-          <Calendar size={48} className="mx-auto text-gray-600 mb-4" />
-          <p className="text-gray-500 mb-3">{searchText ? '未找到匹配会议' : '暂无会议记录'}</p>
-          {!searchText && <button onClick={openCreate} className="text-sm text-[#3B82F6] hover:underline">记录第一次会议</button>}
+        <div className="relative overflow-hidden text-center py-16 max-w-2xl mx-auto rounded-2xl border border-dashed border-gray-200 dark:border-white/10 bg-gradient-to-br from-gray-50 via-white to-purple-50/30 dark:from-gray-900/40 dark:via-gray-900/30 dark:to-purple-950/20">
+          <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-purple-500/[0.07] blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-12 -left-12 w-40 h-40 rounded-full bg-blue-500/[0.07] blur-3xl pointer-events-none" />
+          <div className="relative">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#3B82F6]/20 to-[#8B5CF6]/20 flex items-center justify-center mx-auto mb-4 border border-border/50">
+              <Calendar size={28} className="text-gray-500" strokeWidth={1.8} />
+            </div>
+            <h3 className="text-base font-bold text-white mb-2">{searchText ? '未找到匹配会议' : '开始记录你的第一次会议'}</h3>
+            {!searchText && (
+              <>
+                <div className="flex items-center justify-center gap-5 text-xs text-gray-500 mb-5">
+                  <span className="flex items-center gap-1.5"><FileAudio size={13} className="text-red-400" />实时录音</span>
+                  <span className="flex items-center gap-1.5"><Sparkles size={13} className="text-[#A78BFA]" />AI 自动整理</span>
+                  <span className="flex items-center gap-1.5"><Building2 size={13} className="text-blue-400" />关联项目 / 客户</span>
+                </div>
+                <button onClick={openCreate} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-[#3B82F6] to-[#8B5CF6] text-[#fff] text-xs font-bold hover:shadow-lg hover:shadow-purple-500/30 hover:scale-105 transition-all cursor-pointer">
+                  <Plus size={14} strokeWidth={2.5} />新建会议
+                </button>
+              </>
+            )}
+          </div>
         </div>
       ) : (
-        <div className="columns-1 sm:columns-2 lg:columns-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-stretch">
           {filtered.map((m) => {
             const linkedP = getProjectById(m.project_id)
             const linkedC = m.customer_id ? customers.find(c => c.id === m.customer_id) : null
@@ -624,10 +683,11 @@ export default function MeetingsPage() {
               <button
                 key={m.id}
                 onClick={() => openDetail(m)}
-                className={`w-full text-left break-inside-avoid mb-3 p-4 rounded-xl bg-bg-card border hover:bg-bg-hover-secondary transition-all group/card ${
+                className={`w-full text-left break-inside-avoid rounded-xl bg-bg-card border hover:bg-bg-hover-secondary transition-all group/card flex flex-col ${
                   m.is_shared ? 'border-[#8B5CF6]/40 hover:border-[#8B5CF6]/60' : 'border-border hover:border-[#3B82F6]/60'
                 }`}
               >
+                <div className="p-4 flex-1">
                 {m.is_shared && (
                   <div className="flex items-center gap-1.5 mb-2">
                     <Share2 size={10} className="text-[#8B5CF6]" />
@@ -679,7 +739,8 @@ export default function MeetingsPage() {
                     <span className="text-gray-600">暂无内容</span>
                   )}
                 </div>
-                <div className="flex items-center justify-between pt-2 border-t border-border/50">
+                </div>
+                <div className="flex items-center justify-between px-4 py-2.5 border-t border-border/50">
                   <span className="text-[11px] text-gray-400">{new Date(m.meeting_date).toLocaleDateString('zh-CN')}</span>
                   <span className="text-[10px] text-gray-600">{m.content_md ? m.content_md.length : 0} 字</span>
                 </div>
@@ -741,21 +802,29 @@ export default function MeetingsPage() {
               </div>
             </div>
 
-            <div className="p-4 md:p-6">
+            <div className="p-4 md:p-6 space-y-4">
               {/* AI 总结 */}
               {modalMeeting.ai_summary && (
-                <div className="mb-4 p-4 rounded-xl bg-[#8B5CF6]/10 border border-[#8B5CF6]/20">
-                  <h4 className="text-xs font-bold text-[#8B5CF6] mb-2 flex items-center gap-1.5"><Sparkles size={12} />AI 会议总结</h4>
+                <div className="p-4 md:p-5 rounded-xl bg-gradient-to-br from-[#8B5CF6]/10 to-[#8B5CF6]/5 border border-[#8B5CF6]/25">
+                  <h4 className="text-xs font-bold text-[#A78BFA] mb-3 flex items-center gap-1.5">
+                    <Sparkles size={12} />AI 会议整理总结
+                    <span className="text-[10px] text-gray-500 font-normal ml-1">· 基于系统设置的提示词生成</span>
+                  </h4>
                   <div className="text-sm text-gray-300 leading-relaxed prose prose-invert prose-sm max-w-none">
                     <MarkdownRenderer content={modalMeeting.ai_summary} />
                   </div>
                 </div>
               )}
 
-              {/* 内容 */}
+              {/* 主内容 */}
               {modalMeeting.content_md && (
-                <div className="text-sm text-gray-300 leading-relaxed prose prose-invert prose-sm max-w-none mb-4">
-                  <MarkdownRenderer content={modalMeeting.content_md} />
+                <div>
+                  {modalMeeting.ai_summary && (
+                    <h4 className="text-xs font-bold text-gray-400 mb-2">会议内容</h4>
+                  )}
+                  <div className="text-sm text-gray-300 leading-relaxed prose prose-invert prose-sm max-w-none">
+                    <MarkdownRenderer content={modalMeeting.content_md} />
+                  </div>
                 </div>
               )}
 
@@ -764,16 +833,19 @@ export default function MeetingsPage() {
                 try {
                   const files = JSON.parse(modalMeeting.files_json)
                   return Array.isArray(files) && files.length > 0 && (
-                    <div className="mb-4 flex flex-wrap gap-2">
-                      {files.map((f: any, idx: number) => (
-                        <a key={idx} href={f.url} target="_blank" rel="noopener noreferrer"
-                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-bg-hover border border-border text-xs text-gray-400 hover:text-white hover:border-gray-600 transition-colors">
-                          {f.type?.startsWith('image/') ? (
-                            <img src={f.url} alt={f.name} className="w-5 h-5 rounded object-cover" />
-                          ) : null}
-                          {f.name}
-                        </a>
-                      ))}
+                    <div>
+                      <h4 className="text-xs font-bold text-gray-400 mb-2">附件</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {files.map((f: any, idx: number) => (
+                          <a key={idx} href={f.url} target="_blank" rel="noopener noreferrer"
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-bg-hover border border-border text-xs text-gray-400 hover:text-white hover:border-gray-600 transition-colors">
+                            {f.type?.startsWith('image/') ? (
+                              <img src={f.url} alt={f.name} className="w-5 h-5 rounded object-cover" />
+                            ) : null}
+                            {f.name}
+                          </a>
+                        ))}
+                      </div>
                     </div>
                   )
                 } catch { return null }
@@ -781,7 +853,7 @@ export default function MeetingsPage() {
 
               {/* 音频 */}
               {modalMeeting.audio_url && (
-                <div className="mb-4 p-3 rounded-lg bg-bg-input border border-border">
+                <div className="p-3 rounded-xl bg-bg-input border border-border">
                   <p className="text-xs text-gray-500 mb-2 flex items-center gap-2"><Mic size={12} className="text-red-400" />录音回放</p>
                   <audio controls className="w-full h-9" src={modalMeeting.audio_url} preload="metadata" />
                 </div>
@@ -796,19 +868,20 @@ export default function MeetingsPage() {
                       {transcribingId === modalMeeting.id ? <Loader2 size={12} className="animate-spin" /> : <FileAudio size={12} />}语音转文字
                     </button>
                     <button onClick={() => handleTranscribeAndOrganize(modalMeeting.id)} disabled={organizingId === modalMeeting.id || transcribingId === modalMeeting.id}
-                      className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-bg-hover text-gray-300 hover:text-[#10B981] disabled:opacity-50 transition-colors border border-border">
+                      className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-[#10B981]/10 text-[#10B981] hover:bg-[#10B981]/20 disabled:opacity-50 transition-colors border border-[#10B981]/30">
                       {organizingId === modalMeeting.id ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}转文字+AI整理
                     </button>
                   </>
                 )}
                 <button onClick={() => handleAiExtract(modalMeeting.id)} disabled={aiLoading === modalMeeting.id}
-                  className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-bg-hover text-gray-300 hover:text-[#8B5CF6] disabled:opacity-50 transition-colors border border-border">
+                  className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-[#8B5CF6]/10 text-[#A78BFA] hover:bg-[#8B5CF6]/20 disabled:opacity-50 transition-colors border border-[#8B5CF6]/30">
                   {aiLoading === modalMeeting.id ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}AI 会议整理
                 </button>
+                <p className="text-[10px] text-gray-600 ml-auto">提示词可在【系统设置 → AI 提示词】中调整</p>
               </div>
 
               {/* 评论区 */}
-              <div className="mt-6 pt-4 border-t border-border">
+              <div className="mt-4 pt-4 border-t border-border">
                 <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-1.5">
                   <MessageSquare size={14} />评论{comments.length > 0 && <span className="text-xs text-gray-500 font-normal">({comments.length})</span>}
                 </h4>
@@ -838,7 +911,7 @@ export default function MeetingsPage() {
                     className="flex-1 px-3 py-2 rounded-lg bg-bg-input border border-border text-xs text-gray-300 outline-none focus:border-[#3B82F6] transition-colors placeholder-gray-600"
                   />
                   <button onClick={handleAddComment} disabled={commentLoading || !newComment.trim()}
-                    className="flex items-center gap-1 px-3 py-2 rounded-lg bg-[#3B82F6] text-white text-xs font-medium hover:bg-blue-600 disabled:opacity-50 transition-all">
+                    className="flex items-center gap-1 px-3 py-2 rounded-lg bg-[#3B82F6] text-[#fff] text-xs font-medium hover:bg-blue-600 disabled:opacity-50 transition-all">
                     {commentLoading ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
                   </button>
                 </div>
@@ -879,7 +952,7 @@ export default function MeetingsPage() {
                     <option value="editor">可编辑</option>
                   </select>
                   <button onClick={handleAddShare} disabled={shareLoading || !shareUserId}
-                    className="px-3 py-2 rounded-lg bg-[#3B82F6] text-white text-xs font-medium hover:bg-blue-600 disabled:opacity-50 transition-all">
+                    className="px-3 py-2 rounded-lg bg-[#3B82F6] text-[#fff] text-xs font-medium hover:bg-blue-600 disabled:opacity-50 transition-all">
                     {shareLoading ? <Loader2 size={12} className="animate-spin" /> : '添加'}
                   </button>
                 </div>
@@ -909,219 +982,200 @@ export default function MeetingsPage() {
         </div>
       )}
 
-      {/* 新建/编辑弹窗 */}
+      {/* 新建/编辑弹窗 - 统一布局: 标题 + 元信息 + 录音 + 编辑器 + 附件 */}
       {showForm && (
-        <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm ${isMaximized ? 'items-start pt-4 pb-4' : ''}`} onClick={() => { setShowForm(false); cancelRecording(); setEditingId(null); setIsMaximized(false) }}>
-          <div className={`mx-0 md:mx-4 p-4 md:p-6 rounded-none md:rounded-2xl bg-bg-card border border-border shadow-2xl flex flex-col ${
-            isMaximized 
-              ? 'w-full max-w-5xl h-[calc(100vh-2rem)] max-h-[900px]' 
-              : 'w-full max-w-lg max-h-[90vh]'
-          }`} onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-stretch md:items-center justify-center bg-black/60 backdrop-blur-sm md:p-4" onClick={safeClose}>
+          <div className="w-full max-w-4xl h-screen md:h-auto md:max-h-[88vh] md:rounded-2xl bg-bg-card border-0 md:border border-border shadow-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
             {/* 头部 */}
-            <div className="flex items-center justify-between mb-4 shrink-0">
-              <h3 className="text-lg font-bold text-white">{editingId ? '编辑会议纪要' : '新建会议纪要'}</h3>
-              <div className="flex items-center gap-1">
-                {!editingId && (
-                  <button onClick={() => setIsMaximized(!isMaximized)} className="p-1.5 rounded-lg hover:bg-bg-hover text-gray-500 hover:text-white transition-colors">
-                    {isMaximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-                  </button>
-                )}
-                <button onClick={() => { setShowForm(false); cancelRecording(); setEditingId(null); setIsMaximized(false) }} className="p-1.5 rounded-lg hover:bg-bg-hover text-gray-500 hover:text-white transition-colors"><X size={20} /></button>
+            <div className="flex items-center justify-between px-4 md:px-6 py-3.5 border-b border-border shrink-0">
+              <div>
+                <h3 className="text-base font-bold text-white">{editingId ? '编辑会议纪要' : '新建会议纪要'}</h3>
+                <p className="text-[11px] text-gray-500 mt-0.5">{editingId ? '修改会议内容' : '支持文本、录音、AI 整理'}</p>
               </div>
+              <button onClick={safeClose} className="p-1.5 rounded-lg hover:bg-bg-hover text-gray-500 hover:text-white transition-colors"><X size={18} /></button>
             </div>
 
             {/* 表单内容 - 可滚动 */}
-            <div className="flex-1 overflow-y-auto min-h-0 pr-1 -mr-1">
-              <div className="space-y-3">
+            <div className="flex-1 overflow-y-auto min-h-0">
+              <div className="p-4 md:p-6 space-y-4">
+                {/* 会议标题（大输入） */}
                 <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-xl bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6] transition-colors"
-                  placeholder="会议标题" autoFocus />
+                  className="w-full px-4 py-3 rounded-xl bg-bg-input border border-border text-base font-semibold text-white outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all placeholder-gray-600"
+                  placeholder="会议标题（如：XX 项目需求评审）" autoFocus />
 
-                {/* 日期选择 */}
-                <div>
-                  <label className="block text-[10px] text-gray-500 mb-1">会议日期</label>
-                  <input
-                    type="datetime-local"
-                    value={form.meeting_date}
-                    onChange={(e) => setForm({ ...form, meeting_date: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6] transition-colors"
-                  />
-                </div>
-
-                {/* 客户选择 */}
-                <div>
-                  <label className="block text-[10px] text-gray-500 mb-1">关联客户</label>
-                  <SearchableSelect
-                    options={customers.map(c => ({ id: c.id, label: c.name }))}
-                    value={form.customer_id}
-                    onChange={(val) => {
-                      const cid = val as number
-                      if (cid) {
-                        setForm({ ...form, customer_id: cid })
-                      } else {
-                        setForm({ ...form, customer_id: 0 })
-                      }
-                    }}
-                    placeholder="选择已有客户..."
-                    searchPlaceholder="搜索客户..."
-                    emptyText="无匹配客户"
-                  />
-                </div>
-
-                <div>
-                  <SearchableSelect
-                    options={projects.map(p => ({ id: p.id, label: p.name, sub: p.customer_name }))}
-                    value={form.project_id}
-                    onChange={(val) => {
-                      const pid = val as number
-                      const newForm = { ...form, project_id: pid }
-                      // 若所选项目已关联客户，自动填入客户
-                      if (pid && !form.customer_id) {
-                        const proj = projects.find(p => p.id === pid)
-                        if (proj?.customer_name) {
-                          const matched = customers.find(c => c.name === proj.customer_name)
-                          if (matched) {
-                            newForm.customer_id = matched.id
+                {/* 元信息行：日期 / 客户 / 项目 */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* 日期 */}
+                  <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-bg-input border border-border text-xs text-gray-300 hover:border-gray-600 transition-colors">
+                    <Calendar size={13} className="text-gray-500" />
+                    <input
+                      type="datetime-local"
+                      value={form.meeting_date}
+                      onChange={(e) => setForm({ ...form, meeting_date: e.target.value })}
+                      className="bg-transparent text-xs text-gray-300 outline-none cursor-pointer"
+                    />
+                  </div>
+                  {/* 客户 */}
+                  <div className="min-w-[140px] flex-1 max-w-[220px]">
+                    <SearchableSelect
+                      options={customers.map(c => ({ id: c.id, label: c.name }))}
+                      value={form.customer_id}
+                      onChange={(val) => setForm({ ...form, customer_id: (val as number) || 0 })}
+                      placeholder="关联客户..."
+                      searchPlaceholder="搜索客户..."
+                      emptyText="无匹配客户"
+                    />
+                  </div>
+                  {/* 项目 */}
+                  <div className="min-w-[160px] flex-1 max-w-[260px]">
+                    <SearchableSelect
+                      options={projects.map(p => ({ id: p.id, label: p.name, sub: p.customer_name }))}
+                      value={form.project_id}
+                      onChange={(val) => {
+                        const pid = val as number
+                        const newForm = { ...form, project_id: pid }
+                        if (pid && !form.customer_id) {
+                          const proj = projects.find(p => p.id === pid)
+                          if (proj?.customer_name) {
+                            const matched = customers.find(c => c.name === proj.customer_name)
+                            if (matched) newForm.customer_id = matched.id
                           }
                         }
-                      }
-                      setForm(newForm)
-                    }}
-                    placeholder="关联项目（可选）"
-                    searchPlaceholder="搜索项目..."
-                    emptyText="无匹配项目"
-                  />
+                        setForm(newForm)
+                      }}
+                      placeholder="关联项目..."
+                      searchPlaceholder="搜索项目..."
+                      emptyText="无匹配项目"
+                    />
+                  </div>
                 </div>
 
-                {editingId ? (
-                  <RichTextEditor
-                    value={form.content_md}
-                    onChange={(val) => setForm({ ...form, content_md: val })}
-                    placeholder="会议内容，支持富文本和 Markdown..."
-                    uploadFn={async (file: File) => {
-                      const formData = new FormData()
-                      formData.append('file', file)
-                      const res = await fetch('/api/v1/files/upload', {
-                        method: 'POST',
-                        body: formData,
-                      })
-                      if (!res.ok) throw new Error('Upload failed')
-                      const uploaded = await res.json() as { url: string }
-                      return uploaded.url
-                    }}
-                    className={isMaximized ? 'min-h-[400px]' : 'min-h-[200px]'}
-                  />
-                ) : inputMode === 'text' ? (
-                  <RichTextEditor
-                    value={form.content_md}
-                    onChange={(val) => setForm({ ...form, content_md: val })}
-                    placeholder="会议内容，支持富文本和 Markdown..."
-                    uploadFn={async (file: File) => {
-                      const formData = new FormData()
-                      formData.append('file', file)
-                      const res = await fetch('/api/v1/files/upload', {
-                        method: 'POST',
-                        body: formData,
-                      })
-                      if (!res.ok) throw new Error('Upload failed')
-                      const uploaded = await res.json() as { url: string }
-                      return uploaded.url
-                    }}
-                    className={isMaximized ? 'min-h-[400px]' : 'min-h-[160px]'}
-                  />
-                ) : (
-                  <div>
-                    {!recording && !recordedBlob && (
-                      <div className="flex flex-col items-center justify-center py-10 rounded-xl bg-bg-input border border-dashed border-border">
-                        {audioDevices.length > 1 && (
-                          <div className="mb-4 w-56">
-                            <label className="block text-xs text-gray-500 mb-1.5 text-center">选择麦克风</label>
-                            <select
-                              value={selectedDeviceId}
-                              onChange={(e) => updateDevicePreference(e.target.value)}
-                              className="w-full px-3 py-2 rounded-lg bg-bg-hover border border-border text-xs text-gray-300 outline-none focus:border-[#3B82F6] transition-colors"
-                            >
-                              {audioDevices.map((d) => (
-                                <option key={d.deviceId} value={d.deviceId}>
-                                  {d.label || `麦克风 ${d.deviceId.slice(0, 8)}`}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
-                        <button onClick={startRecording} className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center hover:bg-red-500/30 transition-all mb-3 ring-1 ring-red-500/30">
-                          <Mic size={28} className="text-red-400" />
-                        </button>
-                        <p className="text-sm text-gray-400">点击开始录音</p>
-                      </div>
-                    )}
-                    {recording && (
-                      <div className="flex flex-col items-center py-10 rounded-xl bg-red-500/5 border border-red-500/20">
-                        <div className="flex items-center gap-3 mb-3">
-                          <span className={`w-3 h-3 rounded-full ${isPaused ? 'bg-yellow-500' : 'bg-red-500 animate-pulse'}`} />
-                          <span className="text-2xl font-mono text-red-400">{formatTime(recordingTime)}</span>
-                        </div>
-                        <p className={`text-sm mb-4 ${isPaused ? 'text-yellow-400' : 'text-red-400'}`}>{isPaused ? '已暂停' : '正在录制...'}</p>
-                        <div className="flex items-center gap-3">
+                {/* 录音状态横幅（新建时显示，编辑时不显示） */}
+                {!editingId && (recording || recordedBlob) && (
+                  <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${
+                    recording
+                      ? isPaused
+                        ? 'bg-yellow-500/10 border-yellow-500/30'
+                        : 'bg-red-500/10 border-red-500/30'
+                      : 'bg-green-500/10 border-green-500/30'
+                  }`}>
+                    {recording ? (
+                      <>
+                        <span className={`w-2.5 h-2.5 rounded-full ${isPaused ? 'bg-yellow-500' : 'bg-red-500 animate-pulse'}`} />
+                        <Mic size={14} className={isPaused ? 'text-yellow-400' : 'text-red-400'} />
+                        <span className={`text-lg font-mono font-semibold ${isPaused ? 'text-yellow-300' : 'text-red-300'}`}>{formatTime(recordingTime)}</span>
+                        <span className={`text-xs ${isPaused ? 'text-yellow-400/80' : 'text-red-400/80'}`}>{isPaused ? '已暂停' : '正在录音...'}</span>
+                        <div className="ml-auto flex items-center gap-1.5">
                           {isPaused ? (
-                            <button onClick={resumeRecording} className="w-12 h-12 rounded-full bg-green-500 flex items-center justify-center hover:bg-green-600 transition-all shadow-lg shadow-green-500/30" title="继续录制">
-                              <Play size={20} className="text-white fill-white ml-0.5" />
+                            <button onClick={resumeRecording} className="p-2 rounded-full bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors" title="继续">
+                              <Play size={12} className="fill-green-400" />
                             </button>
                           ) : (
-                            <button onClick={pauseRecording} className="w-12 h-12 rounded-full bg-yellow-500 flex items-center justify-center hover:bg-yellow-600 transition-all shadow-lg shadow-yellow-500/30" title="暂停录制">
-                              <Pause size={20} className="text-white fill-white" />
+                            <button onClick={pauseRecording} className="p-2 rounded-full bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 transition-colors" title="暂停">
+                              <Pause size={12} className="fill-yellow-400" />
                             </button>
                           )}
-                          <button onClick={stopRecording} className="w-12 h-12 rounded-full bg-red-500 flex items-center justify-center hover:bg-red-600 transition-all shadow-lg shadow-red-500/30" title="停止录制">
-                            <Square size={20} className="text-white fill-white" />
+                          <button onClick={stopRecording} className="p-2 rounded-full bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors" title="停止">
+                            <Square size={12} className="fill-red-400" />
                           </button>
                         </div>
-                      </div>
-                    )}
-                    {!recording && recordedBlob && (
-                      <div className="rounded-xl bg-bg-input border border-border p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <span className="text-sm text-green-400 flex items-center gap-2"><Mic size={14} /> 录音完成 · {formatTime(recordingTime)}</span>
-                          <span className="text-xs text-gray-500">{(recordedBlob.size / 1024).toFixed(0)} KB</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button onClick={togglePlay} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-bg-hover text-sm text-gray-300 hover:text-white border border-border transition-colors">
-                            {playing ? <Pause size={14} /> : <Play size={14} />}{playing ? '暂停' : '试听'}
+                      </>
+                    ) : (
+                      <>
+                        <Mic size={14} className="text-green-400" />
+                        <span className="text-sm text-green-300 font-medium">录音完成 · {formatTime(recordingTime)}</span>
+                        <span className="text-[11px] text-gray-500">{(recordedBlob?.size || 0) / 1024 < 1024 ? `${((recordedBlob?.size || 0) / 1024).toFixed(0)} KB` : `${((recordedBlob?.size || 0) / 1024 / 1024).toFixed(1)} MB`}</span>
+                        <div className="ml-auto flex items-center gap-1.5">
+                          <button onClick={togglePlay} className="p-1.5 rounded-md bg-bg-hover text-gray-300 hover:text-white transition-colors" title={playing ? '暂停' : '试听'}>
+                            {playing ? <Pause size={12} /> : <Play size={12} />}
                           </button>
-                          <button onClick={cancelRecording} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-bg-hover text-sm text-gray-400 hover:text-red-400 border border-border transition-colors">重新录制</button>
+                          <button onClick={cancelRecording} className="text-xs text-gray-500 hover:text-red-400 px-2 py-1 rounded-md hover:bg-red-500/10 transition-colors">重新录制</button>
                         </div>
-                      </div>
+                      </>
                     )}
                   </div>
                 )}
-                <FileUpload filesJson={form.files_json} onChange={(v) => setForm({ ...form, files_json: v })} />
+
+                {/* 会议内容编辑区 */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-400 font-semibold">会议内容</span>
+                      <span className="text-[10px] text-gray-600">{form.content_md ? `${form.content_md.replace(/<[^>]*>/g, '').length} 字` : '0 字'}</span>
+                    </div>
+                    {!editingId && !recording && !recordedBlob && (
+                      <div className="flex items-center gap-1.5">
+                        {audioDevices.length > 1 && (
+                          <select
+                            value={selectedDeviceId}
+                            onChange={(e) => updateDevicePreference(e.target.value)}
+                            className="text-[11px] px-2 py-1 rounded-md bg-bg-input border border-border text-gray-400 outline-none"
+                            title="选择麦克风"
+                          >
+                            {audioDevices.map((d) => (
+                              <option key={d.deviceId} value={d.deviceId}>
+                                {d.label || `麦克风 ${d.deviceId.slice(0, 6)}`}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        <button onClick={startRecording} className="flex items-center gap-1.5 text-xs text-red-400 hover:text-white px-2.5 py-1.5 rounded-lg hover:bg-red-500 transition-all border border-red-500/30 hover:border-red-500">
+                          <Mic size={12} />开始录音
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <RichTextEditor
+                    value={form.content_md}
+                    onChange={(val) => setForm({ ...form, content_md: val })}
+                    placeholder="记录会议要点...支持 Markdown 语法（#标题、-列表、**加粗** 等），可直接 Ctrl+V 粘贴图片"
+                    uploadFn={async (file: File) => {
+                      const formData = new FormData()
+                      formData.append('file', file)
+                      const res = await fetch('/api/v1/files/upload', {
+                        method: 'POST',
+                        body: formData,
+                      })
+                      if (!res.ok) throw new Error('Upload failed')
+                      const uploaded = await res.json() as { url: string }
+                      return uploaded.url
+                    }}
+                    className="min-h-[280px]"
+                  />
+                </div>
+
+                {/* 附件区 */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-gray-400 font-semibold">附件（图片、文档等）</span>
+                    <span className="text-[10px] text-gray-600">支持拖拽、点击或粘贴上传</span>
+                  </div>
+                  <FileUpload filesJson={form.files_json} onChange={(v) => setForm({ ...form, files_json: v })} />
+                </div>
               </div>
             </div>
 
             {/* 底部操作栏 */}
-            <div className="flex items-center justify-between mt-4 pt-3 border-t border-border shrink-0">
-              {editingId ? (
-                <span className="text-xs text-gray-600">支持 Markdown 语法</span>
-              ) : (
-                <div className="flex rounded-lg bg-bg-hover border border-border">
-                  <button onClick={() => { setInputMode('text'); cancelRecording() }}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-l-lg text-xs transition-colors ${inputMode === 'text' ? 'bg-border text-white' : 'text-gray-500 hover:text-gray-300'}`}>
-                    <FileText size={12} /> 文本
-                  </button>
-                  <button onClick={() => setInputMode('voice')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-r-lg text-xs transition-colors ${inputMode === 'voice' ? 'bg-border text-white' : 'text-gray-500 hover:text-gray-300'}`}>
-                    <Mic size={12} /> 录音
-                  </button>
-                </div>
-              )}
-              <button onClick={handleSave} disabled={saving || !form.title.trim()}
-                className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#3B82F6] text-white text-sm font-medium hover:bg-blue-600 disabled:opacity-50 transition-all">
-                {saving && <Loader2 size={15} className="animate-spin" />}{saving ? '保存中...' : editingId ? '更新会议' : '保存'}
-              </button>
+            <div className="flex items-center justify-between px-4 md:px-6 py-3 border-t border-border shrink-0 bg-bg-card/50">
+              <div className="text-[11px] text-gray-500 flex items-center gap-2">
+                {recordedBlob && <span className="flex items-center gap-1 text-red-400"><Mic size={11} />含录音</span>}
+                {form.files_json && <span className="flex items-center gap-1 text-blue-400"><Paperclip size={11} />{(JSON.parse(form.files_json || '[]') || []).length} 个附件</span>}
+                {!recordedBlob && !form.files_json && form.content_md && <span>已填写 {form.content_md.replace(/<[^>]*>/g, '').length} 字</span>}
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={safeClose} className="px-4 py-2 rounded-xl text-sm text-gray-400 hover:text-white hover:bg-bg-hover transition-colors">取消</button>
+                <button onClick={handleSave} disabled={saving || !form.title.trim()}
+                  className="flex items-center gap-2 px-5 py-2 rounded-xl bg-[#3B82F6] text-[#fff] text-sm font-medium hover:bg-blue-600 disabled:opacity-50 transition-all shadow-lg shadow-blue-500/20">
+                  {saving && <Loader2 size={14} className="animate-spin" />}{saving ? '保存中...' : editingId ? '更新会议' : '保存'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* 未保存修改确认弹窗 */}
+      {UnsavedDialog}
     </div>
   )
 }

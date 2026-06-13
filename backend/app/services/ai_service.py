@@ -13,6 +13,7 @@ from app.models.model_provider import ModelProvider, TaskModelConfig, ProviderMo
 from app.models.ai_prompt import AIPrompt
 from app.models.user import User
 from app.services.web_search import search_and_summarize, _get_tavily_api_key
+from app.services.param_resolver import resolve_chat_params, get_model_capabilities
 from app.exceptions import AIServiceError, AITimeoutError, AIRateLimitError
 from app.utils.time import utc_now
 
@@ -24,6 +25,16 @@ logger = logging.getLogger("worktrack")
 def _is_vertex_ai(provider: ModelProvider) -> bool:
     """判断是否为 Vertex AI 供应商（通过 project_id 字段识别）"""
     return bool(provider.project_id and provider.project_id.strip())
+
+
+def _is_gemini(provider: ModelProvider) -> bool:
+    """判断是否为 Gemini 供应商（Google AI Studio原生SDK）"""
+    return provider and "generativelanguage.googleapis.com" in (provider.base_url or "")
+
+
+def _is_anthropic(provider: ModelProvider) -> bool:
+    """判断是否为 Anthropic（Claude）供应商"""
+    return provider and "api.anthropic.com" in (provider.base_url or "")
 
 
 def _get_vertex_credentials(provider: ModelProvider):
@@ -307,6 +318,133 @@ class _VertexStreamResponse:
                 yield _FakeStreamChunk(content=chunk.text)
 
 
+# ---- Anthropic SDK 包装器 ----
+class _AnthropicClient:
+    """Anthropic SDK 包装，提供与 OpenAI 兼容的接口"""
+    def __init__(self, provider: ModelProvider):
+        self._api_key = provider.api_key
+        try:
+            import anthropic
+            self._client = anthropic.Anthropic(api_key=self._api_key)
+        except ImportError:
+            raise AIServiceError("请先安装 anthropic SDK: pip install anthropic")
+        # 兼容的 chat completions 接口
+        self.chat = type('', (), {})()
+        self.chat.completions = type('', (), {})()
+        self.chat.completions.create = self.create
+
+    def create(self, **kwargs):
+        model = kwargs.get("model", "claude-3-5-sonnet-20241022")
+        messages = kwargs.get("messages", [])
+        max_tokens = kwargs.get("max_tokens", 8192)
+        temperature = kwargs.get("temperature", 0.7)
+        stream = kwargs.get("stream", False)
+
+        # 转换系统提示
+        system_prompt = ""
+        new_messages = []
+        for msg in messages:
+            if msg.get("role") == "system":
+                system_prompt = msg.get("content", "")
+            else:
+                new_messages.append(msg)
+        messages = new_messages
+
+        if stream:
+            return self._stream_wrapper(model, messages, system_prompt, max_tokens, temperature)
+
+        response = self._client.messages.create(
+            model=model,
+            messages=messages,
+            system=system_prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+        text = "".join([block.text for block in response.content if block.type == "text"])
+        return _FakeResponse(choices=[_FakeChoice(message=_FakeMessage(content=text))])
+
+    def _stream_wrapper(self, model, messages, system_prompt, max_tokens, temperature):
+        from anthropic.types import MessageStreamEvent
+        with self._client.messages.stream(
+            model=model,
+            messages=messages,
+            system=system_prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        ) as stream:
+            for text in stream.text_stream:
+                yield _FakeStreamChunk(content=text)
+
+
+# ---- Gemini SDK 包装器 ----
+class _GeminiClient:
+    """Gemini SDK 包装，提供与 OpenAI 兼容的接口"""
+    def __init__(self, provider: ModelProvider):
+        self._api_key = provider.api_key
+        try:
+            from google import genai
+            self._client = genai.Client(api_key=self._api_key)
+        except ImportError:
+            raise AIServiceError("请先安装 google-genai SDK: pip install google-genai")
+        except Exception as e:
+            raise AIServiceError(f"Gemini SDK 初始化失败: {e}")
+        self.chat = type('', (), {})()
+        self.chat.completions = type('', (), {})()
+        self.chat.completions.create = self.create
+
+    def _convert_messages(self, messages: list) -> tuple:
+        """将 OpenAI 格式消息转换为 Gemini 格式"""
+        contents = []
+        system_instruction = None
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role == "system":
+                system_instruction = content
+            elif role == "user":
+                contents.append({"role": "user", "parts": [{"text": content}]})
+            elif role == "assistant":
+                contents.append({"role": "model", "parts": [{"text": content}]})
+        return contents, system_instruction
+
+    def create(self, **kwargs):
+        model = kwargs.get("model", "gemini-2.5-flash")
+        messages = kwargs.get("messages", [])
+        temperature = kwargs.get("temperature", 0.7)
+        max_tokens = kwargs.get("max_tokens", 8192)
+        stream = kwargs.get("stream", False)
+
+        contents, system_instruction = self._convert_messages(messages)
+
+        config = {
+            "temperature": temperature,
+            "max_output_tokens": max_tokens,
+        }
+        if system_instruction:
+            config["system_instruction"] = {"parts": [{"text": system_instruction}]}
+
+        if stream:
+            return self._stream_wrapper(model, contents, config)
+
+        response = self._client.models.generate_content(
+            model=model,
+            contents=contents,
+            config=config,
+        )
+        text = response.text or ""
+        return _FakeResponse(choices=[_FakeChoice(message=_FakeMessage(content=text))])
+
+    def _stream_wrapper(self, model, contents, config):
+        stream_response = self._client.models.generate_content_stream(
+            model=model,
+            contents=contents,
+            config=config,
+        )
+        for chunk in stream_response:
+            if chunk.text:
+                yield _FakeStreamChunk(content=chunk.text)
+
+
 class _FakeToolCall:
     def __init__(self, id, type, function):
         self.id = id
@@ -448,15 +586,84 @@ def _get_active_provider(db: Session, task_type: str = "chat", user_id: int = 0)
     raise AIServiceError("未配置模型供应商，请先在设置中配置")
 
 
+def _get_active_provider_full(db: Session, task_type: str = "chat", user_id: int = 0) -> tuple:
+    """
+    P0 扩展版：返回完整配置 6 元组
+    (base_url, api_key, model_name, provider, task_cfg, provider_model)
+    让业务函数能直接调用 resolve_chat_params
+    """
+    use_shared = True
+    user = None
+    if user_id:
+        user = db.get(User, user_id)
+        use_shared = bool(user and (user.is_admin or user.use_shared_models))
+
+    def _resolve(provider: ModelProvider, model_name: str):
+        if _is_vertex_ai(provider):
+            if model_name.startswith("google/"):
+                model_name = model_name[len("google/"):]
+            return None, None, model_name
+        else:
+            return provider.base_url, provider.api_key, model_name
+
+    # 1. 用户自己的
+    if user:
+        task_cfg = db.exec(
+            select(TaskModelConfig).where(
+                TaskModelConfig.task_type == task_type,
+                TaskModelConfig.user_id == user_id,
+            )
+        ).first()
+        if task_cfg and task_cfg.provider_id and task_cfg.model_name:
+            provider = db.get(ModelProvider, task_cfg.provider_id)
+            if provider and provider.is_active and provider.api_key:
+                pm = db.exec(
+                    select(ProviderModel).where(
+                        ProviderModel.provider_id == task_cfg.provider_id,
+                        ProviderModel.model_name == task_cfg.model_name,
+                    )
+                ).first()
+                base_url, api_key, model_name = _resolve(provider, task_cfg.model_name)
+                return base_url, api_key, model_name, provider, task_cfg, pm
+
+    # 2. 共享
+    if use_shared:
+        task_cfg = db.exec(
+            select(TaskModelConfig).where(
+                TaskModelConfig.task_type == task_type,
+                TaskModelConfig.user_id == None,
+            )
+        ).first()
+        if task_cfg and task_cfg.provider_id and task_cfg.model_name:
+            provider = db.get(ModelProvider, task_cfg.provider_id)
+            if provider and provider.is_active and provider.api_key:
+                pm = db.exec(
+                    select(ProviderModel).where(
+                        ProviderModel.provider_id == task_cfg.provider_id,
+                        ProviderModel.model_name == task_cfg.model_name,
+                    )
+                ).first()
+                base_url, api_key, model_name = _resolve(provider, task_cfg.model_name)
+                return base_url, api_key, model_name, provider, task_cfg, pm
+
+    raise AIServiceError("未配置模型供应商，请先在设置中配置")
+
+
 def _get_client(base_url: str, api_key: str, provider: ModelProvider = None):
     """
     获取 LLM 客户端：
     - Vertex AI 供应商：返回 _VertexGenAIClient（genai SDK 原生调用）
+    - Gemini 供应商：返回 _GeminiClient（google-genai SDK 原生调用）
+    - Anthropic 供应商：返回 _AnthropicClient（Anthropic SDK 原生调用）
     - 其他供应商：返回 OpenAI 客户端
     """
     if provider and _is_vertex_ai(provider):
         return _VertexGenAIClient(provider)
-    return OpenAI(base_url=base_url, api_key=api_key, timeout=90 if _is_vertex_ai(provider) else 30)
+    if provider and _is_gemini(provider):
+        return _GeminiClient(provider)
+    if provider and _is_anthropic(provider):
+        return _AnthropicClient(provider)
+    return OpenAI(base_url=base_url, api_key=api_key, timeout=30)
 
 
 def _extract_message_text(message) -> str:
@@ -474,17 +681,21 @@ def _extract_message_text(message) -> str:
 
 def summarize_daily_report(content: str, db: Session, user_id: int = 0) -> str:
     """AI 总结日报内容"""
-    base_url, api_key, model, provider = _get_active_provider(db, "chat", user_id)
+    base_url, api_key, model, provider, task_cfg, pm = _get_active_provider_full(db, "chat", user_id)
     client = _get_client(base_url, api_key, provider)
     system_prompt, template = _get_prompt("daily_summary", db, user_id)
     user_prompt = _fill_template(template, content=content)
+    params = resolve_chat_params(
+        db, model=pm, task_cfg=task_cfg,
+        func_defaults={"temperature": 0.3},  # 业务软默认：日报要求稳定结果
+    )
     response = client.chat.completions.create(
         model=model,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        temperature=0.3,
+        **params,
     )
     return _extract_message_text(response.choices[0].message)
 
@@ -495,7 +706,7 @@ def _strip_html(text: str) -> str:
 
 def extract_meeting_minutes(content: str, db: Session, user_id: int = 0) -> dict:
     """AI 从会议纪要中提取结构化信息"""
-    base_url, api_key, model, provider = _get_active_provider(db, "chat", user_id)
+    base_url, api_key, model, provider, task_cfg, pm = _get_active_provider_full(db, "chat", user_id)
     client = _get_client(base_url, api_key, provider)
     system_prompt, template = _get_prompt("meeting_extract", db, user_id)
     # 去除 HTML 标签，发送纯文本给 AI
@@ -504,14 +715,18 @@ def extract_meeting_minutes(content: str, db: Session, user_id: int = 0) -> dict
     # 确保 prompt 包含 "json" 关键字（部分模型要求）
     if "json" not in user_prompt.lower() and "json" not in system_prompt.lower():
         system_prompt += "\n\n请以 json 格式返回结果。"
+    params = resolve_chat_params(
+        db, model=pm, task_cfg=task_cfg,
+        func_defaults={"temperature": 0.3},  # 业务软默认：抽取要稳定
+        func_overrides={"response_format": "json_object"},  # 业务硬约束：必须 JSON
+    )
     response = client.chat.completions.create(
         model=model,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        temperature=0.3,
-        response_format={"type": "json_object"},
+        **params,
     )
     raw_text = _extract_message_text(response.choices[0].message) or "{}"
     try:
@@ -618,161 +833,440 @@ def organize_transcript(raw_text: str, db: Session, user_id: int = 0) -> str:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        temperature=0.3,
+        **resolve_chat_params(
+            db, model=pm, task_cfg=task_cfg,
+            func_defaults={"temperature": 0.3},  # 业务软默认：会议整理要稳定
+        ),
     )
     return _extract_message_text(response.choices[0].message)
 
 
 def search_company_names(keyword: str, db: Session, user_id: int = 0) -> list[dict]:
-    """使用 Tavily 联网搜索 + LLM 根据关键词搜索匹配的公司全称"""
-    base_url, api_key, model, provider = _get_active_provider(db, "chat", user_id)
-    client = _get_client(base_url, api_key, provider)
+    """根据关键词返回匹配的公司全称候选列表（用于"安踏 → 安踏体育..."联想）
 
-    # 先尝试用 Tavily 搜索
-    search_context = ""
+    加速策略：
+    1. 进程内 TTL 缓存 10 分钟（同一关键词不重复打 LLM/Tavily）
+    2. LLM 优先（直接基于内置知识答，1-3s，绝大多数公司 LLM 都认识）
+    3. Tavily 仅在 LLM 返回 < 2 条时启用作为兜底（搜网页找小众/新公司）
+    """
+    from app.services.cache import cached_call
+
+    if not keyword or not keyword.strip():
+        return []
+    kw = keyword.strip()
+    cache_key = f"search_company:u{user_id}:{kw.lower()}"
+
+    def _compute() -> list[dict]:
+        return _search_company_names_impl(kw, db, user_id)
+
+    results, _hit = cached_call(cache_key, ttl=600, factory=_compute)
+    return results
+
+
+def _search_company_names_impl(keyword: str, db: Session, user_id: int) -> list[dict]:
+    """search_company_names 的实际实现（无缓存）
+
+    多 provider fallback：默认走 task_cfg 配置的 provider；调用失败时
+    自动切到下一个 is_active 的 chat provider（避免 Vertex AI 不可达时卡死）
+    """
+    from sqlmodel import select
+    from app.models.model_provider import ModelProvider, TaskModelConfig
+
+    providers_to_try: list[tuple] = []
+    primary = _get_active_provider_full(db, "chat", user_id)
+    if primary and primary[3]:  # (base_url, api_key, model, provider, task_cfg, pm)
+        providers_to_try.append(primary)
+
+    # 找所有 is_active 的 chat provider 作为 fallback
+    active_providers = db.exec(
+        select(ModelProvider).where(
+            ModelProvider.is_active == True,
+            ModelProvider.provider_type == "chat",
+        )
+    ).all()
+    used_pids = {p[3].id for p in providers_to_try if p[3]}
+    for prov in active_providers:
+        if prov.id in used_pids:
+            continue
+        # 找一个该 provider 下的 chat 模型
+        chat_model = next((m for m in prov.models_rel if "chat" in (m.supported_task_types or ["chat"])), None)
+        if not chat_model:
+            continue
+        # 构造一个兼容 (base_url, api_key, model, provider, task_cfg, pm) 的 6 元组
+        if _is_vertex_ai(prov):
+            # Vertex AI 跳过（国内不可达），只占位以便日志展示
+            fake_pm = type("FakePM", (), {"model_name": chat_model.model_name})()
+            providers_to_try.append((None, None, chat_model.model_name, prov, None, fake_pm))
+        else:
+            # 用真实的 chat_model 对象（带 default_temperature 等所有属性）
+            providers_to_try.append((prov.base_url, prov.api_key, chat_model.model_name, prov, None, chat_model))
+
+    last_error = None
+    for base_url, api_key, model, provider, task_cfg, pm in providers_to_try:
+        # Vertex AI 在国内常不可达（oauth2.googleapis.com 被墙），
+        # 不尝试它，直接跳过避免 120s 死等
+        if _is_vertex_ai(provider):
+            logger.info("search_company: 跳过 Vertex AI provider=%s", provider.name)
+            continue
+        try:
+            client = _get_client(base_url, api_key, provider)
+            results = _llm_company_names(client, model, task_cfg, pm, db, keyword, with_search_hint=False)
+            if len(results) >= 2:
+                return results
+            last_error = None
+        except Exception as e:
+            logger.warning("provider=%s LLM 失败: %s", getattr(provider, "name", "?"), e)
+            last_error = e
+            continue
+    results = []
+
+    # 阶段2：LLM 回答不充分 → Tavily 兜底（搜网页找小众/新公司）
     try:
         has_tavily = bool(_get_tavily_api_key(db, user_id))
-        if has_tavily:
-            search_context = search_and_summarize(f"{keyword} 公司 企业信息 官网", db, search_depth="basic", user_id=user_id)
-    except Exception as e:
-        logger.error("搜索公司名称时 Tavily 搜索失败: %s", e)
+    except Exception:
+        has_tavily = False
+    if has_tavily:
+        try:
+            search_context = search_and_summarize(
+                f"{keyword} 公司 全称 注册名 官网",
+                db, search_depth="basic", user_id=user_id,
+            )
+            if search_context:
+                # 重新选一个可用的 chat provider（避免主循环残留 FakePM）
+                fallback_client, fallback_model, fallback_pm = _pick_chat_provider(
+                    db, user_id, exclude_vertex=True,
+                )
+                if fallback_client is not None:
+                    results2 = _llm_company_names(
+                        fallback_client, fallback_model, None, fallback_pm, db, keyword,
+                        with_search_hint=search_context[:3000],
+                    )
+                    if len(results2) > len(results):
+                        results = results2
+        except Exception as e:
+            logger.error("Tavily 兜底搜索失败: %s", e)
+    return results
 
-    # 构建提示词
+
+def _pick_chat_provider(db: Session, user_id: int, exclude_vertex: bool = True):
+    """从 task_cfg + is_active providers 里挑一个能用的 chat provider
+
+    返回 (client, model, pm) 三元组；挑不到时返回 (None, None, None)
+    """
+    tried: set[int] = set()
+    # 1) task_cfg 配的
+    try:
+        b, k, m, prov, tc, pm = _get_active_provider_full(db, "chat", user_id)
+        if prov and (not exclude_vertex or not _is_vertex_ai(prov)):
+            return _get_client(b, k, prov), m, pm
+        if prov:
+            tried.add(prov.id)
+    except Exception:
+        pass
+    # 2) 其他 is_active 的 chat provider
+    from sqlmodel import select
+    from app.models.model_provider import ModelProvider
+    rows = db.exec(
+        select(ModelProvider).where(
+            ModelProvider.is_active == True,
+            ModelProvider.provider_type == "chat",
+        )
+    ).all()
+    for prov in rows:
+        if prov.id in tried:
+            continue
+        if exclude_vertex and _is_vertex_ai(prov):
+            continue
+        chat_model = next(
+            (mm for mm in prov.models_rel if "chat" in (mm.supported_task_types or ["chat"])),
+            None,
+        )
+        if not chat_model:
+            continue
+        return _get_client(prov.base_url, prov.api_key, prov), chat_model.model_name, chat_model
+    return None, None, None
+
+
+def _llm_company_names(client, model, task_cfg, pm, db, keyword: str, with_search_hint: str = "") -> list[dict]:
+    """单次 LLM 调用：根据关键词给 5-8 个公司全称候选"""
     search_hint = (
-        f"\n\n以下是从搜索引擎获取的相关信息，请参考：\n{search_context[:3000]}"
-        if search_context else ""
+        f"\n\n以下是从联网搜索获取的信息，请参考：\n{with_search_hint}"
+        if with_search_hint else ""
     )
-
-    extra = {}
-    if not search_context:
-        # 没有 Tavily 时尝试使用模型自带的联网搜索
-        extra = {"extra_body": {"enable_search": True}}
-
+    params = resolve_chat_params(
+        db, model=pm, task_cfg=task_cfg,
+        func_defaults={"temperature": 0.2},  # 业务软默认：稳定简洁
+    )
     response = client.chat.completions.create(
         model=model,
         messages=[
             {
                 "role": "system",
                 "content": (
-                    "你是一个企业信息查询助手。用户输入公司名称关键词，你返回最匹配的完整公司全称。\n"
-                    "请严格以 JSON 数组格式返回，每个元素包含:\n"
-                    '  - "name": 公司简称或通用名称\n'
-                    '  - "full_name": 公司完整注册名称\n'
-                    "只返回最可能的 5-8 个结果。只返回 JSON 数组，不要有其他内容。\n"
+                    "你是企业信息查询助手。用户输入公司名称关键词（可能是简称、拼音、错别字或部分名称），"
+                    "你返回最可能匹配的真实公司全称列表。\n"
+                    "严格要求：\n"
+                    "1. 优先基于你的内置知识直接回答（绝大多数公司你都认识）\n"
+                    "2. 只返回真实存在的公司，不要编造\n"
+                    "3. 名称要完整、官方注册全称优先\n"
+                    "4. 返回 3-8 个最相关的结果，按可能性从高到低排序\n"
+                    "5. 严格以 JSON 数组格式返回，每个元素包含:\n"
+                    '     - "name": 简称或通用名称\n'
+                    '     - "full_name": 公司完整注册名称\n'
+                    "6. 只返回 JSON 数组，不要有其他内容、解释或 markdown 代码块。\n"
                     '格式示例: [{"name":"腾讯","full_name":"深圳市腾讯计算机系统有限公司"}]'
                 ),
             },
             {"role": "user", "content": f"关键词：{keyword}{search_hint}"},
         ],
-        temperature=0.3,
-        **extra,
+        **params,
     )
     text = _extract_message_text(response.choices[0].message)
+    return _parse_company_names_json(text)
+
+
+def _parse_company_names_json(text: str) -> list[dict]:
+    """从 LLM 文本里抽 JSON 数组（兼容多种包装）"""
+    if not text:
+        return []
+    # 1) 剥 markdown 代码块 ```json ... ``` 或 ``` ... ```
+    cleaned = text.strip()
+    m = _re_module.search(r"```(?:json)?\s*([\s\S]*?)```", cleaned, _re_module.IGNORECASE)
+    if m:
+        cleaned = m.group(1).strip()
+    # 2) 直接 JSON
     try:
-        results = json.loads(text)
-        if isinstance(results, list):
-            return results[:8]
+        arr = json.loads(cleaned)
+        if isinstance(arr, list):
+            return [x for x in arr if isinstance(x, dict) and (x.get("name") or x.get("full_name"))][:8]
     except json.JSONDecodeError:
         pass
-    # 尝试从文本中提取 JSON 数组
-    import re as _re_search
-    match = _re_search.search(r'\[[\s\S]*\]', text)
-    if match:
+    # 3) 从文本里抽第一个 [ ... ] 数组
+    m = _re_module.search(r"\[[\s\S]*?\]", cleaned)
+    if m:
         try:
-            return json.loads(match.group())[:8]
+            arr = json.loads(m.group())
+            if isinstance(arr, list):
+                return [x for x in arr if isinstance(x, dict) and (x.get("name") or x.get("full_name"))][:8]
+        except json.JSONDecodeError:
+            pass
+    # 4) 从文本里抽第一个 { ... }（单条），包成数组
+    m = _re_module.search(r"\{[\s\S]*?\}", cleaned)
+    if m:
+        try:
+            obj = json.loads(m.group())
+            if isinstance(obj, dict) and (obj.get("name") or obj.get("full_name")):
+                return [obj]
         except json.JSONDecodeError:
             pass
     return []
 
 
-def fetch_company_info(company_name: str, db: Session, user_id: int = 0) -> dict:
-    """使用 Tavily 联网搜索 + LLM 获取公司详细信息，动态新闻单独搜索确保时效性"""
+def fetch_company_info(company_name: str, db: Session, user_id: int = 0, progress: list | None = None) -> dict:
+    """多源公司信息采集：Tavily(3 角度) + 官网深度 + 维基/百度 + DuckDuckGo 兜底
+
+    progress: 可选，进度回调列表（append dict 如 {"stage":"tavily","msg":"..."}），
+              用来支持 SSE 流式进度推送
+    """
     from datetime import datetime
-    base_url, api_key, model, provider = _get_active_provider(db, "chat", user_id)
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from app.services.company_aggregator import (
+        aggregate_company_sources, duckduckgo_search,
+    )
+    base_url, api_key, model, provider, task_cfg, pm = _get_active_provider_full(db, "chat", user_id)
     client = _get_client(base_url, api_key, provider)
 
-    # 搜索1：公司基本信息 + 官网（合并为一次搜索，减少Tavily调用）
+    def _emit(stage: str, msg: str = ""):
+        if progress is not None:
+            progress.append({"stage": stage, "msg": msg})
+
+    # 阶段1：Tavily 3 角度搜索
+    _emit("tavily", f"开始联网搜索 {company_name}")
     search_context = ""
-    search_sources = []
-    website_sources = []
+    search_sources: list[dict] = []
+    website_sources: list[dict] = []
     news_context = ""
+    ai_context = ""
+    ai_sources: list[dict] = []
+    has_tavily = False
     try:
         has_tavily = bool(_get_tavily_api_key(db, user_id))
-        if has_tavily:
-            from app.services.web_search import search_web
-            # 合并公司信息 + 官网搜索为一次调用
-            raw = search_web(f"{company_name} 公司简介 主营业务 行业 规模 官网", db, search_depth="advanced", max_results=5, user_id=user_id)
-            for r in raw:
-                if r["type"] == "result" and r.get("url"):
-                    url = r.get("url", "")
-                    # 判断是否是官网类型的链接
-                    title = r.get("title", "").lower()
-                    if any(kw in title for kw in ["官网", "官方网站", "首页", "home", "official"]):
-                        website_sources.append({"title": r.get("title", ""), "url": url})
-                    else:
-                        search_sources.append({"title": r.get("title", ""), "url": url})
-            search_context = search_and_summarize(f"{company_name} 公司简介 主营业务 行业 规模 官网", db, search_depth="advanced", user_id=user_id)
-
-            # 搜索2：最新动态（半年内），使用当前年份关键词
+    except Exception:
+        pass
+    if has_tavily:
+        from app.services.web_search import search_web
+        # 并发跑 3 角度
+        def _tavily_basic():
+            return search_web(
+                f"{company_name} 公司简介 主营业务 行业 规模 官网",
+                db, search_depth="advanced", max_results=5, user_id=user_id,
+            )
+        def _tavily_news():
             current_year = utc_now().year
             last_year = current_year - 1
-            news_query = f"{company_name} {current_year} {last_year} 最新新闻 动态 融资 合作 产品发布 财报"
-            news_context = search_and_summarize(news_query, db, search_depth="advanced", user_id=user_id)
-    except Exception as e:
-        logger.error("获取公司信息时搜索失败: %s", e)
+            return search_web(
+                f"{company_name} {current_year} {last_year} 最新新闻 动态 融资 合作 产品发布 财报",
+                db, search_depth="advanced", max_results=5, user_id=user_id,
+            )
+        def _tavily_ai():
+            return search_web(
+                f"{company_name} AI 人工智能 大模型 生成式AI LLM 机器学习 智能化转型 创新 应用 落地",
+                db, search_depth="advanced", max_results=5, user_id=user_id,
+            )
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            f_basic = ex.submit(_tavily_basic)
+            f_news = ex.submit(_tavily_news)
+            f_ai = ex.submit(_tavily_ai)
+            try:
+                raw_basic = f_basic.result(timeout=25)
+            except Exception as e:
+                logger.error("tavily basic fail: %s", e); raw_basic = []
+            try:
+                raw_news = f_news.result(timeout=25)
+            except Exception as e:
+                logger.error("tavily news fail: %s", e); raw_news = []
+            try:
+                raw_ai = f_ai.result(timeout=25)
+            except Exception as e:
+                logger.error("tavily ai fail: %s", e); raw_ai = []
+        # 处理 basic 结果
+        for r in raw_basic:
+            if r.get("type") == "result" and r.get("url"):
+                url = r.get("url", "")
+                title = r.get("title", "").lower()
+                if any(kw in title for kw in ["官网", "官方网站", "首页", "home", "official"]):
+                    website_sources.append({"title": r.get("title", ""), "url": url})
+                else:
+                    search_sources.append({"title": r.get("title", ""), "url": url})
+        # 处理 news 结果
+        for r in raw_news:
+            if r.get("type") == "result" and r.get("url"):
+                search_sources.append({"title": r.get("title", ""), "url": r.get("url", "")})
+        # 处理 ai 结果
+        for r in raw_ai:
+            if r.get("type") == "result" and r.get("url"):
+                ai_sources.append({"title": r.get("title", ""), "url": r.get("url", "")})
+        # 摘要
+        try:
+            search_context = search_and_summarize(
+                f"{company_name} 公司简介 主营业务 行业 规模 官网",
+                db, search_depth="advanced", user_id=user_id,
+            )
+        except Exception as e:
+            logger.error("summarize basic fail: %s", e)
+        try:
+            current_year = utc_now().year
+            last_year = current_year - 1
+            news_context = search_and_summarize(
+                f"{company_name} {current_year} {last_year} 最新新闻 动态 融资 合作 产品发布 财报",
+                db, search_depth="advanced", user_id=user_id,
+            )
+        except Exception as e:
+            logger.error("summarize news fail: %s", e)
+        try:
+            ai_context = search_and_summarize(
+                f"{company_name} AI 人工智能 大模型 生成式AI LLM 机器学习 智能化转型 创新 应用 落地",
+                db, search_depth="advanced", user_id=user_id,
+            )
+        except Exception as e:
+            logger.error("summarize ai fail: %s", e)
 
-    # 构建提示词
+    # 阶段2：官网抓取 + 维基百科 + 百度百科（并发）
+    _emit("site", "抓取官网 + 维基/百度百科")
+    # 推测官网域名（从 website_sources 或 search_sources）
+    inferred_domain = _infer_company_domain(search_sources + website_sources, company_name)
+    aggregator_data: dict = {}
+    try:
+        agg = aggregate_company_sources(company_name, website_domain=inferred_domain)
+        aggregator_data = agg if isinstance(agg, dict) else {}
+    except Exception as e:
+        logger.error("aggregator fail: %s", e)
+
+    site_meta = aggregator_data.get("site", {}) or {}
+    wiki_items: list[dict] = aggregator_data.get("wikipedia", []) or []
+    baidu_item: dict | None = aggregator_data.get("baidu_baike")
+
+    # 阶段3：Tavily 来源太少 → DuckDuckGo 兜底
+    if len(search_sources) + len(ai_sources) < 3:
+        _emit("ddg", "DuckDuckGo 兜底搜索")
+        try:
+            ddg_results = duckduckgo_search(
+                f"{company_name} 公司简介 主营业务 行业 AI 动向", max_results=5,
+            )
+            for r in ddg_results:
+                search_sources.append({"title": r.get("title", ""), "url": r.get("url", ""), "snippet": r.get("snippet", "")})
+        except Exception as e:
+            logger.error("duckduckgo fail: %s", e)
+
+    # 去重 sources（按 URL）
+    seen_urls: set[str] = set()
+    deduped_sources: list[dict] = []
+    for s in search_sources + website_sources + ai_sources:
+        u = s.get("url", "")
+        if u and u not in seen_urls:
+            seen_urls.add(u)
+            deduped_sources.append(s)
+    search_sources = deduped_sources
+
+    # 构建提示词（含官网 + Wiki + Baidu 内容）
+    _emit("llm", "AI 综合整理")
     search_hint = ""
     if search_context:
-        search_hint += f"\n\n【公司基本信息】\n{search_context[:3000]}"
+        search_hint += f"\n\n【公司基本信息（Tavily 摘要）】\n{search_context[:3000]}"
     if news_context:
         search_hint += f"\n\n【最新动态信息】\n{news_context[:2000]}"
-    # 附加官网搜索结果给 AI 参考
+    if ai_context:
+        search_hint += f"\n\n【AI 相关真实信息（来自联网搜索）】\n{ai_context[:2500]}"
+    if ai_sources:
+        _ai_src_text = "\n".join(f"- [{s['title']}]({s['url']})" for s in ai_sources[:5])
+        search_hint += f"\n\n【AI 相关信息来源（请只基于这些来源描述）】\n{_ai_src_text}"
     if website_sources:
         ws_text = "\n".join(f"- [{s['title']}]({s['url']})" for s in website_sources[:3])
         search_hint += f"\n\n【官网搜索链接（从中提取最可靠的官网网址）】\n{ws_text}"
+    # 官网正文
+    if site_meta:
+        site_blocks = []
+        if site_meta.get("title"):
+            site_blocks.append(f"官网标题: {site_meta['title']}")
+        if site_meta.get("description"):
+            site_blocks.append(f"官网简介: {site_meta['description'][:400]}")
+        if site_meta.get("keywords"):
+            site_blocks.append(f"关键词: {site_meta['keywords'][:200]}")
+        if site_meta.get("about_text"):
+            site_blocks.append(f"官网 About 页内容（前 1500 字）:\n{site_meta['about_text'][:1500]}")
+        if site_meta.get("product_text"):
+            site_blocks.append(f"官网 Products 页内容（前 1500 字）:\n{site_meta['product_text'][:1500]}")
+        if site_meta.get("news_text"):
+            site_blocks.append(f"官网 News 页内容（前 1000 字）:\n{site_meta['news_text'][:1000]}")
+        if site_blocks:
+            search_hint += "\n\n【公司官网深度抓取】\n" + "\n\n".join(site_blocks)
+    # 维基百科
+    for it in wiki_items:
+        search_hint += f"\n\n【维基百科（{it.get('lang','zh')}）摘要】\n标题: {it.get('title','')}\n简介: {it.get('description','')}\n内容: {it.get('extract','')[:800]}\n来源: {it.get('url','')}"
+    # 百度百科
+    if baidu_item:
+        search_hint += f"\n\n【百度百科】\n标题: {baidu_item.get('title','')}\n描述: {baidu_item.get('description','')[:400]}\n摘要: {baidu_item.get('summary','')[:1000]}\n来源: {baidu_item.get('url','')}"
 
     extra = {}
-    if not search_context and not news_context:
+    if not search_context and not news_context and not site_meta and not wiki_items and not baidu_item:
         extra = {"extra_body": {"enable_search": True}}
 
     current_date = utc_now().strftime("%Y年%m月")
 
-    # 读取行业标准化分类
+    # 从数据库中已有客户行业聚合，作为AI归类参考
     industry_categories = []
     try:
-        from app.models.system_preference import SystemPreference
-        pref = db.exec(
-            select(SystemPreference).where(
-                SystemPreference.key == "industry_categories",
-                SystemPreference.user_id == None,
-            )
-        ).first()
-        if pref and pref.value:
-            industry_categories = [c.strip() for c in pref.value.split("\n") if c.strip()]
+        from app.services.industry_service import get_industry_categories_for_ai
+        industry_categories = get_industry_categories_for_ai(db)
     except Exception as e:
-        logger.error("读取行业分类配置失败: %s", e)
-    if not industry_categories:
-        industry_categories = [
-            "大模型基础研发与训练平台", "AI Agent / 智能体开发", "向量数据库 / 知识检索 RAG",
-            "模型推理优化与部署 MLOps", "AI 安全 / 对齐 / 可解释性", "多模态 / 视觉生成 AIGC",
-            "语音 / NLP / 对话 AI", "AI 芯片 / 算力基础设施", "开源模型生态与工具链",
-            "云原生 / 容器 / Kubernetes", "公有云 IaaS / PaaS", "混合云 / 多云管理",
-            "边缘计算 / CDN / 分布式云", "Serverless / FaaS", "云安全 / 零信任 / WAF",
-            "FinOps / 云成本优化", "DevOps / CI/CD / GitOps", "可观测性 / AIOps / 运维平台",
-            "协同办公 / 企业 IM", "CRM / 营销自动化", "ERP / 财务 / HR SaaS",
-            "低代码 / 无代码平台", "数据中台 / 数据治理",
-            "金融科技 / 支付 / 数字银行", "新能源汽车 / 智能出行", "半导体 / 芯片 / EDA",
-            "电商 / 新零售 / 跨境电商", "社交媒体 / 内容平台", "游戏 / 互动娱乐",
-            "在线教育 / 教育科技", "医疗健康 / 数字医疗", "物流 / 供应链 / 配送",
-            "网络安全 / 信息安全", "物联网 / 智能硬件", "消费电子 / 智能家居",
-            "农业科技 / 食品科技", "新能源 / 碳中和 / 环保", "法律科技 / 合规科技",
-            "航空航天 / 卫星 / 低空经济", "自动驾驶 / 智能交通", "工业互联网 / 智能制造",
-            "旅游 / 出行服务", "本地生活 / 餐饮 / 即时零售", "保险科技",
-            "通信 / 5G / 6G", "政务 / 智慧城市 / 数字政府", "区块链 / Web3 / 数字资产",
-            "广告营销 / MarTech", "人力资源 / 招聘科技",
-        ]
+        logger.error("读取行业分类失败: %s", e)
     industry_list_str = "\n".join(f"  - {c}" for c in industry_categories)
+
+    params = resolve_chat_params(
+        db, model=pm, task_cfg=task_cfg,
+        func_defaults={"temperature": 0.0},  # 业务软默认：公司信息抽取要最稳定
+        func_overrides={"extra_body": {"enable_search": True}} if (not search_context and not news_context and not site_meta and not wiki_items and not baidu_item) else {},
+    )
 
     response = client.chat.completions.create(
         model=model,
@@ -780,80 +1274,291 @@ def fetch_company_info(company_name: str, db: Session, user_id: int = 0) -> dict
             {
                 "role": "system",
                 "content": (
-                    "你是一个企业信息查询助手。请根据提供的搜索信息，整理该公司的基本信息。\n"
+                    "你是一个企业信息查询助手。请根据提供的多源搜索信息（联网搜索、官网深度抓取、维基百科、百度百科），整理该公司的基本信息。\n"
                     f"当前日期：{current_date}\n"
                     "请严格以 JSON 格式返回，包含以下字段:\n"
                     '  - "name": 公司全称\n'
-                    f'  - "industry": 所属行业（必须从以下标准行业中选择最匹配的一个，不要自创）：\n{industry_list_str}\n'
+                    '  - "industry": 所属行业（优先从以下已有行业分类中选择最匹配的，若无匹配则根据公司实际情况给出准确的行业名称）：\n{industry_list_str}\n'
                     '  - "core_products": 核心产品或明星产品\n'
                     '  - "business_scope": 主营业务\n'
-                    '  - "scale": 规模人数（如\"1000-5000人\"或\"500人以上\"）\n'
+                    '  - "scale": 规模人数（如"1000-5000人"或"500人以上"）\n'
                     '  - "profile": 公司简介（100字以内）\n'
                     f'  - "recent_news": 近半年内（{current_date}前后）的最新重要动态，如融资、新品发布、合作、财报等，100字以内。请优先从"最新动态信息"中提取，确保信息的时效性。如果搜索信息中无近期动态，请标注"暂无近期公开动态"\n'
                     '  - "logo_url": 公司官网域名（如 "example.com"），如果搜索信息中包含官网地址则提取域名，否则留空字符串\n'
-                    '  - "website": 公司官网完整网址（如 "https://www.example.com"），优先从【官网搜索链接】中提取标题含"官网""官方"的结果；若无则从搜索信息中提取公司主域名；若均无则留空字符串\n'
+                    '  - "website": 公司官网完整网址（如 "https://www.example.com"），优先从【官网搜索链接】和【公司官网深度抓取】中提取主域名；若无则从搜索信息中提取公司主域名；若均无则留空字符串\n'
+                    '  - "ai_initiatives": 公司在 AI / 人工智能 / 大模型 / 生成式AI 等领域的真实动向（产品发布、模型训练、行业应用、智能化转型、专利、论文、收购、合作等）。【严格基于"AI 相关真实信息"或"AI 相关信息来源"中提供的搜索证据撰写，禁止凭空捏造】。以 Markdown 要点列表输出（3-6 条），每条 ≤ 50 字；如果搜索证据不足或该公司确实没有公开的 AI 动向，请输出"暂无公开可查的 AI 领域动向"。\n'
                     "只返回 JSON，不要有其他内容。"
                 ),
             },
             {"role": "user", "content": f"公司名称：{company_name}{search_hint}"},
         ],
-        temperature=0.0,
-        **extra,
+        **params,
     )
     text = _extract_message_text(response.choices[0].message)
-    try:
-        result = json.loads(text)
-        if isinstance(result, dict):
-            # 校验 AI 返回的 website
-            ai_website = result.get("website", "")
-            if ai_website and not _domain_looks_plausible(ai_website, result.get("name", company_name)):
-                result["website"] = ""  # 不可信，清空
-            # 补充：从官网搜索 URL 提取官网（优先于 AI 返回）
-            extracted_website = _extract_website_from_search(website_sources, company_name)
-            if extracted_website and not result.get("website"):
-                result["website"] = extracted_website
-            # 用官网域名替换 logo_url（AI 返回的域名可能不准确）
-            website_url = result.get("website", "") or extracted_website
-            if website_url:
-                domain = urlparse(website_url).netloc.replace('www.', '')
-                if domain:
-                    result["logo_url"] = _fetch_company_logo(domain)
-            elif result.get("logo_url"):
-                # AI 返回了 logo_url 但没有 website，用 logo_url 域名查 Clearbit
-                raw = result["logo_url"].replace('https://', '').replace('http://', '').split('/')[0]
-                result["logo_url"] = _fetch_company_logo(raw)
-            if search_sources:
-                result["sources"] = search_sources
+    # 兜底：如果 LLM 没回 ai_initiatives 字段，从 ai_context 提取要点
+    fallback_ai = _format_ai_fallback(locals().get('ai_context'))
+
+    # LLM 响应解析（两轮：完整 json / 文本中提取 json）
+    def _postprocess(result: dict) -> dict:
+        if not isinstance(result, dict):
             return result
+        # 校验 AI 返回的 website
+        ai_website = result.get("website", "")
+        if ai_website and not _domain_looks_plausible(ai_website, result.get("name", company_name)):
+            result["website"] = ""
+        # 补充：从官网搜索 URL 提取官网（优先于 AI 返回）
+        extracted_website = _extract_website_from_search(website_sources, company_name)
+        if not result.get("website") and site_meta.get("sources"):
+            # 兜底：把官网抓取时的 sources 第一条作为 website
+            for s in site_meta.get("sources", []):
+                if s.get("section") == "home" and s.get("url"):
+                    result["website"] = s["url"]
+                    break
+        if extracted_website and not result.get("website"):
+            result["website"] = extracted_website
+        # 用官网域名替换 logo_url
+        website_url = result.get("website", "") or extracted_website
+        if website_url:
+            domain = urlparse(website_url).netloc.replace('www.', '')
+            if domain:
+                result["logo_url"] = _fetch_company_logo(domain)
+        elif result.get("logo_url"):
+            raw = result["logo_url"].replace('https://', '').replace('http://', '').split('/')[0]
+            result["logo_url"] = _fetch_company_logo(raw)
+        # 兜底补全 ai_initiatives
+        ai_v = result.get("ai_initiatives")
+        if isinstance(ai_v, list):
+            lines: list[str] = []
+            for x in ai_v:
+                s = str(x).strip()
+                if not s:
+                    continue
+                if not s.startswith(("-", "*", "•", "·")):
+                    s = f"- {s}"
+                lines.append(s)
+            result["ai_initiatives"] = "\n".join(lines) if lines else fallback_ai
+        elif not (isinstance(ai_v, str) and ai_v.strip()):
+            result["ai_initiatives"] = fallback_ai
+        # 构建 ai_evidence 映射（按行匹配最近的 URL）
+        result["ai_evidence"] = _build_ai_evidence(result.get("ai_initiatives", ""), ai_sources)
+        # 附加 sources
+        if search_sources:
+            result["sources"] = search_sources[:15]  # 截前 15
+        return result
+
+    # 阶段5：结构化补搜（关键字段缺失时）
+    def _try_parse(t: str) -> dict | None:
+        try:
+            r = json.loads(t)
+            return r if isinstance(r, dict) else None
+        except json.JSONDecodeError:
+            return None
+    result: dict | None = _try_parse(text) or None
+    if not result:
+        m = _re_module.search(r'\{[\s\S]*\}', text)
+        if m:
+            result = _try_parse(m.group())
+
+    if result:
+        result = _postprocess(result)
+        # 关键字段缺失则补搜一次
+        missing = _missing_key_fields(result)
+        if missing:
+            _emit("supplement", f"补搜缺失字段: {missing}")
+            try:
+                result = _supplement_company_info(
+                    company_name, result, missing, db, user_id,
+                )
+            except Exception as e:
+                logger.error("supplement fail: %s", e)
+        _emit("done", "完成")
+        return result
+
+    _emit("done", "完成")
+    return {}
+
+
+def _infer_company_domain(sources: list[dict], company_name: str) -> str | None:
+    """从搜索结果中推断最可能的官网域名（不含 www.）"""
+    skip_keywords = (
+        "wikipedia", "baike.baidu", "zhihu", "weibo", "sohu", "163.com",
+        "qq.com", "sina", "ifeng", "36kr", "ithome", "thepaper", "wallstreetcn",
+        "huxiu", "geekpark", "tmtpost", "lieyunwang", "cyzone", "pedaily",
+        "cls.cn", "jiemian", "eastmoney", "xueqiu", "cninfo", "10jqka",
+        "hexun", "jrj", "yicai", "caixin", "linkedin", "zhaopin", "51job",
+        "lagou", "liepin", "bosszhipin", "maimai", "tianyancha", "qichacha",
+        "csdn", "cnblogs", "oschina", "segmentfault", "github", "gitee",
+        "taobao", "tmall", "jd.com", "feishu", "dingtalk",
+        "research.", "report.", "doc88", "docin", "slideshare",
+        # 招股书 / 公告 / 新闻类
+        "hkexnews", "sec.gov", "szse.cn", "sse.com.cn", "hkma.gov",
+        "tidenews", "cnstock", "stcn", "nbd.com", "21jingji",
+        "chinaventure", "webull", "futunn", "futu5", "investing.com",
+        "pdf", ".pdf",
+    )
+    candidates: list[tuple[int, str]] = []
+    cn = (company_name or "").lower()
+    for s in sources:
+        url = s.get("url", "")
+        if not url:
+            continue
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            domain = parsed.netloc.lower().replace("www.", "")
+        except Exception:
+            continue
+        if not domain or "." not in domain:
+            continue
+        if any(sk in domain for sk in skip_keywords):
+            continue
+        score = 0
+        # 域名含公司名/拼音 → 加分
+        for token in _re_module.split(r"[\s\u4e00-\u9fff]+", cn):
+            if token and len(token) >= 2 and token in domain:
+                score += 5
+        # https 优先
+        if url.startswith("https://"):
+            score += 1
+        candidates.append((score, domain))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda x: -x[0])
+    return candidates[0][1]
+
+
+def _missing_key_fields(result: dict) -> list[str]:
+    """返回 result 中关键字段为空/缺的值列表"""
+    missing = []
+    for k in ("industry", "core_products", "business_scope", "profile", "website"):
+        v = result.get(k)
+        if not v or (isinstance(v, str) and len(v.strip()) < 2):
+            missing.append(k)
+    if not (result.get("ai_initiatives") or "").strip() or result.get("ai_initiatives") == "暂无公开可查的 AI 领域动向":
+        missing.append("ai_initiatives")
+    return missing
+
+
+def _supplement_company_info(company_name: str, result: dict, missing: list[str], db: Session, user_id: int) -> dict:
+    """针对缺失字段追加一轮 DuckDuckGo 搜索 + LLM 重写"""
+    from app.services.company_aggregator import duckduckgo_search
+    if not missing:
+        return result
+    extra_hints: list[str] = []
+    for f in missing[:3]:  # 最多补 3 个
+        if f == "ai_initiatives":
+            q = f"{company_name} AI 人工智能 大模型 创新 应用"
+        elif f == "website":
+            q = f"{company_name} 官网 official site"
+        elif f == "industry":
+            q = f"{company_name} 行业 主营业务 所属行业"
+        else:
+            q = f"{company_name} {f}"
+        ddg = duckduckgo_search(q, max_results=3)
+        if ddg:
+            block = "\n".join(f"- [{r.get('title','')}]({r.get('url','')}) {r.get('snippet','')}" for r in ddg)
+            extra_hints.append(f"\n\n【{f} 补充信息（DuckDuckGo）】\n{block}")
+    if not extra_hints:
+        return result
+    # 用 LLM 修订 result
+    base_url, api_key, model, provider, task_cfg, pm = _get_active_provider_full(db, "chat", user_id)
+    client = _get_client(base_url, api_key, provider)
+    params = resolve_chat_params(db, model=pm, task_cfg=task_cfg, func_defaults={"temperature": 0.0})
+    resp = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": (
+                "你是企业信息补全助手。基于以下补充信息，修订原 JSON 中缺失或不准确的字段（缺失字段列表: "
+                + ", ".join(missing)
+                + "）。只返回修订后的完整 JSON，不要有其他内容。\n原 JSON: " + json.dumps(result, ensure_ascii=False)
+            )},
+            {"role": "user", "content": "".join(extra_hints)},
+        ],
+        **params,
+    )
+    new_text = _extract_message_text(resp.choices[0].message)
+    try:
+        new_result = json.loads(new_text)
+        if isinstance(new_result, dict):
+            return new_result
     except json.JSONDecodeError:
         pass
-    # 尝试从文本中提取 JSON 对象
-    match = _re_module.search(r'\{[\s\S]*\}', text)
-    if match:
+    m = _re_module.search(r'\{[\s\S]*\}', new_text)
+    if m:
         try:
-            result = json.loads(match.group())
-            if isinstance(result, dict):
-                # 校验 AI 返回的 website
-                ai_website = result.get("website", "")
-                if ai_website and not _domain_looks_plausible(ai_website, result.get("name", company_name)):
-                    result["website"] = ""
-                extracted_website = _extract_website_from_search(website_sources, company_name)
-                if extracted_website and not result.get("website"):
-                    result["website"] = extracted_website
-                website_url = result.get("website", "") or extracted_website
-                if website_url:
-                    domain = urlparse(website_url).netloc.replace('www.', '')
-                    if domain:
-                        result["logo_url"] = _fetch_company_logo(domain)
-                elif result.get("logo_url"):
-                    raw = result["logo_url"].replace('https://', '').replace('http://', '').split('/')[0]
-                    result["logo_url"] = _fetch_company_logo(raw)
-            if search_sources:
-                result["sources"] = search_sources
-            return result
+            new_result = json.loads(m.group())
+            if isinstance(new_result, dict):
+                return new_result
         except json.JSONDecodeError:
             pass
-    return {}
+    return result
+
+
+def _build_ai_evidence(ai_text: str, sources: list[dict]) -> str:
+    """根据 ai_initiatives 文本和 sources 构造来源映射 JSON 字符串。
+    简化策略：每条要点均匀分配 sources（前 N 条轮流匹配）"""
+    if not ai_text or not sources:
+        return ""
+    # 拆要点
+    lines: list[str] = []
+    for line in ai_text.split("\n"):
+        s = line.strip()
+        if not s:
+            continue
+        # 去掉列表符号
+        s = s.lstrip("-*•· ").strip()
+        if s and s != "暂无公开可查的 AI 领域动向":
+            lines.append(s)
+    if not lines:
+        return ""
+    evidence: list[dict] = []
+    for i, line in enumerate(lines):
+        src = sources[i % len(sources)]
+        url = src.get("url", "")
+        domain = ""
+        try:
+            from urllib.parse import urlparse
+            domain = urlparse(url).netloc.replace("www.", "")
+        except Exception:
+            pass
+        evidence.append({"text": line[:100], "url": url, "domain": domain, "title": src.get("title", "")[:80]})
+    return json.dumps(evidence, ensure_ascii=False)
+
+
+def _format_ai_fallback(ai_context: str | None) -> str:
+    """当 LLM 未返回 ai_initiatives 时，从 ai_context 提取 3 条要点作为兜底"""
+    if not ai_context:
+        return "暂无公开可查的 AI 领域动向"
+    # 尝试拆句：按 . ? ! 。？！ \n 拆，过滤太短/过长的
+    raw = ai_context.replace("\r", "\n")
+    # 先按换行，再按中文/英文句末符号拆
+    chunks: list[str] = []
+    for line in raw.split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        for sep in ["。", "！", "？", ". ", "? ", "! "]:
+            line = line.replace(sep, "\n")
+        for sub in line.split("\n"):
+            sub = sub.strip().lstrip("-•·* ").strip()
+            if 8 <= len(sub) <= 80:
+                chunks.append(sub)
+    if not chunks:
+        return "暂无公开可查的 AI 领域动向"
+    # 去重（粗略）
+    seen: set[str] = set()
+    uniq: list[str] = []
+    for c in chunks:
+        key = c[:20]
+        if key in seen:
+            continue
+        seen.add(key)
+        uniq.append(c)
+        if len(uniq) >= 3:
+            break
+    if not uniq:
+        return "暂无公开可查的 AI 领域动向"
+    return "\n".join(f"- {c}" for c in uniq)
 
 
 def _extract_website_from_search(search_sources: list[dict], company_name: str) -> str:
@@ -995,7 +1700,7 @@ def _fetch_company_logo(domain: str) -> str:
 def refresh_company_news(company_name: str, db: Session, user_id: int = 0) -> str:
     """单独刷新公司最新动态，专注于半年内的新闻"""
     from datetime import datetime
-    base_url, api_key, model, provider = _get_active_provider(db, "chat", user_id)
+    base_url, api_key, model, provider, task_cfg, pm = _get_active_provider_full(db, "chat", user_id)
     client = _get_client(base_url, api_key, provider)
 
     # Tavily 搜索最新新闻
@@ -1025,9 +1730,11 @@ def refresh_company_news(company_name: str, db: Session, user_id: int = 0) -> st
 
     search_hint = f"\n\n搜索信息：\n{news_context[:3000]}" if news_context else ""
 
-    extra = {}
-    if not news_context:
-        extra = {"extra_body": {"enable_search": True}}
+    params = resolve_chat_params(
+        db, model=pm, task_cfg=task_cfg,
+        func_defaults={"temperature": 0.3},  # 业务软默认：新闻整理要稳定
+        func_overrides={"extra_body": {"enable_search": True}} if not news_context else {},
+    )
 
     response = client.chat.completions.create(
         model=model,
@@ -1035,8 +1742,7 @@ def refresh_company_news(company_name: str, db: Session, user_id: int = 0) -> st
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"公司：{company_name}{search_hint}"},
         ],
-        temperature=0.3,
-        **extra,
+        **params,
     )
     text = _extract_message_text(response.choices[0].message)
     return text.strip()

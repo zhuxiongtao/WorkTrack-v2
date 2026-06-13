@@ -10,12 +10,15 @@ import {
   useDeleteUserMutation,
   useToggleUserActiveMutation,
   useSetUserStatusMutation,
+  useBatchUserActionMutation,
 } from '../../hooks/useUserManagementQueries'
 import { UserStatsBar } from './UserStatsBar'
 import { UserFilterBar } from './UserFilterBar'
 import { UserTable } from './UserTable'
 import { UserFormModal } from './UserFormModal'
 import { ResetPasswordModal } from './ResetPasswordModal'
+import { BatchActionsBar } from './BatchActionsBar'
+import { UserRolesModal } from './UserRolesModal'
 
 function getAvatarColor(name: string) {
   const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
@@ -54,6 +57,10 @@ export function UserListTab({ departmentId }: UserListTabProps) {
   const [showCreate, setShowCreate] = useState(false)
   const [editingUser, setEditingUser] = useState<UserData | null>(null)
   const [resetPwdUser, setResetPwdUser] = useState<UserData | null>(null)
+  const [rolesUser, setRolesUser] = useState<UserData | null>(null)
+
+  // 批量选择
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
   // 构建查询参数
   const queryParams: UserListParams = useMemo(() => ({
@@ -73,6 +80,7 @@ export function UserListTab({ departmentId }: UserListTabProps) {
   const deleteMutation = useDeleteUserMutation()
   const toggleActiveMutation = useToggleUserActiveMutation()
   const setStatusMutation = useSetUserStatusMutation()
+  const batchActionMutation = useBatchUserActionMutation()
 
   // 提取用户数据和分页信息
   const users = useMemo(() => {
@@ -87,16 +95,7 @@ export function UserListTab({ departmentId }: UserListTabProps) {
     return { page: p.page, total_pages: p.total_pages, total: p.total, page_size: p.page_size }
   }, [data])
 
-  // 计算统计
-  const stats = useMemo(() => {
-    const allUsers = users
-    return {
-      total: pagination?.total ?? allUsers.length,
-      active: allUsers.filter(u => u.status === 'active').length,
-      resigned: allUsers.filter(u => u.status === 'resigned').length,
-      locked: allUsers.filter(u => u.locked_until && new Date(u.locked_until) > new Date()).length,
-    }
-  }, [users, pagination])
+  // 统计改由 UserStatsBar 自主调用 /api/v1/users/stats 拉取全量数据
 
   // 回调
   const openCreate = useCallback(() => {
@@ -107,6 +106,10 @@ export function UserListTab({ departmentId }: UserListTabProps) {
   const openEdit = useCallback((u: UserData) => {
     setEditingUser(u)
     setShowCreate(true)
+  }, [])
+
+  const openRoles = useCallback((u: UserData) => {
+    setRolesUser(u)
   }, [])
 
   const handleToggleActive = useCallback(async (u: UserData) => {
@@ -133,21 +136,49 @@ export function UserListTab({ departmentId }: UserListTabProps) {
   const handleSearchChange = useCallback((v: string) => {
     setSearch(v)
     setPage(1)
+    setSelectedIds(new Set())
   }, [])
 
   const handleRoleChange = useCallback((v: string | number) => {
     setFilterRole(v)
     setPage(1)
+    setSelectedIds(new Set())
   }, [])
 
   const handleStatusChange = useCallback((v: string) => {
     setFilterStatus(v)
     setPage(1)
+    setSelectedIds(new Set())
   }, [])
+
+  const handleBatchAction = useCallback(async (
+    action: 'enable' | 'disable' | 'resign' | 'set_department' | 'reset_password',
+    departmentId?: number | null,
+  ) => {
+    const userIds = Array.from(selectedIds)
+    if (userIds.length === 0) return
+    const labels: Record<string, string> = {
+      enable: '启用',
+      disable: '停用',
+      resign: '标记为离职',
+      set_department: departmentId ? `调整部门到 ID=${departmentId}` : '移出部门',
+      reset_password: '重置密码（系统自动生成 10 位随机密码，原密码作废）',
+    }
+    if (!await showConfirm(`确定要对已选的 ${userIds.length} 个用户执行「${labels[action]}」吗？`)) return
+    batchActionMutation.mutate({ user_ids: userIds, action, department_id: departmentId })
+    setSelectedIds(new Set())
+  }, [selectedIds, showConfirm, batchActionMutation])
 
   return (
     <div className="space-y-4">
-      <UserStatsBar total={stats.total} active={stats.active} resigned={stats.resigned} locked={stats.locked} />
+      <UserStatsBar />
+
+      <BatchActionsBar
+        selectedCount={selectedIds.size}
+        onClearSelection={() => setSelectedIds(new Set())}
+        onAction={handleBatchAction}
+        loading={batchActionMutation.isPending}
+      />
 
       <div className="flex items-center justify-between gap-4">
         <div className="flex-1">
@@ -172,12 +203,15 @@ export function UserListTab({ departmentId }: UserListTabProps) {
         loading={isLoading}
         currentUserId={currentUser?.id ?? 0}
         pagination={pagination}
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
         onPageChange={setPage}
         onEdit={openEdit}
         onToggleActive={handleToggleActive}
         onSetStatus={handleSetStatus}
         onDelete={handleDelete}
         onResetPassword={(u) => setResetPwdUser(u)}
+        onManageRoles={openRoles}
         getAvatarColor={getAvatarColor}
         formatTime={formatTime}
       />
@@ -192,6 +226,12 @@ export function UserListTab({ departmentId }: UserListTabProps) {
         isOpen={resetPwdUser !== null}
         user={resetPwdUser}
         onClose={() => setResetPwdUser(null)}
+      />
+
+      <UserRolesModal
+        isOpen={rolesUser !== null}
+        user={rolesUser}
+        onClose={() => setRolesUser(null)}
       />
     </div>
   )

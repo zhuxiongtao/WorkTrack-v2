@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Save, Loader2, Shield, ShieldCheck } from 'lucide-react'
 import type { RoleData } from '../../services/types'
 import {
@@ -59,9 +60,9 @@ export function DepartmentRoleModal({ isOpen, departmentId, departmentName, onCl
 
   const selectedCount = selectedRoleIds.size
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-2xl bg-bg-card border border-gray-150 dark:border-border/50 shadow-2xl flex flex-col overflow-hidden max-h-[80vh]" onClick={e => e.stopPropagation()}>
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 px-4 py-6" onClick={onClose}>
+      <div className="w-full max-w-md rounded-2xl bg-bg-card border border-gray-150 dark:border-border/50 shadow-2xl flex flex-col overflow-hidden max-h-[90vh] animate-scaleIn" onClick={e => e.stopPropagation()}>
         {/* 头部 */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-border/15 shrink-0">
           <div className="flex items-center gap-2">
@@ -158,7 +159,7 @@ export function DepartmentRoleModal({ isOpen, departmentId, departmentName, onCl
         </div>
       </div>
     </div>
-  )
+  , document.body)
 }
 
 // 角色复选框子组件

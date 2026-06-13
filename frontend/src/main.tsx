@@ -17,8 +17,8 @@ const queryClient = new QueryClient({
   },
 })
 
-// ===== PWA Service Worker 注册 =====
-if ('serviceWorker' in navigator) {
+// ===== PWA Service Worker 注册（仅生产环境） =====
+if ('serviceWorker' in navigator && !import.meta.env.DEV) {
   const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   const isHTTPS = window.location.protocol === 'https:'
   if (isLocalhost || isHTTPS) {

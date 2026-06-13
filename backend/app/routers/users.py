@@ -1,5 +1,8 @@
 """用户管理路由：管理员 CRUD 用户"""
 
+import os
+import secrets
+import string
 from typing import Optional, List
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Query
@@ -8,7 +11,7 @@ from sqlmodel import Session, select, func, or_
 
 from app.auth import (
     get_current_admin_user, get_current_user, hash_password, validate_password_strength,
-    bump_token_version, require_permission, has_permission,
+    bump_token_version, require_permission, has_permission, invalidate_rbac_cache,
 )
 from app.database import get_session
 from app.models.user import User
@@ -17,6 +20,21 @@ from app.models.wiki import UserGroup
 from app.models.department import Department
 
 router = APIRouter(prefix="/api/v1/users", tags=["用户管理"])
+
+
+def _is_dept_in_descendants(db: Session, ancestor_id: int, descendant_id: int) -> bool:
+    """检查 ancestor_id 是否在 descendant_id 的祖先链中（即把 ancestor 设为 descendant 的子部门会形成循环）"""
+    current_id = ancestor_id
+    visited: set[int] = set()
+    while current_id is not None and current_id not in visited:
+        if current_id == descendant_id:
+            return True
+        visited.add(current_id)
+        parent = db.get(Department, current_id)
+        if not parent:
+            break
+        current_id = parent.parent_id
+    return False
 
 
 def get_dept_member_ids(current_user: User, db: Session) -> Optional[List[int]]:
@@ -123,25 +141,23 @@ def _user_to_out(user: User) -> dict:
 
 
 def _batch_enrich_users_with_groups_and_roles(users: List[User], db: Session) -> List[dict]:
-    """批量预加载用户的部门角色信息，避免逐用户 N+1 查询"""
+    """批量预加载用户的角色信息（直接分配 + 部门角色），避免逐用户 N+1 查询"""
     if not users:
         return []
-    
-    from app.models.department import Department
 
-    # 收集所有用户的 department_id
-    dept_ids = set()
-    for u in users:
-        if u.department_id is not None:
-            dept_ids.add(u.department_id)
-    
+    from app.models.department import Department
+    from app.models.rbac import UserRole
+
+    user_ids = [u.id for u in users]
+    dept_ids = {u.department_id for u in users if u.department_id is not None}
+
     # 批量查询部门名称
     dept_name_map: dict[int, str] = {}
     if dept_ids:
         depts = db.exec(select(Department).where(Department.id.in_(list(dept_ids)))).all()
         dept_name_map = {d.id: d.name for d in depts}
-    
-    # 批量查询各部门的角色
+
+    # 部门 → 角色列表
     dept_roles_map: dict[int, list] = {}
     if dept_ids:
         all_dept_roles = db.exec(
@@ -151,37 +167,72 @@ def _batch_enrich_users_with_groups_and_roles(users: List[User], db: Session) ->
         ).all()
         for dept_id, role in all_dept_roles:
             dept_roles_map.setdefault(dept_id, []).append({"id": role.id, "name": role.name, "code": role.code})
-    
-    # 组装结果
+
+    # 用户 → 直接分配角色
+    user_roles_map: dict[int, list] = {uid: [] for uid in user_ids}
+    if user_ids:
+        all_user_roles = db.exec(
+            select(UserRole.user_id, Role)
+            .join(Role, Role.id == UserRole.role_id)
+            .where(UserRole.user_id.in_(user_ids))
+        ).all()
+        for uid, role in all_user_roles:
+            user_roles_map.setdefault(uid, []).append({"id": role.id, "name": role.name, "code": role.code})
+
+    # 组装：合并直接分配 + 部门角色，按 id 去重
     result = []
     for u in users:
+        merged: list[dict] = []
+        seen: set[int] = set()
+        for r in user_roles_map.get(u.id, []):
+            if r["id"] not in seen:
+                seen.add(r["id"])
+                merged.append(r)
+        for r in dept_roles_map.get(u.department_id, []) if u.department_id else []:
+            if r["id"] not in seen:
+                seen.add(r["id"])
+                merged.append(r)
         data = _user_to_out(u)
         data["groups"] = []
-        data["roles"] = dept_roles_map.get(u.department_id, []) if u.department_id else []
+        data["roles"] = merged
         data["department_name"] = dept_name_map.get(u.department_id) if u.department_id else None
         result.append(data)
-    
+
     return result
 
 
 
 
 def _user_to_out_with_roles(user: User, db: Session) -> dict:
-    """输出用户信息并附带部门角色列表（单用户版本，用于创建/编辑后返回）"""
+    """输出用户信息并附带有效角色列表（单用户版本，用于创建/编辑后返回）
+
+    有效角色 = 直接分配(UserRole) + 部门角色(DepartmentRole)，按 id 去重。
+    """
+    from app.models.rbac import UserRole
     data = _user_to_out(user)
     data["groups"] = []
-    # 从用户所属部门计算有效角色
+    role_id_set: set[int] = set()
+    roles_out: list[dict] = []
+    # 1) 直接分配
+    direct_ids = [r for r in db.exec(select(UserRole.role_id).where(UserRole.user_id == user.id)).all()]
+    if direct_ids:
+        rows = db.exec(select(Role).where(Role.id.in_(direct_ids))).all()
+        for r in rows:
+            if r.id not in role_id_set:
+                role_id_set.add(r.id)
+                roles_out.append({"id": r.id, "name": r.name, "code": r.code})
+    # 2) 部门角色
     if user.department_id:
-        role_ids = db.exec(
+        dept_role_ids = db.exec(
             select(DepartmentRole.role_id).where(DepartmentRole.department_id == user.department_id)
         ).all()
-        if role_ids:
-            role_rows = db.exec(select(Role).where(Role.id.in_([r for r in role_ids]))).all()
-            data["roles"] = [{"id": r.id, "name": r.name, "code": r.code} for r in role_rows]
-        else:
-            data["roles"] = []
-    else:
-        data["roles"] = []
+        if dept_role_ids:
+            rows = db.exec(select(Role).where(Role.id.in_([r for r in dept_role_ids]))).all()
+            for r in rows:
+                if r.id not in role_id_set:
+                    role_id_set.add(r.id)
+                    roles_out.append({"id": r.id, "name": r.name, "code": r.code})
+    data["roles"] = roles_out
     return data
 
 
@@ -199,7 +250,7 @@ def _get_department_descendants(dept_id: int, db: Session) -> List[int]:
 @router.get("")
 def list_users(
     db: Session = Depends(get_session),
-    _admin: User = Depends(require_permission("user:manage_roles")),
+    _viewer: User = Depends(require_permission("user:read")),
     page: int = Query(default=0, ge=0, description="页码，0=不分页返回全部"),
     page_size: int = Query(default=20, ge=1, le=100, description="每页数量"),
     search: str = Query(default="", description="模糊搜索用户名/姓名/邮箱"),
@@ -278,6 +329,103 @@ def list_users(
     return _batch_enrich_users_with_groups_and_roles(list(users), db)
 
 
+# ===== 用户全局统计（用于统计卡） =====
+@router.get("/stats")
+def get_user_stats(db: Session = Depends(get_session),
+                   _admin: User = Depends(require_permission("user:manage_roles"))):
+    """返回用户全量统计：总成员/活跃/离职/锁定制中/管理员/无部门"""
+    from sqlalchemy import func as sql_func
+    now = datetime.now(timezone.utc)
+    total = db.exec(select(sql_func.count(User.id))).one()
+    active = db.exec(select(sql_func.count(User.id)).where(User.status == "active", User.is_active == True)).one()
+    disabled = db.exec(select(sql_func.count(User.id)).where(or_((User.status == "disabled"), (User.is_active == False)))).one()
+    resigned = db.exec(select(sql_func.count(User.id)).where(User.status == "resigned")).one()
+    locked = db.exec(
+        select(sql_func.count(User.id))
+        .where(User.locked_until != None, User.locked_until > now)
+    ).one()
+    admin_count = db.exec(select(sql_func.count(User.id)).where(User.is_admin == True)).one()
+    no_dept = db.exec(select(sql_func.count(User.id)).where(or_(User.department_id == None, User.department_id == 0))).one()
+    return {
+        "total": total,
+        "active": active,
+        "disabled": disabled,
+        "resigned": resigned,
+        "locked": locked,
+        "admin": admin_count,
+        "no_dept": no_dept,
+    }
+
+
+# ===== 用户批量操作 =====
+class UserBatchAction(BaseModel):
+    user_ids: List[int]
+    action: str  # enable / disable / resign / set_department / reset_password
+    department_id: Optional[int] = None  # action=set_department 时使用
+
+
+@router.post("/batch")
+def batch_user_action(data: UserBatchAction, current_user: User = Depends(require_permission("user:manage_roles")),
+                      db: Session = Depends(get_session)):
+    """批量用户操作：启停/改部门/重置密码"""
+    if not data.user_ids:
+        raise HTTPException(status_code=400, detail="未选择任何用户")
+    if len(data.user_ids) > 200:
+        raise HTTPException(status_code=400, detail="单次最多操作 200 个用户")
+    if data.user_ids and current_user.id in data.user_ids and data.action in ("disable", "resign"):
+        raise HTTPException(status_code=400, detail="不能对自己执行禁用/离职操作")
+
+    users = db.exec(select(User).where(User.id.in_(data.user_ids))).all()
+    found_ids = {u.id for u in users}
+    missing = set(data.user_ids) - found_ids
+    if missing:
+        raise HTTPException(status_code=404, detail=f"用户不存在: {sorted(missing)}")
+
+    affected = 0
+    now = datetime.now(timezone.utc)
+    if data.action == "enable":
+        for u in users:
+            u.is_active = True
+            u.status = "active"
+            u.failed_login_attempts = 0
+            u.locked_until = None
+            affected += 1
+    elif data.action == "disable":
+        for u in users:
+            u.is_active = False
+            u.status = "disabled"
+            affected += 1
+    elif data.action == "resign":
+        for u in users:
+            u.status = "resigned"
+            u.is_active = False
+            u.department_id = None
+            u.leader_id = None
+            u.locked_until = None
+            u.failed_login_attempts = 0
+            affected += 1
+    elif data.action == "set_department":
+        new_dept_id = data.department_id if data.department_id not in (None, 0) else None
+        if new_dept_id is not None:
+            target_dept = db.get(Department, new_dept_id)
+            if not target_dept:
+                raise HTTPException(status_code=404, detail="目标部门不存在")
+        for u in users:
+            u.department_id = new_dept_id
+            affected += 1
+    elif data.action == "reset_password":
+        for u in users:
+            new_pwd = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(10))
+            u.password_hash = hash_password(new_pwd)
+            u.token_version = (u.token_version or 0) + 1
+            affected += 1
+    else:
+        raise HTTPException(status_code=400, detail=f"不支持的操作: {data.action}")
+
+    db.commit()
+    return {"affected": affected, "action": data.action}
+
+
 # ===== 获取简单用户列表（供协同和选择器使用，面向所有登录用户） =====
 @router.get("/simple")
 def get_users_simple(db: Session = Depends(get_session),
@@ -311,6 +459,11 @@ class DepartmentUpdate(BaseModel):
     name: Optional[str] = None
     manager_id: Optional[int] = None
     parent_id: Optional[int] = None
+
+
+class DepartmentMove(BaseModel):
+    parent_id: Optional[int] = None
+    """拖拽改父时使用：new_parent_id 0/None 表示移到根级"""
 
 
 # ===== 获取部门列表 =====
@@ -354,7 +507,35 @@ def update_department(dept_id: int, data: DepartmentUpdate, db: Session = Depend
     if "manager_id" in update_fields:
         dept.manager_id = data.manager_id if data.manager_id not in (None, 0) else None
     if "parent_id" in update_fields:
-        dept.parent_id = data.parent_id if data.parent_id not in (None, 0) else None
+        new_parent_id = data.parent_id if data.parent_id not in (None, 0) else None
+        if new_parent_id is not None:
+            if new_parent_id == dept_id:
+                raise HTTPException(status_code=400, detail="部门不能将自身设为上级")
+            if _is_dept_in_descendants(db, new_parent_id, dept_id):
+                raise HTTPException(status_code=400, detail="不能将部门移动到自身子孙节点下")
+        dept.parent_id = new_parent_id
+    db.add(dept)
+    db.commit()
+    db.refresh(dept)
+    return {"id": dept.id, "name": dept.name, "manager_id": dept.manager_id, "parent_id": dept.parent_id}
+
+
+# ===== 拖拽改父 =====
+@router.patch("/departments/{dept_id}/move")
+def move_department(dept_id: int, data: DepartmentMove, db: Session = Depends(get_session),
+                    _admin: User = Depends(require_permission("user:manage_roles"))):
+    """拖拽改父：把部门直接挂到新父级下，复用循环引用检测"""
+    from app.models.department import Department
+    dept = db.get(Department, dept_id)
+    if not dept:
+        raise HTTPException(status_code=404, detail="部门不存在")
+    new_parent_id = data.parent_id if data.parent_id not in (None, 0) else None
+    if new_parent_id is not None:
+        if new_parent_id == dept_id:
+            raise HTTPException(status_code=400, detail="部门不能将自身设为上级")
+        if _is_dept_in_descendants(db, new_parent_id, dept_id):
+            raise HTTPException(status_code=400, detail="不能将部门移动到自身子孙节点下")
+    dept.parent_id = new_parent_id
     db.add(dept)
     db.commit()
     db.refresh(dept)
@@ -508,11 +689,81 @@ def get_user_report_chain(user_id: int, db: Session = Depends(get_session),
     return {"chain": chain}
 
 
+# ===== 直接给用户分配角色 =====
+class UserRolesUpdate(BaseModel):
+    role_ids: List[int]
+
+
+@router.get("/{user_id}/roles")
+def get_user_roles(user_id: int, db: Session = Depends(get_session),
+                   _viewer: User = Depends(require_permission("user:read"))):
+    """获取某用户**直接分配**的角色 ID 列表（不含部门角色）"""
+    from app.models.rbac import UserRole
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    role_ids = [r for r in db.exec(
+        select(UserRole.role_id).where(UserRole.user_id == user_id)
+    ).all()]
+    return {"role_ids": role_ids}
+
+
+@router.put("/{user_id}/roles")
+def set_user_roles(user_id: int, data: UserRolesUpdate, db: Session = Depends(get_session),
+                   actor: User = Depends(require_permission("user:manage_roles"))):
+    """覆盖式设置某用户**直接分配**的角色（与部门角色并存）"""
+    from app.models.rbac import UserRole, Role as RoleModel
+
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    # 校验所有 role_id 存在
+    if data.role_ids:
+        existing = db.exec(select(RoleModel.id).where(RoleModel.id.in_(data.role_ids))).all()
+        existing_set = set(existing)
+        invalid = [r for r in data.role_ids if r not in existing_set]
+        if invalid:
+            raise HTTPException(status_code=400, detail=f"以下角色不存在: {invalid}")
+
+    # 提权防护：admin 角色只在现有 admin 之间流转
+    # 计算"新直接分配里是否含 admin"
+    new_has_admin = False
+    if data.role_ids:
+        new_codes = db.exec(
+            select(RoleModel.code).where(RoleModel.id.in_(data.role_ids))
+        ).all()
+        new_has_admin = "admin" in {c for c in new_codes}
+    # 计算"该用户当前是否通过任何渠道是 admin"（is_admin 字段 + 直接分配 admin 角色）
+    has_admin_now = user.is_admin
+    if not has_admin_now:
+        existing_admin_direct = db.exec(
+            select(UserRole.role_id).join(RoleModel, RoleModel.id == UserRole.role_id)
+            .where(UserRole.user_id == user_id, RoleModel.code == "admin")
+        ).first()
+        has_admin_now = bool(existing_admin_direct)
+    if (new_has_admin != has_admin_now) and not actor.is_admin:
+        raise HTTPException(status_code=403, detail="只有系统管理员才能变更 admin 角色")
+
+    # 清理旧的直接分配
+    for ur in db.exec(select(UserRole).where(UserRole.user_id == user_id)).all():
+        db.delete(ur)
+    db.flush()
+    # 写入新分配
+    for rid in data.role_ids:
+        db.add(UserRole(user_id=user_id, role_id=rid))
+    db.commit()
+    return _user_to_out_with_roles(user, db)
+
+
 # ===== 创建用户 =====
 @router.post("", status_code=201)
 def create_user(data: UserCreate, db: Session = Depends(get_session),
-                _admin: User = Depends(require_permission("user:create"))):
+                actor: User = Depends(require_permission("user:create"))):
     """管理员创建新用户"""
+    # 提权防护：只有当前已是 admin 的用户才能创建/把账号设为 is_admin=True
+    if data.is_admin and not actor.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有系统管理员才能创建管理员账号")
     if not data.email or not data.email.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="邮箱为必填项")
     # 密码强度校验
@@ -555,11 +806,16 @@ def create_user(data: UserCreate, db: Session = Depends(get_session),
 # ===== 编辑用户 =====
 @router.put("/{user_id}")
 def update_user(user_id: int, data: UserUpdate, db: Session = Depends(get_session),
-                _admin: User = Depends(require_permission("user:manage_roles"))):
+                actor: User = Depends(require_permission("user:manage_roles"))):
     """管理员编辑用户信息"""
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
+
+    # 提权防护：把某人提为 admin、或从 admin 降级，必须由现有 admin 操作
+    target_admin = data.is_admin if data.is_admin is not None else user.is_admin
+    if target_admin != user.is_admin and not actor.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有系统管理员才能变更管理员状态")
 
     if data.username is not None:
         # 检查新用户名是否与其他用户冲突
@@ -609,13 +865,13 @@ def update_user(user_id: int, data: UserUpdate, db: Session = Depends(get_sessio
 # ===== 启用/禁用用户 =====
 @router.put("/{user_id}/toggle-active")
 def toggle_user_active(user_id: int, db: Session = Depends(get_session),
-                       _admin: User = Depends(require_permission("user:manage_roles"))):
+                       actor: User = Depends(require_permission("user:manage_roles"))):
     """管理员启用或禁用用户"""
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
     # 不能禁用自己
-    if user.id == _admin.id:
+    if user.id == actor.id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不能禁用自己的账号")
 
     user.is_active = not user.is_active

@@ -35,11 +35,14 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-accent-blue/10 border border-accent-blue/20 mb-4">
-            <Sparkles size={28} className="text-accent-blue" />
+          <div className="relative inline-block mb-4">
+            <div className="absolute inset-0 bg-accent-blue/40 rounded-2xl blur-xl" />
+            <div className="relative inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-accent-blue to-purple-500 text-[#fff] shadow-lg shadow-accent-blue/30">
+              <Sparkles size={26} strokeWidth={2.4} />
+            </div>
           </div>
-          <h1 className="text-xl font-bold text-white">WorkTrack</h1>
-          <p className="text-sm text-gray-500 mt-1">登录到你的工作空间</p>
+          <h1 className="text-xl font-bold text-white tracking-tight">WorkTrack</h1>
+          <p className="text-xs text-gray-500 mt-1.5">登录到你的工作空间</p>
         </div>
 
         {/* 表单 */}
@@ -87,7 +90,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 rounded-lg bg-accent-blue text-white text-sm font-medium hover:bg-accent-blue/85 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+            className="w-full py-2.5 rounded-lg bg-accent-blue text-[#fff] text-sm font-bold hover:bg-accent-blue/85 disabled:opacity-50 flex items-center justify-center gap-2 transition-all hover:shadow-lg hover:shadow-accent-blue/30 cursor-pointer"
           >
             {loading && <Loader2 size={16} className="animate-spin" />}
             {loading ? '登录中...' : '登录'}

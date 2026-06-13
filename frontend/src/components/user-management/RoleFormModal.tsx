@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Save, Loader2, Shield, Check, ChevronDown, ChevronRight } from 'lucide-react'
 import { useToast } from '../../contexts/ToastContext'
 import type { RoleData, PermissionData } from '../../services/types'
@@ -90,9 +91,9 @@ export function RoleFormModal({ isOpen, editingRole, permissions, onClose }: Rol
     return acc
   }, {})
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4" onClick={onClose}>
-      <div className="w-full max-w-2xl rounded-2xl bg-bg-card border border-border/50 shadow-2xl flex flex-col overflow-hidden max-h-[85vh]" onClick={e => e.stopPropagation()}>
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 px-4 py-6" onClick={onClose}>
+      <div className="w-full max-w-2xl rounded-2xl bg-bg-card border border-gray-150 dark:border-border/50 shadow-2xl flex flex-col overflow-hidden max-h-[90vh] animate-scaleIn" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-border/15 shrink-0">
           <div className="flex items-center gap-2">
@@ -200,5 +201,5 @@ export function RoleFormModal({ isOpen, editingRole, permissions, onClose }: Rol
         </div>
       </div>
     </div>
-  )
+  , document.body)
 }

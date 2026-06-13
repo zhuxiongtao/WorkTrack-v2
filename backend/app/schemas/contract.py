@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ContractCreate(BaseModel):
@@ -36,6 +36,8 @@ class ContractUpdate(BaseModel):
 
 
 class ContractOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     user_id: int
     customer_id: int
@@ -56,7 +58,27 @@ class ContractOut(BaseModel):
     payment_terms: Optional[str] = None
     key_clauses: Optional[str] = None
     summary: Optional[str] = None
+    raw_text: Optional[str] = None
     status: str
     remarks: Optional[str] = None
+
+    # 阶段 1+2 业务字段
+    contract_type: str = ""
+    effective_term: str = ""
+    auto_renew: str = ""
+    penalty_clause: str = ""
+    acceptance_terms: str = ""
+    payment_schedule: str = ""
+    ip_clause: str = ""
+    dispute_resolution: str = ""
+    governing_law: str = ""
+    notice_clause: str = ""
+
+    # 解析元数据
+    parse_status: str = "pending"
+    parse_error: str = ""
+    parsed_at: Optional[datetime] = None
+    extraction_meta: str = ""
+
     created_at: datetime
     updated_at: datetime

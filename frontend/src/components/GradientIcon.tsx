@@ -95,50 +95,47 @@ export function SidebarIcon({
   gradientFrom,
   gradientTo,
   isActive = false,
+  size = 20,
 }: {
   icon: LucideIcon
   gradientFrom?: string
   gradientTo?: string
   isActive?: boolean
+  size?: number
 }) {
+  const iconSize = Math.max(9, Math.round(size * 0.6))
   return (
     <div className="relative">
-      {/* 背景光晕（激活状态） */}
-      {isActive && (
-        <div
-          className="absolute inset-0 rounded-lg blur-lg opacity-30"
-          style={{
-            background: `linear-gradient(135deg, ${gradientFrom || '#3B82F6'} 0%, ${gradientTo || '#60A5FA'} 100%)`,
-          }}
-        />
-      )}
       {/* 图标容器 */}
       <div
-        className="relative flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200 group-hover:scale-105"
+        className="relative flex items-center justify-center rounded transition-all duration-200 group-hover:scale-105"
         style={{
+          width: size,
+          height: size,
           background: isActive
-            ? `linear-gradient(135deg, ${gradientFrom || '#3B82F6'} 0%, ${gradientTo || '#60A5FA'} 100%)`
-            : `linear-gradient(135deg, ${gradientFrom || '#3B82F6'}22 0%, ${gradientTo || '#60A5FA'}22 100%)`,
+            ? (gradientFrom || '#3B82F6')
+            : (gradientFrom || '#3B82F6') + 'CC',
           boxShadow: isActive
-            ? `0 2px 8px ${gradientFrom || '#3B82F6'}40, inset 0 1px 1px rgba(255, 255, 255, 0.2)`
-            : 'inset 0 1px 1px rgba(255, 255, 255, 0.05)',
-          border: isActive ? 'none' : '1px solid rgba(255, 255, 255, 0.08)',
+            ? `0 2px 6px ${gradientFrom || '#3B82F6'}55, inset 0 1px 1px rgba(255, 255, 255, 0.25), inset 0 -1px 2px rgba(0, 0, 0, 0.15)`
+            : `0 1px 2px ${gradientFrom || '#3B82F6'}30`,
         }}
       >
-        {/* 高光 */}
+        {/* 顶部高光 */}
         <div
-          className="absolute inset-0 rounded-lg"
+          className="pointer-events-none absolute inset-0 rounded"
           style={{
-            background: 'linear-gradient(180deg, rgba(255,255,255,0.2) 0%, transparent 60%)',
+            background: isActive
+              ? 'linear-gradient(180deg, rgba(255,255,255,0.22) 0%, transparent 55%)'
+              : 'linear-gradient(180deg, rgba(255,255,255,0.18) 0%, transparent 55%)',
           }}
         />
         {/* 图标 */}
         <Icon
-          size={16}
-          className="relative z-10 transition-colors duration-200"
+          size={iconSize}
+          className="relative z-10"
           style={{
-            color: isActive ? '#fff' : gradientFrom || '#3B82F6',
-            filter: isActive ? 'drop-shadow(0 1px 2px rgba(0,0,0,0.2))' : 'none',
+            color: '#ffffff',
+            filter: isActive ? 'drop-shadow(0 1px 1px rgba(0,0,0,0.2))' : 'drop-shadow(0 1px 1px rgba(0,0,0,0.12))',
           }}
           strokeWidth={isActive ? 2.5 : 2}
         />

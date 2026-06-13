@@ -1,8 +1,9 @@
-import { useState, useCallback, useEffect } from 'react'
-import { X, Save, Loader2, UserPlus, Crown, Sparkles, Users, Eye, EyeOff } from 'lucide-react'
-import { useTheme } from '../../contexts/ThemeContext'
+import { useState, useCallback, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
+import { X, Save, Loader2, UserPlus, Crown, Sparkles, Users, Eye, EyeOff, Check, ChevronRight, ChevronLeft, Mail, AtSign, Briefcase, Building2, UserCheck, ShieldCheck, Lock, AlertCircle } from 'lucide-react'
 import { useToast } from '../../contexts/ToastContext'
 import type { UserData } from '../../services/types'
+import SearchableSelect from '../SearchableSelect'
 import {
   useCreateUserMutation,
   useUpdateUserMutation,
@@ -16,8 +17,41 @@ interface UserFormModalProps {
   onClose: () => void
 }
 
+type StepKey = 'basics' | 'org' | 'privileges'
+
+const STEPS: { key: StepKey; label: string; icon: typeof Mail; tone: string }[] = [
+  { key: 'basics',     label: '基础信息', icon: Mail,      tone: 'blue'   },
+  { key: 'org',        label: '组织架构', icon: Building2, tone: 'cyan'   },
+  { key: 'privileges', label: '系统特权', icon: ShieldCheck, tone: 'amber' },
+]
+
+// 密码强度评估
+function evaluatePassword(pwd: string): { score: 0 | 1 | 2 | 3 | 4; label: string; tone: 'red' | 'orange' | 'amber' | 'emerald' | 'gray'; checks: { label: string; pass: boolean }[] } {
+  const checks = [
+    { label: '至少 8 位',        pass: pwd.length >= 8 },
+    { label: '包含字母',         pass: /[A-Za-z]/.test(pwd) },
+    { label: '包含数字',         pass: /\d/.test(pwd) },
+    { label: '字母 + 数字组合',  pass: /[A-Za-z]/.test(pwd) && /\d/.test(pwd) },
+  ]
+  const passed = checks.filter(c => c.pass).length
+  if (!pwd) return { score: 0, label: '请输入密码', tone: 'gray', checks }
+  if (passed < 2) return { score: 1, label: '弱', tone: 'red', checks }
+  if (passed < 3) return { score: 2, label: '一般', tone: 'orange', checks }
+  if (passed < 4) return { score: 3, label: '良好', tone: 'amber', checks }
+  return { score: 4, label: '很强', tone: 'emerald', checks }
+}
+
+const TONE_BG: Record<string, string> = {
+  blue:   'bg-accent-blue',
+  cyan:   'bg-cyan-500',
+  amber:  'bg-amber-500',
+  red:    'bg-red-500',
+  orange: 'bg-orange-500',
+  emerald: 'bg-emerald-500',
+  gray:   'bg-gray-400',
+}
+
 export function UserFormModal({ isOpen, editingUser, onClose }: UserFormModalProps) {
-  const { theme } = useTheme()
   const { toast: showToast } = useToast()
 
   const [form, setForm] = useState(() => ({
@@ -33,6 +67,8 @@ export function UserFormModal({ isOpen, editingUser, onClose }: UserFormModalPro
     job_title: editingUser?.job_title ?? null as string | null,
   }))
   const [showPassword, setShowPassword] = useState(false)
+  const [step, setStep] = useState<StepKey>('basics')
+  const [leaderManuallyEdited, setLeaderManuallyEdited] = useState(false)
 
   // 打开弹窗或切换编辑对象时重置表单
   useEffect(() => {
@@ -50,6 +86,8 @@ export function UserFormModal({ isOpen, editingUser, onClose }: UserFormModalPro
         job_title: editingUser?.job_title ?? null as string | null,
       })
       setShowPassword(false)
+      setStep('basics')
+      setLeaderManuallyEdited(false)
     }
   }, [isOpen, editingUser])
 
@@ -62,14 +100,12 @@ export function UserFormModal({ isOpen, editingUser, onClose }: UserFormModalPro
   // 选择部门后自动推断汇报上级
   useEffect(() => {
     if (!form.department_id || departments.length === 0) return
-
-    // 仅当部门发生了变化（非初始加载）时才自动推断
+    if (leaderManuallyEdited) return
     if (editingUser && form.department_id === editingUser.department_id) return
 
     const dept = departments.find(d => d.id === form.department_id)
     if (!dept?.manager_id) return
 
-    // 如果用户本人就是该部门的负责人，查找上级部门的负责人
     if (editingUser && editingUser.id === dept.manager_id && dept.parent_id) {
       const parentDept = departments.find(d => d.id === dept.parent_id)
       if (parentDept?.manager_id) {
@@ -77,18 +113,34 @@ export function UserFormModal({ isOpen, editingUser, onClose }: UserFormModalPro
         return
       }
     }
-
-    // 默认：汇报给本部门负责人
     if (!(editingUser && editingUser.id === dept.manager_id)) {
       setForm(prev => ({ ...prev, leader_id: dept.manager_id }))
     }
-  }, [form.department_id, departments, editingUser])
+  }, [form.department_id, departments, editingUser, leaderManuallyEdited])
 
-  const handleSave = async () => {
-    if (!form.username.trim()) { showToast('用户名不能为空', 'warning'); return }
-    if (!form.email.trim()) { showToast('电子邮箱不能为空', 'warning'); return }
+  // 当前密码强度（仅创建用户时计算）
+  const pwdEval = useMemo(() => evaluatePassword(form.password), [form.password])
+  const pwdValid = editingUser || (pwdEval.score >= 3) // 至少"良好"
+
+  // 基础信息校验
+  const basicsValid = useMemo(() => {
+    if (!form.username.trim()) return false
+    if (!form.email.trim()) return false
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(form.email.trim())) { showToast('请输入有效的电子邮箱地址', 'warning'); return }
+    if (!emailRegex.test(form.email.trim())) return false
+    if (!editingUser && !pwdValid) return false
+    return true
+  }, [form.username, form.email, pwdValid, editingUser])
+
+  const canEnterOrg = basicsValid
+  const canEnterPrivileges = canEnterOrg
+
+  const handleSave = useCallback(async () => {
+    if (!form.username.trim()) { showToast('用户名不能为空', 'warning'); setStep('basics'); return }
+    if (!form.email.trim()) { showToast('电子邮箱不能为空', 'warning'); setStep('basics'); return }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(form.email.trim())) { showToast('请输入有效的电子邮箱地址', 'warning'); setStep('basics'); return }
+    if (!editingUser && !pwdValid) { showToast('请设置一个强密码（至少 8 位且含字母数字）', 'warning'); setStep('basics'); return }
 
     if (editingUser) {
       updateMutation.mutate({
@@ -106,7 +158,6 @@ export function UserFormModal({ isOpen, editingUser, onClose }: UserFormModalPro
         },
       }, { onSuccess: onClose })
     } else {
-      if (!form.password.trim()) { showToast('请输入初始密码', 'warning'); return }
       createMutation.mutate({
         username: form.username,
         password: form.password,
@@ -120,199 +171,402 @@ export function UserFormModal({ isOpen, editingUser, onClose }: UserFormModalPro
         job_title: form.job_title,
       }, { onSuccess: onClose })
     }
-  }
+  }, [form, editingUser, pwdValid, updateMutation, createMutation, showToast, onClose])
 
   const updateFormField = useCallback(<K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
     setForm(prev => ({ ...prev, [key]: value }))
   }, [])
 
+  const goNext = () => {
+    if (step === 'basics' && canEnterOrg) setStep('org')
+    else if (step === 'org' && canEnterPrivileges) setStep('privileges')
+  }
+  const goPrev = () => {
+    if (step === 'privileges') setStep('org')
+    else if (step === 'org') setStep('basics')
+  }
+
   if (!isOpen) return null
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-2xl bg-bg-card border border-gray-150 dark:border-border/50 shadow-2xl flex flex-col overflow-hidden max-h-[90vh] animate-scaleIn" onClick={e => e.stopPropagation()}>
+  const currentStepIndex = STEPS.findIndex(s => s.key === step)
+
+  // 挂载到 document.body 避免被父元素的 overflow / transform 限制
+  // z-[100] 高于应用全局遮罩 (z-40) 与抽屉 (z-30)，并避免被页面内任何 stacking context 影响
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 px-4 py-6" onClick={onClose}>
+      <div className="w-full max-w-xl max-h-[90vh] rounded-2xl bg-bg-card border border-gray-150 dark:border-border/50 shadow-2xl flex flex-col overflow-hidden animate-scaleIn" onClick={e => e.stopPropagation()}>
         {/* 头部 */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-border/15 shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-accent-blue/10 flex items-center justify-center text-accent-blue">
-              <UserPlus size={16} />
+        <div className="px-6 pt-4 pb-3 border-b border-gray-200 dark:border-border/15 shrink-0">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-accent-blue flex items-center justify-center text-[#fff] shadow-sm shrink-0">
+                <UserPlus size={17} />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 truncate">{editingUser ? '编辑用户资料' : '录入新系统成员'}</h3>
+                <p className="text-[11px] text-gray-500 dark:text-gray-500 mt-0.5 truncate">
+                  {editingUser ? '修改成员的账号、组织、权限信息' : '按步骤完成账号创建，标 * 为必填'}
+                </p>
+              </div>
             </div>
-            <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">{editingUser ? '编辑用户资料' : '录入新系统成员'}</h3>
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-bg-hover text-gray-500 hover:text-gray-900 dark:hover:text-gray-200 transition-colors cursor-pointer shrink-0"><X size={16} /></button>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-bg-hover text-gray-500 hover:text-gray-900 dark:hover:text-gray-200 transition-colors cursor-pointer"><X size={16} /></button>
+
+          {/* 步骤指示器：单行紧密排列，无右箭头，激活步用进度条样式 */}
+          <div className="mt-3 flex items-stretch gap-1">
+            {STEPS.map((s, i) => {
+              const Icon = s.icon
+              const active = s.key === step
+              const done = i < currentStepIndex
+              return (
+                <div key={s.key} className="flex-1 flex flex-col gap-1 min-w-0">
+                  <div className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-bold transition-colors truncate ${
+                    active ? `${TONE_BG[s.tone]} text-[#fff] shadow-sm` :
+                    done ? 'bg-emerald-500/10 text-emerald-500' :
+                    'bg-gray-100 dark:bg-bg-hover/40 text-gray-400 dark:text-gray-500'
+                  }`}>
+                    {done ? <Check size={11} strokeWidth={3} /> : <Icon size={11} />}
+                    <span className="truncate">{s.label}</span>
+                  </div>
+                  {/* 进度条：已完成/当前步填充 */}
+                  <div className="h-0.5 rounded-full bg-gray-100 dark:bg-bg-hover/40 overflow-hidden">
+                    <div className={`h-full transition-all ${
+                      done ? 'w-full bg-emerald-500' :
+                      active ? 'w-1/2 bg-accent-blue' :
+                      'w-0'
+                    }`} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
 
         {/* 表单体 */}
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
-          {/* 基础属性 */}
-          <div className="space-y-4">
-            <span className="text-[11px] font-bold tracking-wider text-gray-400 dark:text-gray-500 uppercase flex items-center gap-1.5 mb-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-accent-blue" />
-              基础属性与凭证
-            </span>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1.5">登录用户名 *</label>
-                <input
-                  value={form.username}
-                  onChange={e => updateFormField('username', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-sm text-gray-800 dark:text-gray-100 outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all placeholder-gray-400 dark:placeholder-gray-600 font-medium font-mono"
-                  placeholder="e.g. zhangsan (登录时使用)"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1.5">显示名称/真实昵称</label>
-                <input
-                  value={form.name}
-                  onChange={e => updateFormField('name', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-sm text-gray-800 dark:text-gray-100 outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all placeholder-gray-400 dark:placeholder-gray-600 font-medium"
-                  placeholder="e.g. 张三 (系统内显示)"
-                />
-              </div>
-            </div>
+          {step === 'basics' && (
+            <div className="space-y-5 animate-fadeIn">
+              <SectionTitle icon={Mail} title="账号凭证" subtitle="用于登录系统" />
 
-            {!editingUser && (
-              <div className="relative">
-                <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1.5">初始密码 *</label>
-                <div className="relative">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField label="登录用户名" required icon={AtSign} hint="登录时使用，保存后不可修改">
                   <input
-                    type={showPassword ? "text" : "password"}
-                    value={form.password}
-                    onChange={e => updateFormField('password', e.target.value)}
-                    className="w-full pl-3.5 pr-10 py-2.5 rounded-xl bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-sm text-gray-800 dark:text-gray-100 outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all placeholder-gray-400 dark:placeholder-gray-600 font-medium font-mono"
-                    placeholder="最少 8 位，须含字母和数字组合"
+                    value={form.username}
+                    onChange={e => updateFormField('username', e.target.value)}
+                    className="form-input font-mono"
+                    placeholder="e.g. zhangsan"
+                    autoFocus
                   />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 flex items-center pr-3 hover:text-gray-800 dark:hover:text-gray-200 text-gray-400 cursor-pointer">
-                    {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                  </button>
-                </div>
+                </FormField>
+                <FormField label="显示名称" icon={UserCheck} hint="系统内显示的姓名">
+                  <input
+                    value={form.name}
+                    onChange={e => updateFormField('name', e.target.value)}
+                    className="form-input"
+                    placeholder="e.g. 张三"
+                  />
+                </FormField>
               </div>
-            )}
 
-            <div>
-              <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1.5">系统电子邮箱 *</label>
-              <input
-                type="email"
-                value={form.email}
-                onChange={e => updateFormField('email', e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-sm text-gray-800 dark:text-gray-100 outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all placeholder-gray-400 dark:placeholder-gray-600 font-medium font-mono"
-                placeholder="e.g. example@worktrack.com (必填)"
-              />
-            </div>
+              {!editingUser && (
+                <FormField label="初始密码" required icon={Lock} hint="用户首次登录后可自行修改">
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={form.password}
+                      onChange={e => updateFormField('password', e.target.value)}
+                      className="form-input pr-10 font-mono"
+                      placeholder="至少 8 位，包含字母和数字"
+                    />
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 flex items-center pr-3 hover:text-gray-800 dark:hover:text-gray-200 text-gray-400 cursor-pointer">
+                      {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                  </div>
+                  {/* 强度计 */}
+                  {form.password && (
+                    <div className="mt-2 space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-1 rounded-full bg-gray-200 dark:bg-bg-hover/40 overflow-hidden flex gap-0.5">
+                          {[1, 2, 3, 4].map(i => (
+                            <div
+                              key={i}
+                              className={`flex-1 rounded-full transition-colors ${
+                                pwdEval.score >= i ? TONE_BG[pwdEval.tone] : 'bg-transparent'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        <span className={`text-[10px] font-bold ${pwdEval.tone === 'red' ? 'text-red-500' : pwdEval.tone === 'orange' ? 'text-orange-500' : pwdEval.tone === 'amber' ? 'text-amber-500' : 'text-emerald-500'}`}>
+                          {pwdEval.label}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                        {pwdEval.checks.map((c, i) => (
+                          <div key={i} className={`flex items-center gap-1 text-[10px] ${c.pass ? 'text-emerald-500' : 'text-gray-400 dark:text-gray-600'}`}>
+                            {c.pass ? <Check size={9} strokeWidth={3} /> : <span className="w-[9px] h-[9px] rounded-full border border-gray-300 dark:border-gray-700" />}
+                            <span>{c.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </FormField>
+              )}
 
-            {/* 组织架构与汇报线上级 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1.5">所属组织部门</label>
-                <select
-                  value={form.department_id || 0}
-                  onChange={e => updateFormField('department_id', parseInt(e.target.value, 10) || null)}
-                  style={{ colorScheme: theme }}
-                  className="w-full h-10 px-3.5 rounded-xl bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-xs text-gray-700 dark:text-gray-200 outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 cursor-pointer font-bold font-sans"
-                >
-                  <option value={0} className="bg-white dark:bg-bg-input text-gray-800 dark:text-gray-200">无部门 (未分配)</option>
-                  {departments.map(d => {
-                    const mgrName = d.manager_id ? allUsers.find(u => u.id === d.manager_id)?.name || '未知' : null
-                    return (
-                      <option key={d.id} value={d.id} className="bg-white dark:bg-bg-input text-gray-800 dark:text-gray-200">
-                        {d.name}{mgrName ? ` — 负责人: ${mgrName}` : ''}
-                      </option>
-                    )
-                  })}
-                </select>
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1.5">汇报上级领导</label>
-                {form.leader_id ? (
-                  <div className="w-full h-10 px-3.5 rounded-xl bg-gray-50 dark:bg-bg-hover/20 border border-gray-200 dark:border-border/60 text-xs text-gray-700 dark:text-gray-200 flex items-center font-bold font-sans">
-                    {(() => {
-                      const leader = allUsers.find(u => u.id === form.leader_id)
-                      return leader ? `${leader.name || leader.username} (@${leader.username})` : '未知'
-                    })()}
-                    <span className="ml-2 text-[10px] text-gray-400 dark:text-gray-500 font-normal">由所属部门自动推断</span>
-                  </div>
-                ) : (
-                  <div className="w-full h-10 px-3.5 rounded-xl bg-gray-50 dark:bg-bg-hover/20 border border-gray-200 dark:border-border/60 text-xs text-gray-400 dark:text-gray-500 flex items-center font-sans">
-                    未指定部门或该部门暂无负责人
-                  </div>
+              <FormField label="系统电子邮箱" required icon={Mail}>
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={e => updateFormField('email', e.target.value)}
+                  className={`form-input font-mono ${form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()) ? 'border-red-400 focus:border-red-400 focus:ring-red-400/15' : ''}`}
+                  placeholder="e.g. zhangsan@worktrack.com"
+                />
+                {form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()) && (
+                  <p className="text-[10px] text-red-500 mt-1 flex items-center gap-1"><AlertCircle size={10} /> 邮箱格式不正确</p>
                 )}
+              </FormField>
+            </div>
+          )}
+
+          {step === 'org' && (
+            <div className="space-y-5 animate-fadeIn">
+              <SectionTitle icon={Building2} title="组织架构" subtitle="将成员归属到部门和汇报上级" />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField label="所属组织部门" icon={Building2} hint="选择后将自动推荐部门负责人为汇报上级">
+                  <SearchableSelect
+                    options={[
+                      { id: 0, label: '暂不分配部门' },
+                      ...departments.map(d => {
+                        const mgrName = d.manager_id ? allUsers.find(u => u.id === d.manager_id)?.name || '未知' : null
+                        return {
+                          id: d.id,
+                          label: d.name,
+                          sub: mgrName ? `负责人: ${mgrName}` : '暂未指定负责人',
+                        }
+                      }),
+                    ]}
+                    value={form.department_id || 0}
+                    onChange={(v) => updateFormField('department_id', (v as number) || null)}
+                    placeholder="选择所属部门"
+                    searchPlaceholder="搜索部门名称..."
+                    emptyText="没有匹配部门"
+                  />
+                </FormField>
+
+                <FormField label="汇报上级领导" icon={UserCheck} hint={form.leader_id ? '由部门自动推断，可手动调整' : '选择部门后将自动推荐'}>
+                  <SearchableSelect
+                    options={[
+                      { id: 0, label: '暂不指定' },
+                      ...allUsers
+                        .filter(u => u.id !== editingUser?.id && u.is_active)
+                        .map(u => ({
+                          id: u.id,
+                          label: u.name || u.username,
+                          sub: `@${u.username}`,
+                        })),
+                    ]}
+                    value={form.leader_id || 0}
+                    onChange={(v) => {
+                      setLeaderManuallyEdited(true)
+                      updateFormField('leader_id', (v as number) || null)
+                    }}
+                    placeholder={allUsers.length === 0 ? '暂无可选成员' : '选择汇报上级'}
+                    searchPlaceholder="按姓名 / 用户名搜索..."
+                    emptyText="没有匹配成员"
+                  />
+                </FormField>
+              </div>
+
+              <FormField label="职位名称" icon={Briefcase} hint="可选，便于在组织架构中识别">
+                <input
+                  value={form.job_title ?? ''}
+                  onChange={e => updateFormField('job_title', e.target.value || null)}
+                  className="form-input"
+                  placeholder="e.g. 前端开发工程师"
+                />
+              </FormField>
+
+              {/* 预览卡片 */}
+              <div className="rounded-xl bg-gradient-to-br from-blue-50 to-cyan-50/50 dark:from-accent-blue/5 dark:to-cyan-500/5 border border-blue-100 dark:border-accent-blue/15 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-7 h-7 rounded-full bg-accent-blue/15 flex items-center justify-center text-accent-blue text-xs font-bold">
+                    {(form.name || form.username || '?').charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
+                      {form.name || form.username || '新成员'} <span className="text-gray-400 dark:text-gray-500 font-mono font-normal">@{form.username || '未命名'}</span>
+                    </div>
+                    <div className="text-[10px] text-gray-500 dark:text-gray-500 truncate">
+                      {form.job_title || '未指定职位'} · {form.email || '未填写邮箱'}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 text-[10px] text-gray-500 dark:text-gray-500 mt-3 pt-3 border-t border-blue-100 dark:border-accent-blue/10">
+                  <div className="flex items-center gap-1">
+                    <Building2 size={10} />
+                    <span>{departments.find(d => d.id === form.department_id)?.name || '未分配部门'}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <UserCheck size={10} />
+                    <span>{allUsers.find(u => u.id === form.leader_id)?.name || '未指定上级'}</span>
+                  </div>
+                </div>
               </div>
             </div>
+          )}
 
-            {/* 职位 */}
-            <div>
-              <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1.5">职位名称</label>
-              <input
-                value={form.job_title ?? ''}
-                onChange={e => updateFormField('job_title', e.target.value || null)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-sm text-gray-800 dark:text-gray-100 outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all placeholder-gray-400 dark:placeholder-gray-600 font-medium"
-                placeholder="e.g. 前端开发工程师"
-              />
-            </div>
-          </div>
+          {step === 'privileges' && (
+            <div className="space-y-5 animate-fadeIn">
+              <SectionTitle icon={ShieldCheck} title="系统特权" subtitle="高级权限，谨慎分配" />
 
-          {/* 系统特权与 AI 权限 */}
-          <div className="pt-4 border-t border-gray-200 dark:border-border/10 space-y-4">
-            <span className="text-[11px] font-bold tracking-wider text-gray-400 dark:text-gray-500 uppercase flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-              系统特权与 AI 权限定制
-            </span>
-
-            <div className="space-y-3">
-              {/* is_admin */}
-              <div className="flex items-start justify-between p-4 rounded-xl bg-gray-50 dark:bg-bg-hover/10 border border-gray-150 dark:border-border/20 transition-all hover:bg-gray-100/50 dark:hover:bg-bg-hover/20 shadow-sm">
-                <div className="min-w-0 pr-4">
-                  <span className="text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
-                    <Crown size={12} className="text-amber-500" /> 设置为系统超级管理员
-                  </span>
-                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1 leading-relaxed">允许该用户拥有系统后台最高管理特权。</p>
-                </div>
-                <button type="button" onClick={() => updateFormField('is_admin', !form.is_admin)}
-                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ${form.is_admin ? 'bg-accent-blue' : 'bg-gray-300 dark:bg-gray-750'}`}>
-                  <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition duration-200 ${form.is_admin ? 'translate-x-4' : 'translate-x-0'}`} />
-                </button>
+              <div className="rounded-xl bg-amber-50 dark:bg-amber-500/5 border border-amber-200 dark:border-amber-500/20 p-3 flex items-start gap-2">
+                <AlertCircle size={13} className="text-amber-500 mt-0.5 shrink-0" />
+                <p className="text-[11px] text-amber-700 dark:text-amber-300/80 leading-relaxed">
+                  以下三项是高敏感度权限。普通成员只需要有「角色」即可使用系统功能，无需在此开启任何项。
+                </p>
               </div>
 
-              {/* can_manage_models */}
-              <div className="flex items-start justify-between p-4 rounded-xl bg-gray-50 dark:bg-bg-hover/10 border border-gray-150 dark:border-border/20 transition-all hover:bg-gray-100/50 dark:hover:bg-bg-hover/20 shadow-sm">
-                <div className="min-w-0 pr-4">
-                  <span className="text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
-                    <Sparkles size={12} className="text-blue-500 dark:text-blue-400" /> 允许用户自主管理 AI 模型供应商
-                  </span>
-                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1 leading-relaxed">赋予用户独立配置专属 OpenAI / DeepSeek API 密钥和专有模型方案的能力。</p>
-                </div>
-                <button type="button" onClick={() => updateFormField('can_manage_models', !form.can_manage_models)}
-                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ${form.can_manage_models ? 'bg-accent-blue' : 'bg-gray-300 dark:bg-gray-750'}`}>
-                  <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition duration-200 ${form.can_manage_models ? 'translate-x-4' : 'translate-x-0'}`} />
-                </button>
+              <div className="space-y-3">
+                <PrivilegeToggle
+                  icon={Crown}
+                  iconClass="text-amber-500"
+                  title="设为系统超级管理员"
+                  desc="拥有后台全部权限，可管理用户、角色、部门与系统设置。"
+                  checked={form.is_admin}
+                  onChange={v => updateFormField('is_admin', v)}
+                />
+                <PrivilegeToggle
+                  icon={Sparkles}
+                  iconClass="text-blue-500"
+                  title="允许自主管理 AI 模型供应商"
+                  desc="可独立配置 OpenAI / DeepSeek 等 API 密钥与专有模型方案。"
+                  checked={form.can_manage_models}
+                  onChange={v => updateFormField('can_manage_models', v)}
+                />
+                <PrivilegeToggle
+                  icon={Users}
+                  iconClass="text-purple-500"
+                  title="允许调用平台公共共享模型"
+                  desc="无需自行配置 API 密钥，直接使用管理员预置的共享大语言模型。"
+                  checked={form.use_shared_models}
+                  onChange={v => updateFormField('use_shared_models', v)}
+                />
               </div>
 
-              {/* use_shared_models */}
-              <div className="flex items-start justify-between p-4 rounded-xl bg-gray-50 dark:bg-bg-hover/10 border border-gray-150 dark:border-border/20 transition-all hover:bg-gray-100/50 dark:hover:bg-bg-hover/20 shadow-sm">
-                <div className="min-w-0 pr-4">
-                  <span className="text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
-                    <Users size={12} className="text-purple-500 dark:text-purple-400" /> 允许调用系统平台公共共享模型
-                  </span>
-                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1 leading-relaxed">授权后可直接调用管理员配置的平台默认公共共享大语言模型。</p>
+              {/* 角色提示 */}
+              <div className="rounded-xl bg-gray-50 dark:bg-bg-hover/10 border border-gray-200 dark:border-border/20 p-4">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <UserCheck size={12} className="text-accent-blue" />
+                  <span className="text-[11px] font-bold text-gray-700 dark:text-gray-300">关于「角色」</span>
                 </div>
-                <button type="button" onClick={() => updateFormField('use_shared_models', !form.use_shared_models)}
-                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ${form.use_shared_models ? 'bg-accent-blue' : 'bg-gray-300 dark:bg-gray-750'}`}>
-                  <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition duration-200 ${form.use_shared_models ? 'translate-x-4' : 'translate-x-0'}`} />
-                </button>
+                <p className="text-[11px] text-gray-500 dark:text-gray-500 leading-relaxed">
+                  用户的常规功能权限由「角色」统一管理。保存成员后，可在成员列表点行首盾牌图标单独调整其角色（直接分配 + 部门角色取并集）。
+                </p>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* 页脚 */}
-        <div className="px-6 py-4 border-t border-gray-200 dark:border-border/15 shrink-0 bg-gray-50/50 dark:bg-bg-hover/10 flex items-center justify-end gap-2.5">
-          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg bg-bg-hover hover:bg-gray-200 text-xs text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 border border-gray-200 dark:border-border/30 transition-colors cursor-pointer font-semibold shadow-sm">取消</button>
-          <button type="button" onClick={handleSave} disabled={saving} className="px-4 py-2 rounded-lg bg-accent-blue text-white text-xs font-bold hover:bg-blue-600 disabled:opacity-50 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm">
-            {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-            {saving ? '正在保存...' : '保存修改'}
-          </button>
+        <div className="px-6 py-4 border-t border-gray-200 dark:border-border/15 shrink-0 bg-gray-50/50 dark:bg-bg-hover/10 flex items-center justify-between gap-2.5">
+          <div className="text-[11px] text-gray-500 dark:text-gray-500">
+            步骤 {currentStepIndex + 1} / {STEPS.length}
+          </div>
+          <div className="flex items-center gap-2">
+            {step !== 'basics' && (
+              <button type="button" onClick={goPrev} className="px-3.5 py-2 rounded-lg bg-bg-card hover:bg-gray-100 dark:hover:bg-bg-hover text-xs text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-border/30 transition-colors cursor-pointer font-semibold flex items-center gap-1 shadow-sm">
+                <ChevronLeft size={13} /> 上一步
+              </button>
+            )}
+            <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg bg-bg-card hover:bg-gray-100 dark:hover:bg-bg-hover text-xs text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-border/30 transition-colors cursor-pointer font-semibold shadow-sm">取消</button>
+            {step !== 'privileges' ? (
+              <button
+                type="button"
+                onClick={goNext}
+                disabled={(step === 'basics' && !canEnterOrg) || (step === 'org' && !canEnterPrivileges)}
+                className="px-4 py-2 rounded-lg bg-accent-blue text-[#fff] text-xs font-bold hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+              >
+                下一步 <ChevronRight size={13} />
+              </button>
+            ) : (
+              <button type="button" onClick={handleSave} disabled={saving} className="px-4 py-2 rounded-lg bg-accent-blue text-[#fff] text-xs font-bold hover:bg-blue-600 disabled:opacity-50 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm">
+                {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                {saving ? '正在保存...' : '保存成员'}
+              </button>
+            )}
+          </div>
         </div>
       </div>
+    </div>,
+    document.body
+  )
+}
+
+// === 内部小组件 ===
+
+function SectionTitle({ icon: Icon, title, subtitle }: { icon: typeof Mail; title: string; subtitle?: string }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <div className="w-7 h-7 rounded-lg bg-accent-blue/10 flex items-center justify-center text-accent-blue">
+        <Icon size={14} />
+      </div>
+      <div>
+        <h4 className="text-sm font-bold text-gray-900 dark:text-gray-100">{title}</h4>
+        {subtitle && <p className="text-[11px] text-gray-500 dark:text-gray-500 mt-0.5">{subtitle}</p>}
+      </div>
+    </div>
+  )
+}
+
+function FormField({
+  label, required, icon: Icon, hint, children,
+}: {
+  label: string; required?: boolean; icon?: typeof Mail; hint?: string; children: React.ReactNode
+}) {
+  return (
+    <div>
+      <label className="flex items-center gap-1.5 mb-1.5">
+        {Icon && <Icon size={11} className="text-gray-400 dark:text-gray-500" />}
+        <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-400">
+          {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+        </span>
+      </label>
+      {children}
+      {hint && <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1.5 leading-relaxed">{hint}</p>}
+    </div>
+  )
+}
+
+function PrivilegeToggle({
+  icon: Icon, iconClass, title, desc, checked, onChange,
+}: {
+  icon: typeof Crown; iconClass: string; title: string; desc: string; checked: boolean; onChange: (v: boolean) => void
+}) {
+  return (
+    <div className={`flex items-start justify-between p-4 rounded-xl border transition-all ${
+      checked
+        ? 'bg-accent-blue/5 border-accent-blue/30 shadow-sm'
+        : 'bg-bg-card border-gray-200 dark:border-border/30 hover:bg-gray-50/50 dark:hover:bg-bg-hover/20'
+    }`}>
+      <div className="min-w-0 pr-4 flex items-start gap-2.5">
+        <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${checked ? 'bg-accent-blue/15' : 'bg-gray-100 dark:bg-bg-hover/40'}`}>
+          <Icon size={14} className={iconClass} />
+        </div>
+        <div className="min-w-0">
+          <span className="text-xs font-bold text-gray-800 dark:text-gray-200 block">{title}</span>
+          <p className="text-[10px] text-gray-500 dark:text-gray-500 mt-0.5 leading-relaxed">{desc}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={() => onChange(!checked)}
+        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ${
+          checked ? 'bg-accent-blue' : 'bg-gray-300 dark:bg-gray-700'
+        }`}
+      >
+        <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition duration-200 ${checked ? 'translate-x-4' : 'translate-x-0'}`} />
+      </button>
     </div>
   )
 }

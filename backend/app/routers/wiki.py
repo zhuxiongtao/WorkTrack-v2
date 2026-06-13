@@ -27,8 +27,10 @@ def _verify_share_access(space: WikiSpace, password: str | None) -> None:
     if space.share_expires_at:
         now = datetime.now(timezone.utc)
         expires = space.share_expires_at
+        # 确保两个时间都是时区感知的
         if expires.tzinfo is None:
             expires = expires.replace(tzinfo=timezone.utc)
+        # 直接比较两个时区感知的时间
         if now > expires:
             raise HTTPException(status_code=status.HTTP_410_GONE, detail="该共享链接已到期失效")
     if space.share_password:
@@ -36,14 +38,12 @@ def _verify_share_access(space: WikiSpace, password: str | None) -> None:
             raise HTTPException(status_code=401, detail="提取密码错误")
 
 def _get_user_permission(target_type: str, target_id: int, user_id: int, db: Session) -> str | None:
-    """查询用户对空间/页面的最高权限。owner 视为 admin"""
-    # 检查是否是空间 owner
+    """查询用户对空间/页面的最高权限。owner 视为 admin，支持部门级权限继承"""
     if target_type == "space":
         space = db.get(WikiSpace, target_id)
         if space and space.owner_id == user_id:
             return "admin"
 
-    # 查显式权限
     perms = db.exec(
         select(WikiPermission).where(
             WikiPermission.target_type == target_type,
@@ -66,6 +66,26 @@ def _get_user_permission(target_type: str, target_id: int, user_id: int, db: Ses
             )
         ).all()
         perms.extend(group_perms)
+
+    # 查所属部门的权限（含父部门继承）
+    user = db.get(User, user_id)
+    if user and user.department_id:
+        from app.models.department import Department
+        dept_id = user.department_id
+        visited = set()
+        while dept_id and dept_id not in visited:
+            visited.add(dept_id)
+            dept_perms = db.exec(
+                select(WikiPermission).where(
+                    WikiPermission.target_type == target_type,
+                    WikiPermission.target_id == target_id,
+                    WikiPermission.subject_type == "department",
+                    WikiPermission.subject_id == dept_id,
+                )
+            ).all()
+            perms.extend(dept_perms)
+            dept = db.get(Department, dept_id)
+            dept_id = dept.parent_id if dept else None
 
     if not perms:
         return None
@@ -610,19 +630,58 @@ def move_page(page_id: int, new_parent_id: int | None = None, new_index: int = 0
 
 # ===================== 权限管理 =====================
 
-@router.get("/spaces/{space_id}/permissions", response_model=list[WikiPermissionOut])
+def _build_permission_out(perm: WikiPermission, db: Session) -> WikiPermissionOut:
+    subject_name = ""
+    subject_username = ""
+    if perm.subject_type == "user":
+        user = db.get(User, perm.subject_id)
+        if user:
+            subject_name = user.name or user.username or ""
+            subject_username = user.username or ""
+    elif perm.subject_type == "group":
+        group = db.get(UserGroup, perm.subject_id)
+        if group:
+            subject_name = group.name
+            subject_username = f"@group_{group.id}"
+    elif perm.subject_type == "department":
+        from app.models.department import Department
+        dept = db.get(Department, perm.subject_id)
+        if dept:
+            subject_name = dept.name
+            subject_username = f"@dept_{dept.id}"
+    return WikiPermissionOut(
+        id=perm.id,
+        target_type=perm.target_type,
+        target_id=perm.target_id,
+        subject_type=perm.subject_type,
+        subject_id=perm.subject_id,
+        permission=perm.permission,
+        subject_name=subject_name,
+        subject_username=subject_username,
+    )
+
+
+def _fill_permissions_list(permissions: list, db: Session) -> list:
+    result = []
+    for perm in permissions:
+        result.append(_build_permission_out(perm, db))
+    return result
+
+
+@router.get("/spaces/{space_id}/permissions")
 def list_space_permissions(space_id: int, current_user: User = Depends(require_permission("wiki:manage_space")), db: Session = Depends(get_session)):
     if not _check_access("space", space_id, current_user.id, db, "admin"):
         raise HTTPException(status_code=403, detail="无权限")
-    return db.exec(
+    permissions = db.exec(
         select(WikiPermission).where(
             WikiPermission.target_type == "space",
             WikiPermission.target_id == space_id,
         )
     ).all()
+    return _fill_permissions_list(permissions, db)
 
 
-@router.post("/spaces/{space_id}/permissions", response_model=WikiPermissionOut, status_code=201)
+@router.post("/spaces/{space_id}/permissions", status_code=201)
 def add_space_permission(space_id: int, data: WikiPermissionCreate,
                           current_user: User = Depends(require_permission("wiki:manage_space")), db: Session = Depends(get_session)):
     if not _check_access("space", space_id, current_user.id, db, "admin"):
@@ -641,7 +700,7 @@ def add_space_permission(space_id: int, data: WikiPermissionCreate,
         db.add(existing)
         db.commit()
         db.refresh(existing)
-        return existing
+        return _build_permission_out(existing, db)
 
     perm = WikiPermission(
         target_type="space", target_id=space_id,
@@ -651,7 +710,7 @@ def add_space_permission(space_id: int, data: WikiPermissionCreate,
     db.add(perm)
     db.commit()
     db.refresh(perm)
-    return perm
+    return _build_permission_out(perm, db)
 
 
 @router.delete("/permissions/{perm_id}", status_code=204)
@@ -874,23 +933,24 @@ def list_public_pages(space_id: int, password: Optional[str] = None, page_id: Op
 
 # ===================== 页面级权限管理 =====================
 
-@router.get("/pages/{page_id}/permissions", response_model=list[WikiPermissionOut])
+@router.get("/pages/{page_id}/permissions")
 def list_page_permissions(page_id: int, current_user: User = Depends(require_permission("wiki:manage_space")), db: Session = Depends(get_session)):
-    """获取具体某个页面的独立协作者权限列表"""
     page = db.get(WikiPage, page_id)
     if not page:
         raise HTTPException(status_code=404, detail="页面不存在")
     if not _check_access("space", page.space_id, current_user.id, db, "admin") and page.created_by != current_user.id:
         raise HTTPException(status_code=403, detail="无权限查看页面权限")
-    return db.exec(
+    permissions = db.exec(
         select(WikiPermission).where(
             WikiPermission.target_type == "page",
             WikiPermission.target_id == page_id,
         )
     ).all()
+    result = _fill_permissions_list(permissions, db)
+    return result
 
 
-@router.post("/pages/{page_id}/permissions", response_model=WikiPermissionOut, status_code=201)
+@router.post("/pages/{page_id}/permissions", status_code=201)
 def add_page_permission(page_id: int, data: WikiPermissionCreate,
                           current_user: User = Depends(require_permission("wiki:manage_space")), db: Session = Depends(get_session)):
     """为具体页面添加或修改协作者权限"""
@@ -913,7 +973,7 @@ def add_page_permission(page_id: int, data: WikiPermissionCreate,
         db.add(existing)
         db.commit()
         db.refresh(existing)
-        return existing
+        return _build_permission_out(existing, db)
 
     perm = WikiPermission(
         target_type="page", target_id=page_id,
@@ -923,5 +983,5 @@ def add_page_permission(page_id: int, data: WikiPermissionCreate,
     db.add(perm)
     db.commit()
     db.refresh(perm)
-    return perm
+    return _build_permission_out(perm, db)
 

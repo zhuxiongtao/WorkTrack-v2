@@ -36,3 +36,33 @@ screenshot_*.png
 # Alembic
 backend/alembic/__pycache__/
 backend/alembic/versions/__pycache__/
+
+# 本地服务日志（nssm 启动 frpc / backend / frontend 生成）
+backend/service.out.log
+backend/service.err.log
+frontend/service.out.log
+frontend/service.err.log
+
+# 本地 PostgreSQL 临时文件
+backend/.pgport
+
+# 同事调试 / 一次性脚本（不进仓库）
+backend/_*.py
+backend/test_*.py
+backend/diag*.py
+backend/diag_output.txt
+backend/http_test.py
+backend/check_contract.py
+backend/dump_contract_cfg.py
+backend/find_braces.py
+backend/verify_contract_parse.py
+backend/test_feed.xml
+backend/test_logo_*.ico
+backend/test_logo_*.png
+*.ico
+backend/openapi.json
+consistency_report.json
+backend/test_reparse_api.py
+
+# Trae IDE 本地数据
+.trae/

@@ -2,8 +2,10 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import {
   LayoutGrid, Users, Briefcase, Calendar, FileText, ChevronRight, ChevronDown,
-  BarChart3, TrendingUp, Clock, Search, User, X
+  BarChart3, TrendingUp, Clock, Search, User, X, type LucideIcon
 } from 'lucide-react'
+import { IconBox } from '../components/design-system'
+import type { Tone } from '../theme/tokens'
 
 interface DeptNode {
   id: number
@@ -184,12 +186,10 @@ export default function ConsolePage() {
   }
 
   // 统计卡片
-  const StatCard = ({ icon: Icon, label, value, color }: { icon: any; label: string; value: number; color: string }) => (
+  const StatCard = ({ icon: Icon, label, value, tone }: { icon: LucideIcon; label: string; value: number; tone: Tone }) => (
     <div className="bg-bg-card border border-border rounded-xl p-4 max-md:p-3">
       <div className="flex items-center gap-3 max-md:gap-2">
-        <div className={`w-10 h-10 max-md:w-8 max-md:h-8 rounded-lg flex items-center justify-center ${color}`}>
-          <Icon size={20} className="text-white max-md:size-4" />
-        </div>
+        <IconBox icon={Icon} size="md" tone={tone} variant="solid" />
         <div>
           <div className="text-2xl max-md:text-xl font-bold text-white">{value}</div>
           <div className="text-xs max-md:text-[10px] text-gray-500">{label}</div>
@@ -257,10 +257,10 @@ export default function ConsolePage() {
       {/* 左侧面板：部门树 */}
       <div className="w-64 max-md:hidden shrink-0 bg-bg-card border-r border-border flex flex-col">
         <div className="p-4 border-b border-border">
-          <h2 className="text-sm font-medium text-white flex items-center gap-2">
-            <LayoutGrid size={16} className="text-rose-500" />
-            管理总览
-          </h2>
+          <div className="flex items-center gap-2.5">
+            <IconBox icon={LayoutGrid} size="md" tone="red" variant="solid" />
+            <h2 className="text-sm font-medium text-white">管理总览</h2>
+          </div>
         </div>
         
         {/* 搜索框 */}
@@ -312,10 +312,10 @@ export default function ConsolePage() {
         {/* 顶部统计卡片 */}
         <div className="p-6 max-md:p-4 border-b border-border">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-md:gap-3">
-            <StatCard icon={FileText} label="本周日报" value={overview?.stats.reports_this_week || 0} color="bg-green-500" />
-            <StatCard icon={Briefcase} label="活跃项目" value={overview?.stats.active_projects || 0} color="bg-blue-500" />
-            <StatCard icon={Calendar} label="近期会议" value={overview?.stats.recent_meetings || 0} color="bg-purple-500" />
-            <StatCard icon={Users} label="团队成员" value={overview?.stats.member_count || 0} color="bg-orange-500" />
+            <StatCard icon={FileText}  label="本周日报" value={overview?.stats.reports_this_week || 0} tone="green" />
+            <StatCard icon={Briefcase} label="活跃项目" value={overview?.stats.active_projects || 0} tone="blue" />
+            <StatCard icon={Calendar}  label="近期会议" value={overview?.stats.recent_meetings || 0} tone="purple" />
+            <StatCard icon={Users}     label="团队成员" value={overview?.stats.member_count || 0} tone="orange" />
           </div>
           {overview?.period && (
             <div className="mt-3 text-xs text-gray-500">
