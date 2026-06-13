@@ -1,6 +1,6 @@
 from typing import Optional
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class DataShareCreate(BaseModel):
@@ -12,6 +12,8 @@ class DataShareCreate(BaseModel):
 
 
 class DataShareOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     target_type: str
     target_id: int
@@ -24,15 +26,14 @@ class DataShareOut(BaseModel):
     # 数据摘要（用于列表展示）
     target_title: str = ""
 
-    class Config:
-        from_attributes = True
-
 
 class DataShareCommentCreate(BaseModel):
     content: str
 
 
 class DataShareCommentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     share_id: int
     user_id: int
@@ -40,6 +41,3 @@ class DataShareCommentOut(BaseModel):
     user_avatar: Optional[str] = None
     content: str
     created_at: datetime
-
-    class Config:
-        from_attributes = True

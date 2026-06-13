@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from typing import Optional, Literal
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 VALID_REPORT_STATUSES = ("draft", "submitted")
 

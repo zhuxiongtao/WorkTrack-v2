@@ -21,6 +21,8 @@ class WikiSpaceUpdate(BaseModel):
 
 
 class WikiSpaceOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     name: str
     description: str
@@ -52,6 +54,8 @@ class WikiPageUpdate(BaseModel):
 
 
 class WikiPageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     space_id: int
     parent_id: Optional[int] = None
@@ -91,6 +95,8 @@ class WikiPermissionOut(BaseModel):
     subject_type: str
     subject_id: int
     permission: str
+    subject_name: str = ""
+    subject_username: str = ""
 
 
 class WikiPageVersionOut(BaseModel):
@@ -107,6 +113,8 @@ class WikiUserGroupCreate(BaseModel):
 
 
 class WikiUserGroupOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     name: str
     owner_id: int
