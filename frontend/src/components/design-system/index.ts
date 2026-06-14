@@ -9,6 +9,7 @@ export { StatusBadge } from './StatusBadge'
 export { SectionHeader } from './SectionHeader'
 export { PageHeader } from './PageHeader'
 export { EmptyState } from './EmptyState'
+export { Modal, ModalFooter, SectionLabel, Field } from './Modal'
 export {
   APP_ICONS,
   TASK_GROUP_ICONS,

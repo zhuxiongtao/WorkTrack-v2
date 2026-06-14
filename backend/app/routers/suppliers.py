@@ -8,7 +8,7 @@ from app.models.supplier import Supplier
 from app.models.channel import Channel
 from app.models.project_cost import ProjectCost
 from app.models.project import Project
-from app.models.supplier import SupplierCreate, SupplierUpdate, SupplierOut, SupplierSummary
+from app.schemas.supplier import SupplierCreate, SupplierUpdate, SupplierOut, SupplierSummary
 from app.auth import require_permission
 
 router = APIRouter(prefix="/api/v1/suppliers", tags=["供应商管理"])

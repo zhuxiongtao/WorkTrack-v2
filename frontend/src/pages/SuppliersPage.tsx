@@ -5,7 +5,7 @@ import {
   ChevronRight, BarChart3, Key, Cpu, FileText, AlertTriangle,
   ExternalLink, Network,
 } from 'lucide-react'
-import { PageHeader, IconBox, EmptyState } from '../components/design-system'
+import { PageHeader, IconBox, EmptyState, Modal, ModalFooter, SectionLabel, Field } from '../components/design-system'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
@@ -927,123 +927,114 @@ export default function SuppliersPage() {
         )
       })()}
 
-      {/* 新增/编辑供应商弹窗 */}
+      {/* 新增/编辑供应商弹窗（统一 Modal） */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowForm(false)}>
-          <div className="bg-bg-card rounded-2xl border border-border shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-5" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2.5">
-                <IconBox icon={editingSupplier ? Edit3 : Plus} size="sm" tone="blue" variant="solid" />
-                <h3 className="text-sm font-bold text-white">{editingSupplier ? '编辑供应商' : '新增供应商'}</h3>
-              </div>
-              <button onClick={() => setShowForm(false)} className="p-1 rounded-lg text-gray-500 hover:text-white hover:bg-bg-hover transition-colors"><X size={16} /></button>
-            </div>
-            <div className="space-y-3">
-              {/* 基本信息 */}
-              <div className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-1">基本信息</div>
+        <Modal
+          icon={editingSupplier ? Edit3 : Plus}
+          title={editingSupplier ? '编辑供应商' : '新增供应商'}
+          subtitle="基础信息 · 联系信息 · 商务条款 · 技术对接 一站录入"
+          tone="blue"
+          size="2xl"
+          onClose={() => setShowForm(false)}
+        >
+          <div className="space-y-5">
+            {/* 基本信息 */}
+            <div>
+              <SectionLabel>基本信息</SectionLabel>
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[11px] text-gray-500 mb-1 block">名称 *</label>
-                  <input type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="如 OpenAI" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6] transition-colors" />
-                </div>
-                <div>
-                  <label className="text-[11px] text-gray-500 mb-1 block">简码</label>
-                  <input type="text" value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value }))} placeholder="如 openai" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6] transition-colors" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[11px] text-gray-500 mb-1 block">类型</label>
-                  <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6]">
+                <Field label="名称" required>
+                  <input type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="如 OpenAI" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" />
+                </Field>
+                <Field label="简码" hint="英文字母 + 数字，用于内部引用">
+                  <input type="text" value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value }))} placeholder="如 openai" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" />
+                </Field>
+                <Field label="类型">
+                  <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all">
                     {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
-                </div>
-                <div>
-                  <label className="text-[11px] text-gray-500 mb-1 block">状态</label>
-                  <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6]">
+                </Field>
+                <Field label="状态">
+                  <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all">
                     {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
-                </div>
+                </Field>
               </div>
+            </div>
 
-              {/* 联系信息 */}
-              <div className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-1 pt-2">联系信息</div>
-              <div>
-                <label className="text-[11px] text-gray-500 mb-1 block">对接人</label>
-                <input type="text" value={form.contact_person} onChange={e => setForm(f => ({ ...f, contact_person: e.target.value }))} placeholder="对接人姓名" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6]" />
-              </div>
+            {/* 联系信息 */}
+            <div>
+              <SectionLabel>联系信息</SectionLabel>
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[11px] text-gray-500 mb-1 block">邮箱</label>
-                  <input type="email" value={form.contact_email} onChange={e => setForm(f => ({ ...f, contact_email: e.target.value }))} placeholder="email@example.com" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6]" />
-                </div>
-                <div>
-                  <label className="text-[11px] text-gray-500 mb-1 block">电话</label>
-                  <input type="text" value={form.contact_phone} onChange={e => setForm(f => ({ ...f, contact_phone: e.target.value }))} placeholder="联系电话" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6]" />
-                </div>
+                <Field label="对接人" full>
+                  <input type="text" value={form.contact_person} onChange={e => setForm(f => ({ ...f, contact_person: e.target.value }))} placeholder="对接人姓名" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" />
+                </Field>
+                <Field label="邮箱">
+                  <input type="email" value={form.contact_email} onChange={e => setForm(f => ({ ...f, contact_email: e.target.value }))} placeholder="email@example.com" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" />
+                </Field>
+                <Field label="电话">
+                  <input type="text" value={form.contact_phone} onChange={e => setForm(f => ({ ...f, contact_phone: e.target.value }))} placeholder="联系电话" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" />
+                </Field>
               </div>
+            </div>
 
-              {/* 商务信息 */}
-              <div className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-1 pt-2">商务信息</div>
+            {/* 商务信息 */}
+            <div>
+              <SectionLabel>商务信息</SectionLabel>
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[11px] text-gray-500 mb-1 block">结算币种</label>
-                  <select value={form.settlement_currency} onChange={e => setForm(f => ({ ...f, settlement_currency: e.target.value }))} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6]">
+                <Field label="结算币种">
+                  <select value={form.settlement_currency} onChange={e => setForm(f => ({ ...f, settlement_currency: e.target.value }))} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all">
                     {CURRENCIES.map(c => <option key={c} value={c}>{c} - {CURRENCY_META[c]?.name || c}</option>)}
                   </select>
-                </div>
-                <div>
-                  <label className="text-[11px] text-gray-500 mb-1 block">付款条件</label>
-                  <input type="text" value={form.payment_terms} onChange={e => setForm(f => ({ ...f, payment_terms: e.target.value }))} placeholder="如 月结30天" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6]" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[11px] text-gray-500 mb-1 block">合同起始</label>
-                  <input type="month" value={form.contract_start} onChange={e => setForm(f => ({ ...f, contract_start: e.target.value }))} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6]" />
-                </div>
-                <div>
-                  <label className="text-[11px] text-gray-500 mb-1 block">合同终止</label>
-                  <input type="month" value={form.contract_end} onChange={e => setForm(f => ({ ...f, contract_end: e.target.value }))} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6]" />
-                </div>
-              </div>
-
-              {/* 技术信息 */}
-              <div className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-1 pt-2">技术信息</div>
-              <div>
-                <label className="text-[11px] text-gray-500 mb-1 block">API 入口</label>
-                <input type="text" value={form.api_endpoint} onChange={e => setForm(f => ({ ...f, api_endpoint: e.target.value }))} placeholder="https://api.openai.com" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6]" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[11px] text-gray-500 mb-1 block">提供模型</label>
-                  <input type="text" value={form.models_provided} onChange={e => setForm(f => ({ ...f, models_provided: e.target.value }))} placeholder="逗号分隔，如 GPT-4o,Claude-3.5" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6]" />
-                </div>
-                <div>
-                  <label className="text-[11px] text-gray-500 mb-1 block">认证方式</label>
-                  <select value={form.auth_type} onChange={e => setForm(f => ({ ...f, auth_type: e.target.value }))} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6]">
-                    <option value="">请选择</option>
-                    {AUTH_TYPES.map(a => <option key={a} value={a}>{a}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              {/* 备注 */}
-              <div>
-                <label className="text-[11px] text-gray-500 mb-1 block">备注</label>
-                <textarea value={form.remarks} onChange={e => setForm(f => ({ ...f, remarks: e.target.value }))} placeholder="其他备注信息" rows={2} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6] resize-none" />
+                </Field>
+                <Field label="付款条件">
+                  <input type="text" value={form.payment_terms} onChange={e => setForm(f => ({ ...f, payment_terms: e.target.value }))} placeholder="如 月结30天" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" />
+                </Field>
+                <Field label="合同起始">
+                  <input type="month" value={form.contract_start} onChange={e => setForm(f => ({ ...f, contract_start: e.target.value }))} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" />
+                </Field>
+                <Field label="合同终止">
+                  <input type="month" value={form.contract_end} onChange={e => setForm(f => ({ ...f, contract_end: e.target.value }))} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" />
+                </Field>
               </div>
             </div>
-            <div className="flex justify-end gap-2 mt-5">
-              <button onClick={() => setShowForm(false)} className="px-4 py-1.5 rounded-lg text-xs text-gray-400 hover:text-white border border-border transition-colors">取消</button>
-              <button
-                onClick={handleSave}
-                disabled={!form.name || saving}
-                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-50 transition-colors"
-              >{saving ? '保存中...' : '保存'}</button>
+
+            {/* 技术信息 */}
+            <div>
+              <SectionLabel>技术对接</SectionLabel>
+              <div className="space-y-3">
+                <Field label="API 入口" full hint="完整 URL，含 https://">
+                  <input type="text" value={form.api_endpoint} onChange={e => setForm(f => ({ ...f, api_endpoint: e.target.value }))} placeholder="https://api.openai.com" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" />
+                </Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="提供模型" hint="逗号分隔">
+                    <input type="text" value={form.models_provided} onChange={e => setForm(f => ({ ...f, models_provided: e.target.value }))} placeholder="GPT-4o,Claude-3.5" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" />
+                  </Field>
+                  <Field label="认证方式">
+                    <select value={form.auth_type} onChange={e => setForm(f => ({ ...f, auth_type: e.target.value }))} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all">
+                      <option value="">请选择</option>
+                      {AUTH_TYPES.map(a => <option key={a} value={a}>{a}</option>)}
+                    </select>
+                  </Field>
+                </div>
+              </div>
             </div>
+
+            {/* 备注 */}
+            <Field label="备注" full>
+              <textarea value={form.remarks} onChange={e => setForm(f => ({ ...f, remarks: e.target.value }))} placeholder="其他备注信息" rows={2} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all resize-none" />
+            </Field>
           </div>
-        </div>
+
+          <ModalFooter
+            onClose={() => setShowForm(false)}
+            onSave={handleSave}
+            saving={saving}
+            tone="blue"
+            saveText={editingSupplier ? '保存修改' : '创建供应商'}
+            saveDisabled={!form.name}
+            leftHint={editingSupplier ? `编辑供应商：${editingSupplier.name}` : '新增供应商，提交后可在「通道管理」绑定通道'}
+          />
+        </Modal>
       )}
     </div>
   )

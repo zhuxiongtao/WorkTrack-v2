@@ -28,6 +28,7 @@ from app.models.reconcile import (
     ReconcileSummary,
     ReconcileDiff,
 )
+from app.models.model_catalog import ModelCatalog
 
 __all__ = [
     "User",
@@ -74,4 +75,5 @@ __all__ = [
     "ReconcileSupply",
     "ReconcileSummary",
     "ReconcileDiff",
+    "ModelCatalog",
 ]

@@ -1,4 +1,6 @@
 from typing import Optional
+import os
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Response
 from sqlmodel import Session, select
 from app.database import get_session
@@ -18,6 +20,8 @@ from app.routers.logs import write_log
 import httpx
 import re as _re_logo
 from app.services.cache import cached_call
+
+logger = logging.getLogger("worktrack")
 
 router = APIRouter(prefix="/api/v1/customers", tags=["客户"])
 
@@ -116,6 +120,11 @@ def delete_customer(customer_id: int, background_tasks: BackgroundTasks, current
 
     contracts = db.exec(select(Contract).where(Contract.customer_id == customer_id)).all()
     for c in contracts:
+        if c.file_path and os.path.exists(c.file_path):
+            try:
+                os.remove(c.file_path)
+            except Exception as e:
+                logger.error("删除客户级联合同文件失败 contract=%s: %s", c.id, e)
         db.delete(c)
 
     meetings = db.exec(select(MeetingNote).where(MeetingNote.customer_id == customer_id)).all()

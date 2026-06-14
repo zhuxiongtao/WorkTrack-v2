@@ -6,6 +6,7 @@ from sqlmodel import Session, select, func
 from app.database import get_session
 from app.models.project import Project
 from app.models.project_cost import ProjectCost
+from app.models.supplier import Supplier
 from app.schemas.project_cost import (
     CostItemCreate, CostItemUpdate, CostItemOut,
     ProjectProfitSummary, OverallProfitSummary,
@@ -38,6 +39,7 @@ def create_cost_item(body: CostItemCreate, db: Session = Depends(get_session), c
     )
     db.add(item)
     _sync_project_cost(db, body.project_id)
+    _sync_supplier_stats(db, body.supplier_id)
     db.commit()
     db.refresh(item)
     return item
@@ -70,10 +72,14 @@ def update_cost_item(item_id: int, body: CostItemUpdate, db: Session = Depends(g
     project = db.get(Project, item.project_id)
     if project and not check_data_access(project.user_id, current_user, db):
         raise HTTPException(403, "无权操作")
+    old_supplier_id = item.supplier_id
     for k, v in body.model_dump(exclude_unset=True).items():
         setattr(item, k, v)
     db.add(item)
     _sync_project_cost(db, item.project_id)
+    _sync_supplier_stats(db, old_supplier_id)
+    if item.supplier_id != old_supplier_id:
+        _sync_supplier_stats(db, item.supplier_id)
     db.commit()
     db.refresh(item)
     return item
@@ -88,8 +94,10 @@ def delete_cost_item(item_id: int, db: Session = Depends(get_session), current_u
     if project and not check_data_access(project.user_id, current_user, db):
         raise HTTPException(403, "无权操作")
     pid = item.project_id
+    sid = item.supplier_id
     db.delete(item)
     _sync_project_cost(db, pid)
+    _sync_supplier_stats(db, sid)
     db.commit()
     return {"ok": True}
 
@@ -226,3 +234,21 @@ def _sync_project_cost(db: Session, project_id: int):
         else:
             project.gross_margin = None
         db.add(project)
+
+
+def _sync_supplier_stats(db: Session, supplier_id: Optional[int]):
+    """同步回写供应商的累计成本与关联项目数"""
+    if not supplier_id:
+        return
+    supplier = db.get(Supplier, supplier_id)
+    if not supplier:
+        return
+    cost_total = db.exec(
+        select(func.coalesce(func.sum(ProjectCost.amount), 0)).where(ProjectCost.supplier_id == supplier_id)
+    ).one()
+    project_ids = db.exec(
+        select(ProjectCost.project_id).where(ProjectCost.supplier_id == supplier_id).distinct()
+    ).all()
+    supplier.total_cost = round(cost_total, 2)
+    supplier.project_count = len(project_ids)
+    db.add(supplier)

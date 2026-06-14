@@ -64,7 +64,7 @@ interface ProjectFormModalProps {
 }
 
 export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, isSubmitting }: ProjectFormModalProps) {
-  const { customers, options, meetings, loading } = useProjectFormOptions()
+  const { customers, options, channels, modelCatalog, modelCatalogRefreshedAt, meetings, loading } = useProjectFormOptions()
   const [form, setForm] = useState<ProjectFormState>(initialState)
   const [formInitial, setFormInitial] = useState<string>('')
   const [activeSection, setActiveSection] = useState<string>('basic')
@@ -114,6 +114,33 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
       setShowCustomScenario(false)
     }
   }, [isOpen, editingProject, options.project_scenario])
+
+  // 上游通道 → 模型建议（基于模型目录，仅作为提示，不自动写入表单，避免覆盖用户编辑意图）
+  // 用户仍可手动选择或自定义模型名
+  const suggestedModelsByChannels = useMemo(() => {
+    if (channels.length === 0 || modelCatalog.length === 0) return []
+    const seen = new Set<string>()
+    const out: string[] = []
+    form.selectedUpstreamChannels.forEach((name) => {
+      const ch = channels.find((c) => c.name === name)
+      if (!ch?.model_type) return
+      // 命中模型目录里同 provider 同 modality/region 的项
+      modelCatalog
+        .filter((m) => m.provider && ch.supplier_name && m.provider.toLowerCase() === ch.supplier_name.toLowerCase())
+        .forEach((m) => {
+          const key = `${m.name}@${m.version_id || ''}`
+          if (!seen.has(key)) {
+            seen.add(key)
+            out.push(`${m.name}${m.version_id ? ` ${m.version_id}` : ''}`)
+          }
+        })
+      // 即使没命中目录，也把 model_type 本身作为建议（兼容历史数据）
+      if (ch.model_type && !out.includes(ch.model_type)) {
+        out.push(ch.model_type)
+      }
+    })
+    return out
+  }, [form.selectedUpstreamChannels, channels, modelCatalog])
 
   const currency = useMemo(() => getCurrencyMeta(form.currency), [form.currency])
 
@@ -314,24 +341,29 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
                     </FormField>
 
                     <FormField label="技术支持" icon={Wrench} hint="负责项目交付、问题排查">
-                      {options.sales_person.length > 0 ? (
-                        <select
-                          value={form.tech_support_person}
-                          onChange={(e) => updateField('tech_support_person', e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-sm outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all cursor-pointer"
-                        >
-                          <option value="">不指定</option>
-                          {options.sales_person.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      ) : (
-                        <input
-                          type="text"
-                          value={form.tech_support_person}
-                          onChange={(e) => updateField('tech_support_person', e.target.value)}
-                          placeholder="输入技术支持姓名"
-                          className="w-full px-3 py-2 rounded-lg bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-sm outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all"
-                        />
-                      )}
+                      {(() => {
+                        const tsList = (options.tech_support && options.tech_support.length > 0)
+                          ? options.tech_support
+                          : options.sales_person
+                        return tsList.length > 0 ? (
+                          <select
+                            value={form.tech_support_person}
+                            onChange={(e) => updateField('tech_support_person', e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-sm outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all cursor-pointer"
+                          >
+                            <option value="">不指定</option>
+                            {tsList.map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                        ) : (
+                          <input
+                            type="text"
+                            value={form.tech_support_person}
+                            onChange={(e) => updateField('tech_support_person', e.target.value)}
+                            placeholder="输入技术支持姓名"
+                            className="w-full px-3 py-2 rounded-lg bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-sm outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all"
+                          />
+                        )
+                      })()}
                     </FormField>
 
                     <FormField label="项目状态">
@@ -351,27 +383,83 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
               )}
 
               {activeSection === 'maas' && (
-                <Section icon={Cloud} title="MaaS 配置" desc="上游供应商、模型、客户使用场景">
+                <Section icon={Cloud} title="MaaS 配置" desc="上游供应商通道、模型、客户使用场景">
                   <ErrorBoundary sectionName="MaaS 配置">
                     <div className="space-y-4">
-                    <FormField label="上游供应商通道" hint="本平台使用的上游通道（多选）" icon={Cloud}>
+                    <FormField label="上游供应商通道" hint="来自「业务管理 → 通道管理」合作中的通道（多选）" icon={Cloud}>
+                      {channels.length === 0 ? (
+                        <div className="rounded-lg border border-dashed border-border bg-bg-input/30 px-3 py-4 text-center">
+                          <p className="text-xs text-gray-500">尚未配置任何通道。请先到
+                            <span className="mx-1 text-accent-blue font-semibold">业务管理 → 通道管理</span>
+                            添加合作中的通道，或在下方自定义通道名称。
+                          </p>
+                        </div>
+                      ) : null}
                       <ChannelChips
-                        options={options.cloud}
+                        options={channels.map(c => c.name)}
                         selected={form.selectedUpstreamChannels}
                         onChange={(v) => updateField('selectedUpstreamChannels', v)}
                         allowCustom
-                        placeholder="如：OpenAI · 阿里云百炼 · 自建集群"
+                        placeholder="搜索或自定义通道"
+                        formatLabel={(name) => {
+                          const ch = channels.find(c => c.name === name)
+                          if (!ch) return name
+                          return `${ch.name} · ${ch.supplier_name}${ch.model_type ? ` · ${ch.model_type}` : ''}`
+                        }}
                       />
                     </FormField>
 
-                    <FormField label="使用模型" hint="本项目调用的模型（多选，可自定义）" icon={Activity}>
+                    <FormField
+                      label="使用模型"
+                      hint={
+                        modelCatalogRefreshedAt
+                          ? `来自「业务管理 → 模型管理」（上次刷新于 ${new Date(modelCatalogRefreshedAt).toLocaleString('zh-CN')}）`
+                          : '来自「业务管理 → 模型管理」，选填'
+                      }
+                      icon={Activity}
+                    >
+                      {modelCatalog.length === 0 ? (
+                        <div className="rounded-lg border border-dashed border-border bg-bg-input/30 px-3 py-4 text-center">
+                          <p className="text-xs text-gray-500">
+                            尚未配置任何模型。请先到
+                            <span className="mx-1 text-accent-blue font-semibold">业务管理 → 模型管理</span>
+                            触发自动采集并审校，或在下方手动输入模型名后回车。
+                          </p>
+                        </div>
+                      ) : null}
                       <ChannelChips
-                        options={['qwen3-max', 'qwen3-plus', 'deepseek-v3.2', 'glm-4.6', 'doubao-1.5-pro', 'kimi-k2', 'gpt-5', 'gpt-5-mini', 'claude-sonnet-4.5', 'claude-haiku-4.5', 'gemini-2.5-pro', '自定义']}
+                        options={modelCatalog.map(m => m.name)}
                         selected={form.selectedModels}
                         onChange={(v) => updateField('selectedModels', v)}
                         allowCustom
-                        placeholder="自定义后回车"
+                        placeholder="从模型目录选择，或手动输入模型名后回车"
+                        formatLabel={(name) => {
+                          const m = modelCatalog.find(x => x.name === name)
+                          if (!m) return name
+                          const tail = [m.provider, m.version_id, m.modality].filter(Boolean).join(' · ')
+                          return tail ? `${name} · ${tail}` : name
+                        }}
                       />
+                      {suggestedModelsByChannels.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                          <span className="text-[10px] text-gray-400">基于所选通道推荐：</span>
+                          {suggestedModelsByChannels.map((s) => (
+                            <button
+                              key={s}
+                              type="button"
+                              onClick={() => {
+                                if (!form.selectedModels.includes(s)) {
+                                  updateField('selectedModels', [...form.selectedModels, s])
+                                }
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-accent-blue/10 text-accent-blue text-[10px] font-semibold hover:bg-accent-blue/20 transition-colors"
+                              title="点击加入已选"
+                            >
+                              + {s}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </FormField>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -428,9 +516,9 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
                       />
                     </FormField>
 
-                    <FormField label="云厂商 / 部署方式" hint="可选，标识底层基础设施" icon={Cloud}>
+                    <FormField label="云厂商 / 部署方式" hint="底层基础设施（与上游通道不同）" icon={Cloud}>
                       <ChannelChips
-                        options={['AWS', '阿里云', '腾讯云', '华为云', 'Azure', 'GCP', '自建机房', '混合云']}
+                        options={options.cloud}
                         selected={form.selectedClouds}
                         onChange={(v) => updateField('selectedClouds', v)}
                       />
@@ -578,7 +666,7 @@ function AmountInput({ value, onChange, currency }: { value: string; onChange: (
   )
 }
 
-function ChannelChips({ options, selected, onChange, allowCustom, placeholder }: { options: string[]; selected: string[]; onChange: (v: string[]) => void; allowCustom?: boolean; placeholder?: string }) {
+function ChannelChips({ options, selected, onChange, allowCustom, placeholder, formatLabel }: { options: string[]; selected: string[]; onChange: (v: string[]) => void; allowCustom?: boolean; placeholder?: string; formatLabel?: (v: string) => string }) {
   const [input, setInput] = useState('')
   const toggle = (v: string) => {
     onChange(selected.includes(v) ? selected.filter(s => s !== v) : [...selected, v])
@@ -589,6 +677,7 @@ function ChannelChips({ options, selected, onChange, allowCustom, placeholder }:
       setInput('')
     }
   }
+  const labelOf = (v: string) => (formatLabel ? formatLabel(v) : v)
   return (
     <div className="space-y-1.5">
       <div className="flex flex-wrap gap-1.5 p-2 rounded-lg border border-gray-200 dark:border-border/60 bg-white dark:bg-bg-input min-h-[42px]">
@@ -604,8 +693,9 @@ function ChannelChips({ options, selected, onChange, allowCustom, placeholder }:
                   ? 'bg-accent-blue text-white shadow-sm'
                   : 'bg-gray-100 dark:bg-bg-hover text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-bg-hover/80'
               }`}
+              title={labelOf(o)}
             >
-              {o}
+              {labelOf(o)}
               {isSel && <X size={10} />}
             </button>
           )

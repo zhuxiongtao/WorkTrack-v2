@@ -4,7 +4,7 @@ import {
   Cpu, DollarSign, BarChart3, Building2, Activity, Key, Calendar,
   ChevronRight, ExternalLink, FileText, AlertTriangle, Hash,
 } from 'lucide-react'
-import { PageHeader, IconBox, EmptyState, SectionHeader, StatusBadge } from '../components/design-system'
+import { PageHeader, IconBox, EmptyState, SectionHeader, StatusBadge, Modal, ModalFooter, SectionLabel, Field } from '../components/design-system'
 import { useToast } from '../contexts/ToastContext'
 import { apiFetch, apiPost, apiPut, apiDelete } from '../services/api'
 
@@ -763,7 +763,7 @@ function BigStat({ label, value, tone, icon: Icon }: { label: string; value: str
   )
 }
 
-/* ──── 表单弹窗 ──── */
+/* ──── 表单弹窗（统一 Modal） ──── */
 function ChannelFormModal({
   form, setForm, suppliers, editing, saving, onClose, onSave,
 }: {
@@ -778,180 +778,162 @@ function ChannelFormModal({
   const upd = (patch: Partial<typeof form>) => setForm({ ...form, ...patch })
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-gray-900 to-gray-950 shadow-2xl" onClick={e => e.stopPropagation()}>
-        <div className="sticky top-0 z-10 flex items-center justify-between p-4 border-b border-white/5 bg-gradient-to-r from-cyan-500/10 to-blue-500/10">
-          <div className="flex items-center gap-2">
-            <IconBox icon={Network} size="md" tone="cyan" />
-            <div>
-              <h3 className="text-sm font-bold text-white">{editing ? '编辑通道' : '新建通道'}</h3>
-              <p className="text-[10px] text-gray-500">MaaS 模型供给通道</p>
-            </div>
+    <Modal
+      icon={Network}
+      title={editing ? '编辑通道' : '新建通道'}
+      subtitle="MaaS 模型供给通道 · 价格 / 合同 / SLA 一站配置"
+      tone="cyan"
+      size="3xl"
+      onClose={onClose}
+    >
+      <div className="space-y-5">
+        {/* 基本信息 */}
+        <div>
+          <SectionLabel>基本信息</SectionLabel>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="所属供应商" required>
+              <select value={form.supplier_id} onChange={e => upd({ supplier_id: parseInt(e.target.value) || 0 })}
+                className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all">
+                <option value={0}>请选择…</option>
+                {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </Field>
+            <Field label="通道名称" required>
+              <input value={form.name} onChange={e => upd({ name: e.target.value })}
+                placeholder="如 AWS 通道 / CC 号池"
+                className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" />
+            </Field>
+            <Field label="通道编码" hint="如 AWS-01">
+              <input value={form.code} onChange={e => upd({ code: e.target.value })}
+                placeholder="AWS-01"
+                className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" />
+            </Field>
+            <Field label="模型族" hint="如 Anthropic Claude / OpenAI GPT">
+              <input value={form.model_type} onChange={e => upd({ model_type: e.target.value })}
+                placeholder="Anthropic Claude / OpenAI GPT"
+                className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" />
+            </Field>
+            <Field label="通道类型">
+              <select value={form.kind} onChange={e => upd({ kind: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all">
+                {KINDS.map(k => <option key={k} value={k}>{k}</option>)}
+              </select>
+            </Field>
+            <Field label="状态">
+              <select value={form.status} onChange={e => upd({ status: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all">
+                {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </Field>
           </div>
-          <button onClick={onClose} className="text-gray-500 hover:text-white">
-            <X size={18} />
-          </button>
         </div>
 
-        <div className="p-5 space-y-5">
-          {/* 基本信息 */}
+        {/* 价格 */}
+        <div>
+          <SectionLabel>价格与商务</SectionLabel>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <Field label="成本单价">
+              <input type="number" step="0.0001" value={form.cost_price} onChange={e => upd({ cost_price: parseFloat(e.target.value) || 0 })}
+                className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" />
+            </Field>
+            <Field label="计费单位">
+              <select value={form.price_unit} onChange={e => upd({ price_unit: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all">
+                {PRICE_UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
+              </select>
+            </Field>
+            <Field label="折扣率" hint="0~1">
+              <input type="number" step="0.01" min="0" max="1" value={form.discount_rate} onChange={e => upd({ discount_rate: parseFloat(e.target.value) || 1 })}
+                className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" />
+            </Field>
+            <Field label="建议加价率">
+              <input type="number" step="0.01" value={form.suggested_markup} onChange={e => upd({ suggested_markup: parseFloat(e.target.value) || 0 })}
+                className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" />
+            </Field>
+          </div>
+        </div>
+
+        {/* 合同 & SLA */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <div>
-            <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">基本信息</div>
+            <SectionLabel>合同期</SectionLabel>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="所属供应商" required>
-                <select value={form.supplier_id} onChange={e => upd({ supplier_id: parseInt(e.target.value) || 0 })}
-                  className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none focus:border-cyan-500/50">
-                  <option value={0}>请选择…</option>
-                  {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
+              <Field label="开始" hint="YYYY-MM">
+                <input value={form.contract_start} onChange={e => upd({ contract_start: e.target.value })}
+                  placeholder="2026-01"
+                  className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" />
               </Field>
-              <Field label="通道名称" required>
-                <input value={form.name} onChange={e => upd({ name: e.target.value })}
-                  placeholder="如 AWS 通道 / CC 号池"
-                  className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500/50" />
-              </Field>
-              <Field label="通道编码">
-                <input value={form.code} onChange={e => upd({ code: e.target.value })}
-                  placeholder="如 AWS-01"
-                  className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500/50" />
-              </Field>
-              <Field label="模型族">
-                <input value={form.model_type} onChange={e => upd({ model_type: e.target.value })}
-                  placeholder="如 Anthropic Claude / OpenAI GPT"
-                  className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500/50" />
-              </Field>
-              <Field label="通道类型">
-                <select value={form.kind} onChange={e => upd({ kind: e.target.value })}
-                  className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none focus:border-cyan-500/50">
-                  {KINDS.map(k => <option key={k} value={k}>{k}</option>)}
-                </select>
-              </Field>
-              <Field label="状态">
-                <select value={form.status} onChange={e => upd({ status: e.target.value })}
-                  className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none focus:border-cyan-500/50">
-                  {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
+              <Field label="结束" hint="YYYY-MM">
+                <input value={form.contract_end} onChange={e => upd({ contract_end: e.target.value })}
+                  placeholder="2026-12"
+                  className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" />
               </Field>
             </div>
           </div>
-
-          {/* 价格 */}
           <div>
-            <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">价格与商务</div>
-            <div className="grid grid-cols-4 gap-3">
-              <Field label="成本单价">
-                <input type="number" step="0.0001" value={form.cost_price} onChange={e => upd({ cost_price: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none focus:border-cyan-500/50" />
+            <SectionLabel>SLA & 技术指标</SectionLabel>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="缓存命中率" hint="0~1">
+                <input value={form.cache_hit_rate} onChange={e => upd({ cache_hit_rate: e.target.value })}
+                  placeholder="0.7"
+                  className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" />
               </Field>
-              <Field label="计费单位">
-                <select value={form.price_unit} onChange={e => upd({ price_unit: e.target.value })}
-                  className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none focus:border-cyan-500/50">
-                  {PRICE_UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
-                </select>
+              <Field label="TPM">
+                <input value={form.tpm} onChange={e => upd({ tpm: e.target.value })}
+                  placeholder="10000"
+                  className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" />
               </Field>
-              <Field label="折扣率 (0~1)">
-                <input type="number" step="0.01" min="0" max="1" value={form.discount_rate} onChange={e => upd({ discount_rate: parseFloat(e.target.value) || 1 })}
-                  className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none focus:border-cyan-500/50" />
+              <Field label="RPM">
+                <input value={form.rpm} onChange={e => upd({ rpm: e.target.value })}
+                  placeholder="60"
+                  className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" />
               </Field>
-              <Field label="建议加价率">
-                <input type="number" step="0.01" value={form.suggested_markup} onChange={e => upd({ suggested_markup: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none focus:border-cyan-500/50" />
+              <Field label="平均延迟" hint="ms">
+                <input value={form.avg_latency_ms} onChange={e => upd({ avg_latency_ms: e.target.value })}
+                  placeholder="800"
+                  className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" />
               </Field>
             </div>
           </div>
+        </div>
 
-          {/* 合同 & SLA */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">合同期</div>
-              <div className="grid grid-cols-2 gap-2">
-                <Field label="开始 (YYYY-MM)">
-                  <input value={form.contract_start} onChange={e => upd({ contract_start: e.target.value })}
-                    placeholder="2026-01"
-                    className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500/50" />
-                </Field>
-                <Field label="结束 (YYYY-MM)">
-                  <input value={form.contract_end} onChange={e => upd({ contract_end: e.target.value })}
-                    placeholder="2026-12"
-                    className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500/50" />
-                </Field>
-              </div>
-            </div>
-            <div>
-              <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">SLA & 技术指标</div>
-              <div className="grid grid-cols-2 gap-2">
-                <Field label="缓存命中率 (0~1)">
-                  <input value={form.cache_hit_rate} onChange={e => upd({ cache_hit_rate: e.target.value })}
-                    placeholder="0.7"
-                    className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500/50" />
-                </Field>
-                <Field label="TPM">
-                  <input value={form.tpm} onChange={e => upd({ tpm: e.target.value })}
-                    placeholder="10000"
-                    className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500/50" />
-                </Field>
-                <Field label="RPM">
-                  <input value={form.rpm} onChange={e => upd({ rpm: e.target.value })}
-                    placeholder="60"
-                    className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500/50" />
-                </Field>
-                <Field label="平均延迟 (ms)">
-                  <input value={form.avg_latency_ms} onChange={e => upd({ avg_latency_ms: e.target.value })}
-                    placeholder="800"
-                    className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500/50" />
-                </Field>
-              </div>
+        {/* 库存（仅编辑时） */}
+        {editing && (
+          <div>
+            <SectionLabel>
+              <AlertTriangle size={11} className="text-orange-400" />
+              库存（聚合字段，由交付/归还自动更新）
+            </SectionLabel>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="库存总数">
+                <input type="number" value={editing.inventory_total} disabled
+                  className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-500 cursor-not-allowed" />
+              </Field>
+              <Field label="在库可用数">
+                <input type="number" value={editing.inventory_available} disabled
+                  className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-500 cursor-not-allowed" />
+              </Field>
             </div>
           </div>
+        )}
 
-          {/* 库存（仅编辑时） */}
-          {editing && (
-            <div>
-              <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
-                <AlertTriangle size={11} className="text-orange-400" />库存（聚合字段，由交付/归还自动更新）
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="库存总数">
-                  <input type="number" value={editing.inventory_total} disabled
-                    className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-gray-500" />
-                </Field>
-                <Field label="在库可用数">
-                  <input type="number" value={editing.inventory_available} disabled
-                    className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-gray-500" />
-                </Field>
-              </div>
-            </div>
-          )}
-
-          {/* 备注 */}
-          <Field label="备注">
-            <textarea value={form.remarks} onChange={e => upd({ remarks: e.target.value })} rows={2}
-              placeholder="补充说明：稳定性、SLA 等级、风控要点等"
-              className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500/50 resize-none" />
-          </Field>
-        </div>
-
-        <div className="sticky bottom-0 flex items-center justify-end gap-2 p-4 border-t border-white/5 bg-gray-950/80 backdrop-blur">
-          <button onClick={onClose}
-            className="px-4 py-1.5 text-xs text-gray-400 hover:text-white">取消</button>
-          <button onClick={onSave} disabled={saving}
-            className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-cyan-500 to-blue-500 rounded-lg hover:opacity-90 disabled:opacity-50">
-            {saving && <Loader2 size={12} className="animate-spin" />}
-            {editing ? '保存修改' : '创建通道'}
-          </button>
-        </div>
+        {/* 备注 */}
+        <Field label="备注" full hint="补充说明：稳定性、SLA 等级、风控要点等">
+          <textarea value={form.remarks} onChange={e => upd({ remarks: e.target.value })} rows={2}
+            placeholder="补充说明：稳定性、SLA 等级、风控要点等"
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all resize-none" />
+        </Field>
       </div>
-    </div>
-  )
-}
 
-function Field({ label, children, required }: { label: string; children: React.ReactNode; required?: boolean }) {
-  return (
-    <label className="block">
-      <span className="text-[10px] text-gray-500 mb-1 block">
-        {label}{required && <span className="text-rose-400 ml-0.5">*</span>}
-      </span>
-      {children}
-    </label>
+      <ModalFooter
+        onClose={onClose}
+        onSave={onSave}
+        saving={saving}
+        tone="cyan"
+        saveText={editing ? '保存修改' : '创建通道'}
+        saveDisabled={!form.name.trim() || !form.supplier_id}
+        leftHint={editing ? `编辑通道：${editing.name}` : '新建通道，提交后可在详情页补充 SLA 实测数据'}
+      />
+    </Modal>
   )
 }

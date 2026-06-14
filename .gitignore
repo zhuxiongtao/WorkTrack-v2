@@ -47,6 +47,7 @@ frontend/service.err.log
 backend/.pgport
 
 # 同事调试 / 一次性脚本（不进仓库）
+/check_*.py
 backend/_*.py
 backend/test_*.py
 backend/diag*.py

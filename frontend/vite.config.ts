@@ -8,9 +8,9 @@ export default defineConfig({
     host: '0.0.0.0',
     allowedHosts: true,
     proxy: {
-      '/api': 'http://localhost:8001',
-      '/health': 'http://localhost:8001',
-      '/mcp': 'http://localhost:8001',
+      '/api': 'http://localhost:8000',
+      '/health': 'http://localhost:8000',
+      '/mcp': 'http://localhost:8000',
     },
   },
 })

@@ -180,6 +180,10 @@ def update_project(project_id: int, data: ProjectUpdate, background_tasks: Backg
     update_data = data.model_dump(exclude={"meeting_ids"})
     for key, value in update_data.items():
         setattr(project, key, value)
+    if project.deal_amount and project.deal_amount > 0:
+        project.gross_margin = round((1 - (project.cost_amount or 0) / project.deal_amount) * 100, 2)
+    else:
+        project.gross_margin = None
     project.updated_at = utc_now()
     db.add(project)
     db.commit()

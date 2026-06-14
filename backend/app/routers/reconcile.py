@@ -11,6 +11,7 @@ from app.database import get_session
 from app.models.reconcile import ReconcileSales, ReconcileSupply, ReconcileSummary, ReconcileDiff
 from app.models.project import Project
 from app.models.channel import Channel
+from app.models.supplier import Supplier
 from app.schemas.reconcile import (
     ReconcileSalesCreate, ReconcileSalesUpdate, ReconcileSalesOut,
     ReconcileSupplyCreate, ReconcileSupplyUpdate, ReconcileSupplyOut,
@@ -118,6 +119,9 @@ def create_reconcile_supply(
         raise HTTPException(400, f"通道 {body.channel_id} 不存在")
     if db.get(Supplier, body.supplier_id) is None:
         raise HTTPException(400, f"供应商 {body.supplier_id} 不存在")
+    channel = db.get(Channel, body.channel_id)
+    if channel.supplier_id != body.supplier_id:
+        raise HTTPException(400, f"通道 {body.channel_id} 不属于供应商 {body.supplier_id}")
     obj = ReconcileSupply(**body.model_dump())
     db.add(obj)
     db.commit()

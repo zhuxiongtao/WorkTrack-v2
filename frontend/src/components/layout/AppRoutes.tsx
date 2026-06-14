@@ -21,6 +21,7 @@ import ProjectCostPage from '../../pages/ProjectCostPage'
 import SuppliersPage from '../../pages/SuppliersPage'
 import ChannelsPage from '../../pages/ChannelsPage'
 import ReconcilePage from '../../pages/ReconcilePage'
+import ModelCatalogPage from '../../pages/ModelCatalogPage'
 
 interface AppRoutesProps {
   homePage: string
@@ -54,6 +55,7 @@ function AppRoutes({ homePage }: AppRoutesProps) {
       <Route path="/suppliers" element={hasPermission('project:read') ? <SuppliersPage /> : <Navigate to={homePage} replace />} />
       <Route path="/channels" element={hasPermission('project:read') ? <ChannelsPage /> : <Navigate to={homePage} replace />} />
       <Route path="/reconcile" element={hasPermission('project:read') ? <ReconcilePage /> : <Navigate to={homePage} replace />} />
+      <Route path="/models" element={isAdmin ? <ModelCatalogPage /> : <Navigate to={homePage} replace />} />
       {/* 兜底：未知路径重定向到首页，避免白屏 */}
       <Route path="*" element={<Navigate to={homePage} replace />} />
     </Routes>

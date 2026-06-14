@@ -1,10 +1,11 @@
 """通道（Channel）API：供应商下挂载的具体模型通道"""
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import Session, select, col
+from sqlmodel import Session, select, col, func
 from app.database import get_session
 from app.models.channel import Channel
 from app.models.supplier import Supplier
+from app.models.reconcile import ReconcileSupply
 from app.schemas.channel import ChannelCreate, ChannelUpdate, ChannelOut, ChannelSummary
 from app.auth import require_permission
 
@@ -118,6 +119,11 @@ def delete_channel(
     channel = db.get(Channel, channel_id)
     if not channel:
         raise HTTPException(404, "通道不存在")
+    linked_supply = db.exec(
+        select(func.count()).where(ReconcileSupply.channel_id == channel_id)
+    ).one()
+    if linked_supply > 0:
+        raise HTTPException(400, f"该通道下有 {linked_supply} 条供应对账记录，请先处理后再删除")
     db.delete(channel)
     db.commit()
     return {"ok": True}

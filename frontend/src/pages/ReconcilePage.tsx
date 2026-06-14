@@ -5,7 +5,7 @@ import {
   FileText, RefreshCw, Calendar, DollarSign, Activity, Hash,
   CheckCircle2, Clock, AlertCircle, FileBarChart,
 } from 'lucide-react'
-import { PageHeader, IconBox, EmptyState, SectionHeader } from '../components/design-system'
+import { PageHeader, IconBox, EmptyState, SectionHeader, Modal, ModalFooter, SectionLabel, Field } from '../components/design-system'
 import { useToast } from '../contexts/ToastContext'
 import { apiFetch, apiPost, apiPut, apiDelete } from '../services/api'
 
@@ -930,37 +930,43 @@ function SalesFormModal({ period, projects, projectMap, editing, onClose, onSave
   }
 
   return (
-    <Modal title={editing ? '编辑销售对账' : '新增销售对账'} tone="green" onClose={onClose}>
+    <Modal
+      icon={editing ? Edit3 : Plus}
+      title={editing ? '编辑销售对账' : '新增销售对账'}
+      subtitle="按月汇总销售侧调用量、单价、应收金额、票面状态"
+      tone="green"
+      onClose={onClose}
+    >
       <div className="grid grid-cols-2 gap-3">
         <Field label="项目" required>
           <select value={form.project_id} onChange={e => setForm({ ...form, project_id: parseInt(e.target.value) })}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white">
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 transition-all">
             <option value={0}>请选择…</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </Field>
         <Field label="对账月份" required>
           <input value={form.period} onChange={e => setForm({ ...form, period: e.target.value })}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white" />
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 transition-all" />
         </Field>
         <Field label="客户名">
           <input value={form.customer_name} onChange={e => setForm({ ...form, customer_name: e.target.value })}
             placeholder="自动从项目带入"
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white placeholder-gray-600" />
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 transition-all" />
         </Field>
         <Field label="开票状态">
           <select value={form.invoice_status} onChange={e => setForm({ ...form, invoice_status: e.target.value })}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white">
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 transition-all">
             {SALES_STATUS.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </Field>
         <Field label="调用量">
           <input type="number" step="0.0001" value={form.call_volume} onChange={e => setForm({ ...form, call_volume: parseFloat(e.target.value) || 0 })}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white" />
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 transition-all" />
         </Field>
         <Field label="计费单位">
           <select value={form.call_volume_unit} onChange={e => setForm({ ...form, call_volume_unit: e.target.value })}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white">
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 transition-all">
             <option value="per_1k_token">/ 1K tokens</option>
             <option value="per_request">/ 次</option>
             <option value="per_month">/ 月</option>
@@ -968,22 +974,22 @@ function SalesFormModal({ period, projects, projectMap, editing, onClose, onSave
         </Field>
         <Field label="成交单价 ($)">
           <input type="number" step="0.0001" value={form.final_price} onChange={e => setForm({ ...form, final_price: parseFloat(e.target.value) || 0 })}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white" />
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 transition-all" />
         </Field>
         <Field label="应收金额 ($)">
           <input type="number" step="0.01" value={form.amount_due} onChange={e => setForm({ ...form, amount_due: parseFloat(e.target.value) || 0 })}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-emerald-300 font-bold" />
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 transition-all font-bold" />
         </Field>
         <Field label="与客户报价差异 ($)">
           <input type="number" step="0.01" value={form.diff_amount} onChange={e => setForm({ ...form, diff_amount: parseFloat(e.target.value) || 0 })}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white" />
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 transition-all" />
         </Field>
         <Field label="备注" full>
           <textarea value={form.remarks} onChange={e => setForm({ ...form, remarks: e.target.value })} rows={2}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white resize-none" />
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 transition-all resize-none" />
         </Field>
       </div>
-      <ModalFooter onClose={onClose} saving={saving} onSave={save} tone="green" />
+      <ModalFooter onClose={onClose} saving={saving} onSave={save} tone="green" saveText={editing ? '保存修改' : '创建销售对账'} />
     </Modal>
   )
 }
@@ -1048,39 +1054,45 @@ function SupplyFormModal({ period, channels, suppliers, channelMap, supplierMap,
   }
 
   return (
-    <Modal title={editing ? '编辑供应对账' : '新增供应对账'} tone="red" onClose={onClose}>
+    <Modal
+      icon={editing ? Edit3 : Plus}
+      title={editing ? '编辑供应对账' : '新增供应对账'}
+      subtitle="按月汇总供应侧调用量、成本单价、应付金额、票面状态"
+      tone="red"
+      onClose={onClose}
+    >
       <div className="grid grid-cols-2 gap-3">
         <Field label="通道" required>
           <select value={form.channel_id} onChange={e => setForm({ ...form, channel_id: parseInt(e.target.value) })}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white">
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/15 transition-all">
             <option value={0}>请选择…</option>
             {channels.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </Field>
         <Field label="供应商" required>
           <select value={form.supplier_id} onChange={e => setForm({ ...form, supplier_id: parseInt(e.target.value) })}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white">
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/15 transition-all">
             <option value={0}>请选择…</option>
             {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </Field>
         <Field label="对账月份" required>
           <input value={form.period} onChange={e => setForm({ ...form, period: e.target.value })}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white" />
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/15 transition-all" />
         </Field>
         <Field label="付款状态">
           <select value={form.bill_status} onChange={e => setForm({ ...form, bill_status: e.target.value })}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white">
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/15 transition-all">
             {SUPPLY_STATUS.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </Field>
         <Field label="调用量">
           <input type="number" step="0.0001" value={form.call_volume} onChange={e => setForm({ ...form, call_volume: parseFloat(e.target.value) || 0 })}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white" />
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/15 transition-all" />
         </Field>
         <Field label="计费单位">
           <select value={form.call_volume_unit} onChange={e => setForm({ ...form, call_volume_unit: e.target.value })}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white">
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/15 transition-all">
             <option value="per_1k_token">/ 1K tokens</option>
             <option value="per_request">/ 次</option>
             <option value="per_month">/ 月</option>
@@ -1088,22 +1100,22 @@ function SupplyFormModal({ period, channels, suppliers, channelMap, supplierMap,
         </Field>
         <Field label="成本单价 ($)">
           <input type="number" step="0.0001" value={form.cost_price} onChange={e => setForm({ ...form, cost_price: parseFloat(e.target.value) || 0 })}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white" />
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/15 transition-all" />
         </Field>
         <Field label="应付金额 ($)">
           <input type="number" step="0.01" value={form.amount_payable} onChange={e => setForm({ ...form, amount_payable: parseFloat(e.target.value) || 0 })}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-rose-300 font-bold" />
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/15 transition-all font-bold" />
         </Field>
         <Field label="与厂商账单差异 ($)">
           <input type="number" step="0.01" value={form.diff_amount} onChange={e => setForm({ ...form, diff_amount: parseFloat(e.target.value) || 0 })}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white" />
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/15 transition-all" />
         </Field>
         <Field label="备注" full>
           <textarea value={form.remarks} onChange={e => setForm({ ...form, remarks: e.target.value })} rows={2}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white resize-none" />
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/15 transition-all resize-none" />
         </Field>
       </div>
-      <ModalFooter onClose={onClose} saving={saving} onSave={save} tone="red" />
+      <ModalFooter onClose={onClose} saving={saving} onSave={save} tone="red" saveText={editing ? '保存修改' : '创建供应对账'} />
     </Modal>
   )
 }
@@ -1155,114 +1167,73 @@ function DiffFormModal({ period, projects, channels, editing, onClose, onSaved }
   }
 
   return (
-    <Modal title={editing ? '编辑差异记录' : '新增差异记录'} tone="orange" onClose={onClose}>
+    <Modal
+      icon={editing ? Edit3 : Plus}
+      title={editing ? '编辑差异记录' : '新增差异记录'}
+      subtitle="销售侧与供应侧对账时，自动计算差异量并记录原因/处理结果"
+      tone="orange"
+      onClose={onClose}
+    >
       <div className="grid grid-cols-2 gap-3">
         <Field label="对账月份" required>
           <input value={form.period} onChange={e => setForm({ ...form, period: e.target.value })}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white" />
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 transition-all" />
         </Field>
         <Field label="差异类型">
           <select value={form.diff_type} onChange={e => setForm({ ...form, diff_type: e.target.value })}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white">
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 transition-all">
             {DIFF_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
         </Field>
         <Field label="关联项目">
           <select value={form.project_id || ''} onChange={e => setForm({ ...form, project_id: e.target.value ? parseInt(e.target.value) : null })}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white">
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 transition-all">
             <option value="">无</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </Field>
         <Field label="关联通道">
           <select value={form.channel_id || ''} onChange={e => setForm({ ...form, channel_id: e.target.value ? parseInt(e.target.value) : null })}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white">
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 transition-all">
             <option value="">无</option>
             {channels.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </Field>
         <Field label="销售调用量">
           <input type="number" step="0.0001" value={form.sales_call_volume} onChange={e => setForm({ ...form, sales_call_volume: parseFloat(e.target.value) || 0 })}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white" />
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 transition-all" />
         </Field>
         <Field label="供应调用量">
           <input type="number" step="0.0001" value={form.supply_call_volume} onChange={e => setForm({ ...form, supply_call_volume: parseFloat(e.target.value) || 0 })}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white" />
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 transition-all" />
         </Field>
         <Field label="差异量（自动）">
           <input type="number" value={form.diff_volume} disabled
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-orange-300 font-bold" />
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-orange-500 font-bold cursor-not-allowed" />
         </Field>
         <Field label="差异金额 ($)">
           <input type="number" step="0.01" value={form.diff_amount} onChange={e => setForm({ ...form, diff_amount: parseFloat(e.target.value) || 0 })}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white" />
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 transition-all" />
         </Field>
         <Field label="差异原因" full>
           <textarea value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })} rows={2}
             placeholder="如：缓存命中率不同 / 客户使用量浮动 / 厂商计费口径差异"
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white resize-none" />
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 transition-all resize-none" />
         </Field>
         <Field label="处理结果">
           <input value={form.resolution} onChange={e => setForm({ ...form, resolution: e.target.value })}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white" />
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 transition-all" />
         </Field>
         <Field label="状态">
           <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}
-            className="w-full px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white">
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 transition-all">
             {DIFF_STATUS.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </Field>
       </div>
-      <ModalFooter onClose={onClose} saving={saving} onSave={save} tone="orange" />
+      <ModalFooter onClose={onClose} saving={saving} onSave={save} tone="orange" saveText={editing ? '保存修改' : '创建差异记录'} />
     </Modal>
   )
 }
 
-/* ──── 通用弹窗 ──── */
-function Modal({ title, tone, onClose, children }: { title: string; tone: 'green' | 'red' | 'orange' | 'purple'; onClose: () => void; children: React.ReactNode }) {
-  const bg: Record<string, string> = {
-    green: 'from-emerald-500/10 to-green-500/10',
-    red: 'from-rose-500/10 to-red-500/10',
-    orange: 'from-orange-500/10 to-yellow-500/10',
-    purple: 'from-purple-500/10 to-indigo-500/10',
-  }
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 bg-gradient-to-br from-gray-900 to-gray-950 shadow-2xl" onClick={e => e.stopPropagation()}>
-        <div className={`sticky top-0 z-10 flex items-center justify-between p-4 border-b border-white/5 bg-gradient-to-r ${bg[tone]} backdrop-blur`}>
-          <h3 className="text-sm font-bold text-white">{title}</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-white"><X size={18} /></button>
-        </div>
-        <div className="p-5">{children}</div>
-      </div>
-    </div>
-  )
-}
-
-function ModalFooter({ onClose, saving, onSave, tone }: { onClose: () => void; saving: boolean; onSave: () => void; tone: 'green' | 'red' | 'orange' }) {
-  const bg: Record<string, string> = {
-    green: 'from-emerald-500 to-green-500',
-    red: 'from-rose-500 to-red-500',
-    orange: 'from-orange-500 to-yellow-500',
-  }
-  return (
-    <div className="sticky bottom-0 flex items-center justify-end gap-2 p-4 border-t border-white/5 bg-gray-950/80 backdrop-blur -m-5 mt-4">
-      <button onClick={onClose} className="px-4 py-1.5 text-xs text-gray-400 hover:text-white">取消</button>
-      <button onClick={onSave} disabled={saving}
-        className={`inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold text-white bg-gradient-to-r ${bg[tone]} rounded-lg hover:opacity-90 disabled:opacity-50`}>
-        {saving && <Loader2 size={12} className="animate-spin" />}保存
-      </button>
-    </div>
-  )
-}
-
-function Field({ label, children, required, full }: { label: string; children: React.ReactNode; required?: boolean; full?: boolean }) {
-  return (
-    <label className={`block ${full ? 'col-span-2' : ''}`}>
-      <span className="text-[10px] text-gray-500 mb-1 block">
-        {label}{required && <span className="text-rose-400 ml-0.5">*</span>}
-      </span>
-      {children}
-    </label>
-  )
-}
+/* 通用弹窗 / 字段已统一从 design-system/Modal 引入，移除本地实现以保持风格统一 */

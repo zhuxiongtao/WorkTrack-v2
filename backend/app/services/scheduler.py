@@ -126,6 +126,62 @@ def start_scheduler():
     """启动调度器"""
     scheduler.start()
     load_tasks_from_db()
+    # 注册内置的「模型目录自动刷新」任务
+    try:
+        _register_model_catalog_refresh()
+    except Exception as e:
+        print(f"[scheduler] 注册 model_catalog_refresh 失败: {e}", flush=True)
+
+
+def _register_model_catalog_refresh():
+    """注册模型目录自动刷新任务（每天/每周 Tavily 拉取最新模型）
+    - 通过环境变量 MODEL_REFRESH_CRON 控制（默认 每周一 03:00）
+    - 通过环境变量 MODEL_REFRESH_ENABLED 关闭（默认开启）
+    """
+    import os
+    from apscheduler.triggers.cron import CronTrigger as _Cron
+    enabled = os.getenv("MODEL_REFRESH_ENABLED", "true").lower() != "false"
+    if not enabled:
+        print("[scheduler] MODEL_REFRESH_ENABLED=false, 跳过 model_catalog_refresh 注册", flush=True)
+        return
+    cron_expr = os.getenv("MODEL_REFRESH_CRON", "0 3 * * 1")
+    trigger = _Cron.from_crontab(cron_expr)
+    # 替换已存在的同名 job
+    try:
+        scheduler.remove_job("model_catalog_refresh")
+    except Exception:
+        pass
+    scheduler.add_job(
+        _execute_model_catalog_refresh,
+        trigger=trigger,
+        id="model_catalog_refresh",
+        name="模型目录自动刷新（Tavily）",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=3600,
+    )
+    print(f"[scheduler] 已注册 model_catalog_refresh cron='{cron_expr}'", flush=True)
+
+
+def _execute_model_catalog_refresh():
+    """scheduler 回调：调 fetcher 完成刷新 + 写日志"""
+    from app.routers.logs import write_log
+    try:
+        from app.services.model_catalog_fetcher import refresh_and_record
+        res = refresh_and_record()
+        if res.get("success"):
+            msg = (
+                f"模型目录刷新成功: 新增 {res.get('inserted',0)}, "
+                f"更新 {res.get('updated',0)}, 降级 {res.get('deactivated',0)}, "
+                f"耗时 {res.get('duration_ms',0)}ms"
+            )
+            write_log("info", "task", msg, db=None)
+        else:
+            write_log("error", "task", f"模型目录刷新失败: {res.get('error','unknown')}", details=res.get("error",""), db=None)
+    except Exception as e:
+        from app.routers.logs import write_log
+        write_log("error", "task", f"模型目录刷新异常: {e}", details=str(e), db=None)
 
 
 def shutdown_scheduler():
