@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Sun, Moon, Menu, AlertTriangle, Settings, X } from 'lucide-react'
+import { Sun, Moon, Monitor, Menu, AlertTriangle, Settings, X } from 'lucide-react'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -61,7 +61,7 @@ function AppHeader({ brandLogo, brandTitle, onOpenSidebar }: AppHeaderProps) {
           className="p-1.5 -mr-1 rounded-lg hover:bg-white/10 active:bg-white/15 text-gray-400 transition-colors"
           aria-label="切换主题"
         >
-          {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          {theme === 'dark' ? <Moon size={16} /> : theme === 'light' ? <Sun size={16} /> : <Monitor size={16} />}
         </button>
       </div>
       {showModelWarning && (

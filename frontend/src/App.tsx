@@ -4,11 +4,14 @@ import { Loader2 } from 'lucide-react'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { useAuth } from './contexts/AuthContext'
 import LoginPage from './pages/LoginPage'
+import ForgotPasswordPage from './pages/ForgotPasswordPage'
+import ResetPasswordPage from './pages/ResetPasswordPage'
 import PublicWikiPage from './pages/PublicWikiPage'
 import SetupPage from './pages/SetupPage'
 import AppSidebar from './components/layout/AppSidebar'
 import AppHeader from './components/layout/AppHeader'
 import AppRoutes from './components/layout/AppRoutes'
+import AdminLayout from './components/layout/AdminLayout'
 import AIFab from './components/AIFab'
 
 function AppContent() {
@@ -100,11 +103,11 @@ function AppContent() {
   }, [user, hasPermission])
 
   function computeDefaultHome(): string {
+    // 只考虑业务前台页面，admin 页面已迁移至 /admin/*
     const pages: [string, string][] = [
-      ['/monitor', 'monitor:read'], ['/users', 'user:read'], ['/settings', ''],
-      ['/reports', 'report:read'], ['/projects', 'project:read'], ['/meetings', 'meeting:read'],
-      ['/dashboard', 'dashboard:read'], ['/ai', 'ai:use'], ['/wiki', 'wiki:read'],
-      ['/console', 'management:console'], ['/shared', 'share:read'],
+      ['/dashboard', 'dashboard:read'], ['/reports', 'report:read'],
+      ['/projects', 'project:read'], ['/meetings', 'meeting:read'],
+      ['/wiki', 'wiki:read'], ['/ai', 'ai:use'], ['/shared', 'share:read'],
     ]
     for (const [path, perm] of pages) {
       if (!perm || hasPermission(perm)) return path
@@ -138,6 +141,8 @@ function AppContent() {
         <div className="flex-1">
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/wiki/public/:spaceId/:pageId" element={<PublicWikiPage />} />
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
@@ -145,6 +150,11 @@ function AppContent() {
       )}
 
       {!authLoading && user && (
+        <>
+      {/* ── 管理后台：/admin/* ── */}
+      {location.pathname.startsWith('/admin') ? (
+        <AdminLayout brandLogo={brandLogo} brandTitle={brandTitle} />
+      ) : (
         <>
       {sidebarOpen && (
         <div
@@ -177,6 +187,8 @@ function AppContent() {
         visible={location.pathname !== '/ai'}
         canUse={hasPermission('ai:use')}
       />
+        </>
+      )}
         </>
       )}
         </>

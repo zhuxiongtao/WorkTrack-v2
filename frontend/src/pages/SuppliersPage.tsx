@@ -67,6 +67,14 @@ const STATUSES = ['合作中', '暂停', '已终止']
 const CURRENCIES = ['USD', 'CNY', 'EUR', 'JPY']
 const AUTH_TYPES = ['API Key', 'OAuth', '其他']
 
+/** 通道计费单位短标签 */
+const PRICE_UNIT_SHORT: Record<string, string> = {
+  per_1k_token: '1K',
+  per_1m_token: '1M',
+  per_request: '次',
+  per_month: '月',
+}
+
 const CATEGORY_COLORS: Record<string, string> = {
   '模型厂商': '#3B82F6',
   '云服务商': '#8B5CF6',
@@ -438,7 +446,7 @@ export default function SuppliersPage() {
               {filteredSuppliers.map(s => {
                 const summary = summaries.find(sm => sm.supplier_id === s.id)
                 const catColor = CATEGORY_COLORS[s.category] || '#6B7280'
-                const stColor = STATUS_COLORS[s.status] || STATUS_COLORS['其他']
+                const stColor = STATUS_COLORS[s.status] || { bg: '#6B728015', text: '#6B7280' }
                 const cs = getContractStatus(s.contract_start, s.contract_end)
                 return (
                   <button
@@ -497,8 +505,8 @@ export default function SuppliersPage() {
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="text-base font-bold text-white">{selectedDetail.name}</h3>
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ background: `${CATEGORY_COLORS[selectedDetail.category]}15`, color: CATEGORY_COLORS[selectedDetail.category] || '#6B7280' }}>{selectedDetail.category}</span>
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ background: (STATUS_COLORS[selectedDetail.status] || STATUS_COLORS['其他']).bg, color: (STATUS_COLORS[selectedDetail.status] || STATUS_COLORS['其他']).text }}>{selectedDetail.status}</span>
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ background: `${CATEGORY_COLORS[selectedDetail.category] || '#6B7280'}15`, color: CATEGORY_COLORS[selectedDetail.category] || '#6B7280' }}>{selectedDetail.category}</span>
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ background: (STATUS_COLORS[selectedDetail.status] || { bg: '#6B728015', text: '#6B7280' }).bg, color: (STATUS_COLORS[selectedDetail.status] || { bg: '#6B728015', text: '#6B7280' }).text }}>{selectedDetail.status}</span>
                       </div>
                       <div className="flex items-center gap-3 mt-1 text-[11px] text-gray-500 flex-wrap">
                         {selectedDetail.code && <span>简码: {selectedDetail.code}</span>}
@@ -751,7 +759,7 @@ export default function SuppliersPage() {
                                       <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold shrink-0" style={{ background: `${kindColor}15`, color: kindColor }}>{c.kind}</span>
                                     </div>
                                     <div className="text-[10px] text-gray-500 truncate">
-                                      {c.model_type || '—'} · 成本 ${c.cost_price}/{c.price_unit === 'per_1k_token' ? '1K' : c.price_unit}
+                                      {c.model_type || '—'} · 成本 ${c.cost_price}/{PRICE_UNIT_SHORT[c.price_unit] || c.price_unit}
                                     </div>
                                   </div>
                                 </div>

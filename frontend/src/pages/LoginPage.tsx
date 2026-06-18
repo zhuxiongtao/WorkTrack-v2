@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { Sparkles, Loader2, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -95,6 +95,12 @@ export default function LoginPage() {
             {loading && <Loader2 size={16} className="animate-spin" />}
             {loading ? '登录中...' : '登录'}
           </button>
+
+          <div className="text-center">
+            <Link to="/forgot-password" className="text-xs text-gray-500 hover:text-accent-blue transition-colors">
+              忘记密码？
+            </Link>
+          </div>
         </form>
 
         <p className="text-center text-xs text-gray-600 mt-6">

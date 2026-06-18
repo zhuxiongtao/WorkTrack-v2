@@ -17,7 +17,6 @@ from sqlmodel import Session, select
 
 from app.database import engine
 from app.models.model_catalog import ModelCatalog
-from app.models.model_provider import ModelProvider
 from app.config import settings
 
 logger = logging.getLogger("worktrack.model_catalog")
@@ -106,20 +105,17 @@ def _get_tavily_key() -> Optional[str]:
     return settings.tavily_api_key or os.getenv("TAVILY_API_KEY")
 
 
-def _pick_extractor_provider_id() -> Optional[int]:
-    """从 modelprovider 表挑一个开启的、用于做结构化抽取"""
+def _pick_extractor_provider() -> Optional[tuple]:
+    """从系统 TaskModelConfig 读取 chat 任务配置的 provider+model，复用统一路由逻辑。
+    返回 (provider, model_name) 或 None。"""
     try:
+        from app.services.ai_service import _get_active_provider, _get_client
         with Session(engine) as db:
-            row = db.exec(
-                select(ModelProvider)
-                .where(ModelProvider.is_active == True)
-                .where(ModelProvider.provider_type == "chat")
-                .order_by(ModelProvider.id.asc())
-            ).first()
-            if row and row.api_key and row.base_url:
-                return row.id
-    except Exception:
-        pass
+            base_url, api_key, model_name, provider = _get_active_provider(db, "chat")
+            client = _get_client(base_url, api_key, provider)
+            return provider, model_name, client
+    except Exception as e:
+        logger.warning("无法通过 TaskModelConfig 获取抽取器: %s", e)
     return None
 
 
@@ -179,31 +175,20 @@ def _strip_code_fence(text: str) -> str:
     return text
 
 
-def _call_extractor(provider: ModelProvider, search_content: str) -> list[dict]:
-    """调用用户配置的 LLM 做结构化抽取"""
-    # 避免 search_content 中的 { / } 被 str.format 当成占位符解析（用占位符占位 + replace 的方式）
-    prompt = EXTRACT_PROMPT.replace("{search_content}", search_content[:30000])  # 防止爆 token
-    base_url = (provider.base_url or "").rstrip("/")
-    # OpenAI 兼容协议
-    url = f"{base_url}/chat/completions" if not base_url.endswith("/chat/completions") else base_url
-    headers = {
-        "Authorization": f"Bearer {provider.api_key}",
-        "Content-Type": "application/json",
-    }
-    body = {
-        "model": provider.default_model or "gpt-4o-mini",
-        "messages": [
-            {"role": "system", "content": "你是 AI 模型目录抽取专家，只输出 JSON 数组。"},
-            {"role": "user", "content": prompt},
-        ],
-        "temperature": 0.1,
-    }
+def _call_extractor(client, model_name: str, search_content: str) -> list[dict]:
+    """调用系统配置的 LLM（通过统一 SDK 路由）做结构化抽取"""
+    from app.services.ai_service import _extract_message_text
+    prompt = EXTRACT_PROMPT.replace("{search_content}", search_content[:30000])
     try:
-        with httpx.Client(timeout=EXTRACT_TIMEOUT) as client:
-            r = client.post(url, headers=headers, json=body)
-            r.raise_for_status()
-            data = r.json()
-            content = data["choices"][0]["message"]["content"]
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {"role": "system", "content": "你是 AI 模型目录抽取专家，只输出 JSON 数组。"},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.1,
+        )
+        content = _extract_message_text(response.choices[0].message)
         return json.loads(_strip_code_fence(content))
     except Exception as e:
         logger.error("LLM 抽取失败: %s", e, exc_info=True)
@@ -350,13 +335,11 @@ def refresh_model_catalog_sync() -> dict:
     返回 dict: {success, inserted, updated, deactivated, duration_ms, error}
     """
     t0 = time.time()
-    provider_id = _pick_extractor_provider_id()
-    if not provider_id:
-        return {"success": False, "error": "未找到可用的 LLM 抽取器（请先在「设置 → 模型供应商」中配置并启用至少一个 chat provider）", "duration_ms": int((time.time()-t0)*1000)}
-    with Session(engine) as db:
-        provider = db.get(ModelProvider, provider_id)
-        if not provider:
-            return {"success": False, "error": "抽取器 provider 不存在", "duration_ms": int((time.time()-t0)*1000)}
+    extractor = _pick_extractor_provider()
+    if not extractor:
+        return {"success": False, "error": "未配置可用的 chat 任务模型（请先在「设置 → 任务模型」中为 chat 任务配置供应商和模型）", "duration_ms": int((time.time()-t0)*1000)}
+    provider, model_name, llm_client = extractor
+    logger.info("使用抽取器: provider=%s model=%s", provider.name, model_name)
 
     try:
         # 1) Tavily 搜索（异步 -> 同步包装）
@@ -365,7 +348,7 @@ def refresh_model_catalog_sync() -> dict:
         logger.info("Tavily 搜索完成，拼接内容 %d 字符", len(search_content))
 
         # 2) LLM 抽取
-        items = _call_extractor(provider, search_content)
+        items = _call_extractor(llm_client, model_name, search_content)
         if not isinstance(items, list):
             return {"success": False, "error": "LLM 抽取返回非数组", "duration_ms": int((time.time()-t0)*1000)}
         logger.info("LLM 抽取到 %d 条候选模型", len(items))

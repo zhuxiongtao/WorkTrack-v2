@@ -22,13 +22,19 @@ export interface ToneScale {
 }
 
 export const TONES: Record<Tone, ToneScale> = {
+  // Void Indigo 主色：薰衣草（深色模式）/ 靛蓝（浅色模式通用）
   blue: {
-    50: '#EFF6FF',   100: '#DBEAFE',  500: '#3B82F6',  600: '#2563EB',  900: '#1E3A8A',
-    ring: 'rgba(59, 130, 246, 0.45)',  shadow: 'rgba(59, 130, 246, 0.28)',
+    50:  'rgba(129, 140, 248, 0.12)',  // soft bg：深色下半透明薰衣草，浅色下极淡
+    100: 'rgba(129, 140, 248, 0.22)',  // soft hover
+    500: '#818CF8',                    // Lavender — 深色主色
+    600: '#6366F1',                    // Indigo — 按下/浅色主色
+    900: '#3730A3',
+    ring:   'rgba(129, 140, 248, 0.45)',
+    shadow: 'rgba(129, 140, 248, 0.28)',
   },
   purple: {
-    50: '#F5F3FF',   100: '#EDE9FE',  500: '#8B5CF6',  600: '#7C3AED',  900: '#4C1D95',
-    ring: 'rgba(139, 92, 246, 0.45)',  shadow: 'rgba(139, 92, 246, 0.28)',
+    50: '#F5F3FF',   100: '#EDE9FE',  500: '#A78BFA',  600: '#8B5CF6',  900: '#4C1D95',
+    ring: 'rgba(167, 139, 250, 0.45)',  shadow: 'rgba(167, 139, 250, 0.28)',
   },
   green: {
     50: '#ECFDF5',   100: '#D1FAE5',  500: '#10B981',  600: '#059669',  900: '#064E3B',

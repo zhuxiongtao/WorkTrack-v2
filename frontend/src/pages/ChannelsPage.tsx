@@ -59,6 +59,7 @@ const KINDS = ['官网通道', '号池', '逆向', '官方聚合', '其他']
 const STATUSES = ['合作中', '暂停', '已终止']
 const PRICE_UNITS: { value: string; label: string }[] = [
   { value: 'per_1k_token', label: '¥/1K tokens' },
+  { value: 'per_1m_token', label: '¥/1M tokens（百万）' },
   { value: 'per_request', label: '¥/次' },
   { value: 'per_month', label: '¥/月' },
 ]
@@ -78,6 +79,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
 
 const PRICE_UNIT_LABEL: Record<string, string> = {
   per_1k_token: '1K tokens',
+  per_1m_token: '1M tokens',
   per_request: '次',
   per_month: '月',
 }

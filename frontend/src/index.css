@@ -6,8 +6,10 @@ html {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ===== Tailwind 暗色模式：彻底覆盖默认 prefers-color-scheme，只跟随 data-theme 属性 ===== */
-@variant dark (&:where([data-theme="dark"] &));
+/* ===== Tailwind 暗色模式：深色为默认，浅色是例外（data-theme="light"）===== */
+/* 原理：锁定 :root，只要 html 元素没有 data-theme="light"，dark: 变体就生效
+   好处：首次渲染前 dark: 类即正确激活，不依赖 ThemeContext 的 useEffect */
+@variant dark (&:where(:root:not([data-theme="light"]) &));
 
 /* ===== 主题颜色系统 ===== */
 @theme {
@@ -19,60 +21,59 @@ html {
   --color-bg-hover-secondary: var(--bg-hover-secondary);
   --color-border: var(--border);
   --color-accent-blue: var(--accent-blue);
-  --color-accent-purple: #8B5CF6;
-  --color-accent-green: #10B981;
-  --color-accent-orange: #F59E0B;
+  --color-accent-purple: #A78BFA;
+  --color-accent-green: #34D399;
+  --color-accent-orange: #FBBF24;
   --font-sans: 'Inter', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 }
 
-/* ===== 暗色模式 —— 深蓝灰基底，避免纯黑 ===== */
+/* ===== 深色模式 —— Void Indigo 极深蓝黑基底 ===== */
 :root {
-  --bg-primary: #101720;
-  --bg-card: #1a1f2e;
-  --bg-input: #141a24;
-  --bg-sidebar: #0f141e;
-  --bg-hover: #242c3a;
-  --bg-hover-secondary: #1e2533;
-  --border: #2a3348;
-  --accent-blue: #3B82F6;
+  --bg-primary: #09090F;
+  --bg-card: #111118;
+  --bg-input: #0D0D16;
+  --bg-sidebar: #0B0B12;
+  --bg-hover: #1A1B2C;
+  --bg-hover-secondary: #141523;
+  --border: #1E2040;
+  --accent-blue: #818CF8;
 }
 
-/* ===== 亮色模式 —— 暖灰基底，避免刺眼纯白 ===== */
+/* ===== 浅色模式 —— Void Indigo 薰衣草白基底 ===== */
 [data-theme="light"] {
-  --bg-primary: #f1f3f6;
-  --bg-card: #fdfdfe;
-  --bg-input: #f5f6f9;
-  --bg-sidebar: #f3f5f8;
-  --bg-hover: #eef0f4;
-  --bg-hover-secondary: #e4e7ec;
-  --border: #d1d5db;
-  --accent-blue: #2563EB;
+  --bg-primary: #F2F3FB;
+  --bg-card: #FFFFFF;
+  --bg-input: #F7F8FE;
+  --bg-sidebar: #FFFFFF;
+  --bg-hover: #EEF0FD;
+  --bg-hover-secondary: #E8EAFB;
+  --border: #E2E4F3;
+  --accent-blue: #6366F1;
 }
 
-/* ===== 亮色模式 - 强制反色 Tailwind dark: 变体（兜底保障） ===== */
-/* 如果 @variant dark 因任何原因未覆盖系统 prefers-color-scheme，此规则确保亮色下文字可见 */
-[data-theme="light"] .dark\:text-white { color: #111827 !important; }
-[data-theme="light"] .dark\:text-gray-100 { color: #1F2937 !important; }
-[data-theme="light"] .dark\:text-gray-200 { color: #1F2937 !important; }
+/* ===== 浅色模式 - 强制反色 Tailwind dark: 变体（兜底保障） ===== */
+[data-theme="light"] .dark\:text-white { color: #0C0D1E !important; }
+[data-theme="light"] .dark\:text-gray-100 { color: #1A1B2E !important; }
+[data-theme="light"] .dark\:text-gray-200 { color: #1A1B2E !important; }
 [data-theme="light"] .dark\:text-gray-300 { color: #374151 !important; }
-[data-theme="light"] .dark\:text-gray-400 { color: #4B5563 !important; }
+[data-theme="light"] .dark\:text-gray-400 { color: #525577 !important; }
 [data-theme="light"] .dark\:text-gray-500 { color: #6B7280 !important; }
 [data-theme="light"] .dark\:text-gray-600 { color: #374151 !important; }
-[data-theme="light"] .dark\:hover\:text-white:hover { color: #111827 !important; }
-[data-theme="light"] .dark\:hover\:text-gray-200:hover { color: #1F2937 !important; }
+[data-theme="light"] .dark\:hover\:text-white:hover { color: #0C0D1E !important; }
+[data-theme="light"] .dark\:hover\:text-gray-200:hover { color: #1A1B2E !important; }
 [data-theme="light"] .dark\:hover\:text-gray-300:hover { color: #374151 !important; }
 
-/* ===== 亮色模式 - 裸浅色文字反色（未使用 dark: 前缀的元素） ===== */
-[data-theme="light"] .text-white { color: #111827 !important; }
-[data-theme="light"] .text-gray-100 { color: #111827 !important; }
-[data-theme="light"] .text-gray-200 { color: #1F2937 !important; }
+/* ===== 浅色模式 - 裸浅色文字反色（未使用 dark: 前缀的元素） ===== */
+[data-theme="light"] .text-white { color: #0C0D1E !important; }
+[data-theme="light"] .text-gray-100 { color: #0C0D1E !important; }
+[data-theme="light"] .text-gray-200 { color: #1A1B2E !important; }
 [data-theme="light"] .text-gray-300 { color: #374151 !important; }
-[data-theme="light"] .text-gray-400 { color: #4B5563 !important; }
+[data-theme="light"] .text-gray-400 { color: #525577 !important; }
 [data-theme="light"] .text-gray-500 { color: #6B7280 !important; }
 [data-theme="light"] .text-gray-600 { color: #374151 !important; }
 
-/* ===== 修复亮色模式下彩色/深色背景中文字被强制变黑的问题 ===== */
+/* ===== 修复浅色模式下彩色/深色背景中文字被强制变黑的问题 ===== */
 [data-theme="light"] .bg-accent-blue,
 [data-theme="light"] .bg-accent-blue *,
 [data-theme="light"] .bg-\[\#3B82F6\],
@@ -89,6 +90,8 @@ html {
 [data-theme="light"] .bg-amber-500 *,
 [data-theme="light"] .bg-violet-500,
 [data-theme="light"] .bg-violet-500 *,
+[data-theme="light"] .bg-indigo-500,
+[data-theme="light"] .bg-indigo-500 *,
 [data-theme="light"] .from-\[\#3B82F6\].to-\[\#8B5CF6\],
 [data-theme="light"] .from-\[\#3B82F6\].to-\[\#8B5CF6\] *,
 [data-theme="light"] .text-white-force {
@@ -98,18 +101,15 @@ html {
 [data-theme="light"] .placeholder-gray-500::placeholder { color: #9CA3AF !important; }
 [data-theme="light"] .placeholder-gray-600::placeholder { color: #9CA3AF !important; }
 
-/* ===== 业务管理大模块（供应商/通道/对账）弹窗：亮色模式适配 ===== */
-/* 弹窗主面板（from-gray-900 to-gray-950 → 卡片白） */
+/* ===== 业务管理大模块（供应商/通道/对账）弹窗：浅色模式适配 ===== */
 [data-theme="light"] .from-gray-900.to-gray-950 {
   --tw-gradient-from: var(--bg-card) var(--tw-gradient-from-position);
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
 }
-/* 弹窗底部粘性栏（bg-gray-950/80 → 浅色半透明白） */
 [data-theme="light"] .bg-gray-950\/80 {
   background-color: rgba(255, 255, 255, 0.85) !important;
   backdrop-filter: blur(8px);
 }
-/* 弹窗内表单输入（bg-black/30 → 浅色输入框） */
 [data-theme="light"] input.bg-black\/30,
 [data-theme="light"] select.bg-black\/30,
 [data-theme="light"] textarea.bg-black\/30 {
@@ -125,29 +125,26 @@ html {
   background-color: var(--bg-input) !important;
   color: #1F2937 !important;
 }
-/* 弹窗内细边框（border-white/5、border-white/10 → 主题边框） */
 [data-theme="light"] .border-white\/5,
 [data-theme="light"] .border-white\/10 {
   border-color: var(--border) !important;
 }
-/* 弹窗内禁用态的灰底（bg-black/20） */
 [data-theme="light"] .bg-black\/20 {
   background-color: rgba(0, 0, 0, 0.04) !important;
 }
-/* 弹窗内小标签栏（border-white/5） */
 [data-theme="light"] .border-b.border-white\/5,
 [data-theme="light"] .border-t.border-white\/5 {
   border-color: var(--border) !important;
 }
 
-/* ===== 亮色模式 - hover 反色 ===== */
-[data-theme="light"] .hover\:text-white:hover { color: #111827 !important; }
-[data-theme="light"] .hover\:text-gray-200:hover { color: #1F2937 !important; }
+/* ===== 浅色模式 - hover 反色 ===== */
+[data-theme="light"] .hover\:text-white:hover { color: #0C0D1E !important; }
+[data-theme="light"] .hover\:text-gray-200:hover { color: #1A1B2E !important; }
 [data-theme="light"] .hover\:text-gray-300:hover { color: #374151 !important; }
 
 [data-theme="light"] .border-theme { border-color: var(--border) !important; }
 
-/* ===== 全局微渐变 —— 增加视觉层次 ===== */
+/* ===== 全局微渐变 —— Void Indigo 薰衣草/天蓝光晕 ===== */
 :root::before {
   content: '';
   position: fixed;
@@ -155,30 +152,75 @@ html {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 60% 50% at 50% 0%, rgba(59, 130, 246, 0.03) 0%, transparent 100%),
-    radial-gradient(ellipse 40% 40% at 100% 100%, rgba(139, 92, 246, 0.02) 0%, transparent 100%);
+    radial-gradient(ellipse 60% 50% at 50% 0%, rgba(129, 140, 248, 0.05) 0%, transparent 100%),
+    radial-gradient(ellipse 40% 40% at 100% 100%, rgba(56, 189, 248, 0.03) 0%, transparent 100%);
 }
 
 [data-theme="light"]::before {
   background:
-    radial-gradient(ellipse 60% 50% at 50% 0%, rgba(59, 130, 246, 0.06) 0%, transparent 100%),
-    radial-gradient(ellipse 40% 40% at 100% 100%, rgba(139, 92, 246, 0.04) 0%, transparent 100%);
+    radial-gradient(ellipse 60% 50% at 50% 0%, rgba(99, 102, 241, 0.07) 0%, transparent 100%),
+    radial-gradient(ellipse 40% 40% at 100% 100%, rgba(129, 140, 248, 0.05) 0%, transparent 100%);
 }
 
 /* 卡片微光边框效果 */
 :root .shadow-2xl {
-  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.08), 0 25px 50px -12px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.08), 0 25px 50px -12px rgba(0, 0, 0, 0.45);
 }
 
 [data-theme="light"] .shadow-2xl {
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.08), 0 25px 50px -12px rgba(0, 0, 0, 0.12);
+}
+
+/* ===== Void Indigo 深色模式全局色彩标准化 =====
+   目标：把各页面遗留的 bg-gray-* / border-gray-* 硬编码色纳入 Void Indigo 调色盘
+   原则：只影响深色模式，浅色模式由 [data-theme="light"] 规则接管
+   ================================================================== */
+
+/* —— 卡片/面板背景 —— */
+:root:not([data-theme="light"]) .bg-gray-900,
+:root:not([data-theme="light"]) .dark\:bg-gray-900 { background-color: var(--bg-primary) !important; }
+
+:root:not([data-theme="light"]) .bg-gray-800,
+:root:not([data-theme="light"]) .dark\:bg-gray-800 { background-color: var(--bg-card) !important; }
+
+:root:not([data-theme="light"]) .bg-gray-700,
+:root:not([data-theme="light"]) .dark\:bg-gray-700 { background-color: var(--bg-hover) !important; }
+
+/* —— 输入框/表单 —— */
+:root:not([data-theme="light"]) .bg-gray-800\/50,
+:root:not([data-theme="light"]) .dark\:bg-gray-800\/50 { background-color: rgba(17,17,24,0.5) !important; }
+:root:not([data-theme="light"]) .bg-gray-900\/80 { background-color: rgba(9,9,15,0.8) !important; }
+
+/* —— 边框 —— */
+:root:not([data-theme="light"]) .border-gray-700,
+:root:not([data-theme="light"]) .dark\:border-gray-700 { border-color: var(--border) !important; }
+
+:root:not([data-theme="light"]) .border-gray-600,
+:root:not([data-theme="light"]) .dark\:border-gray-600 { border-color: var(--border) !important; }
+
+:root:not([data-theme="light"]) .border-gray-800,
+:root:not([data-theme="light"]) .dark\:border-gray-800 { border-color: var(--border) !important; }
+
+/* —— 悬停背景 —— */
+:root:not([data-theme="light"]) .hover\:bg-gray-800:hover,
+:root:not([data-theme="light"]) .dark\:hover\:bg-gray-800:hover { background-color: var(--bg-hover) !important; }
+:root:not([data-theme="light"]) .hover\:bg-gray-700:hover { background-color: var(--bg-hover) !important; }
+
+/* —— 弹窗/深色渐变面板（from-gray-900 to-gray-950 模式）—— */
+:root:not([data-theme="light"]) .from-gray-900,
+:root:not([data-theme="light"]) .from-gray-900.to-gray-950 {
+  --tw-gradient-from: var(--bg-card) var(--tw-gradient-from-position);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+:root:not([data-theme="light"]) .to-gray-950 {
+  --tw-gradient-to: var(--bg-sidebar) var(--tw-gradient-to-position);
 }
 
 /* ===== 滚动条美化 ===== */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #3B82F6; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent-blue); }
 
 /* 日期选择器图标修复 */
 input[type="date"] { color-scheme: dark; }
@@ -189,7 +231,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.6); cur
 body {
   margin: 0;
   background-color: var(--bg-primary);
-  color: #E5E7EB;
+  color: #EEF0FA;
   overflow-x: hidden;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: auto;
@@ -199,7 +241,7 @@ body {
 
 [data-theme="light"] body {
   -webkit-font-smoothing: auto;
-  color: #111827;
+  color: #0C0D1E;
 }
 
 /* ===== 移动端响应式断点 ===== */
@@ -210,7 +252,6 @@ body {
 
 /* ===== PWA 安全区域适配 ===== */
 .safe-area-top {
-  /* iOS Safari 浏览器模式下 safe-area-inset-top 为 0，兜底 20px 避开状态栏 */
   padding-top: max(env(safe-area-inset-top, 0px), 20px);
 }
 .safe-area-bottom {
@@ -227,7 +268,7 @@ body {
 .markdown-body h1, .markdown-body h2, .markdown-body h3,
 .markdown-body h4, .markdown-body h5, .markdown-body h6 { margin: 0.6em 0 0.3em; }
 .markdown-body h1 { font-size: 1.4em; font-weight: 700; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
-:root[data-theme="dark"] .markdown-body h1 { border-color: #374151; }
+:root[data-theme="dark"] .markdown-body h1 { border-color: #1E2040; }
 .markdown-body h2 { font-size: 1.2em; font-weight: 700; }
 .markdown-body h3 { font-size: 1.05em; font-weight: 600; }
 .markdown-body hr { margin: 0.5em 0; opacity: 0.3; border-color: inherit; }
@@ -235,26 +276,26 @@ body {
   font-size: 0.85em; padding: 1px 3px; border-radius: 3px;
   background: #e5e7eb; color: #b45309;
 }
-:root[data-theme="dark"] .markdown-body code { background: #1f2937; color: #f59e0b; }
+:root[data-theme="dark"] .markdown-body code { background: #1a1b2c; color: #FBBF24; }
 .markdown-body pre {
   margin: 0.4em 0; padding: 12px; border-radius: 8px;
   background: #e5e7eb; border: 1px solid #d1d5db; overflow-x: auto;
 }
-:root[data-theme="dark"] .markdown-body pre { background: #1f2937; border-color: #374151; }
+:root[data-theme="dark"] .markdown-body pre { background: #111118; border-color: #1E2040; }
 .markdown-body pre code { background: transparent; color: inherit; padding: 0; }
 .markdown-body blockquote {
   margin: 0.4em 0; padding-left: 12px;
-  border-left: 3px solid #3B82F6; color: #6b7280;
+  border-left: 3px solid var(--accent-blue); color: #6b7280;
 }
-:root[data-theme="dark"] .markdown-body blockquote { color: #9ca3af; }
+:root[data-theme="dark"] .markdown-body blockquote { color: #7C7FA0; }
 .markdown-body table { margin: 0.4em 0; border-collapse: collapse; font-size: 0.9em; }
 .markdown-body th, .markdown-body td { padding: 3px 8px; border: 1px solid #d1d5db; }
 :root[data-theme="dark"] .markdown-body th,
-:root[data-theme="dark"] .markdown-body td { border-color: #374151; }
+:root[data-theme="dark"] .markdown-body td { border-color: #1E2040; }
 .markdown-body th { background: #e5e7eb; font-weight: 600; }
-:root[data-theme="dark"] .markdown-body th { background: #1f2937; }
+:root[data-theme="dark"] .markdown-body th { background: #111118; }
 .markdown-body img { max-width: 100%; border-radius: 8px; margin: 0.4em 0; }
-.markdown-body a { color: #3B82F6; text-decoration: underline; }
+.markdown-body a { color: var(--accent-blue); text-decoration: underline; }
 
 /* ===== 会议卡片 Markdown 预览紧凑样式 ===== */
 .markdown-preview-card h1, .markdown-preview-card h2, .markdown-preview-card h3,
@@ -322,10 +363,7 @@ body {
 .animate-fadeIn  { animation: fadeIn  0.22s ease-out both; }
 .animate-scaleIn { animation: scaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) both; }
 
-/* ===== 上下滚动 banner（ticker）=====
-   - 列表形式：固定高度视口 + 复制一份实现无缝循环
-   - 50% 时刚好走完第一份回到起点（视觉上无缝衔接）
-   - duration 按条目数 / 速度线性增长：12 条 × 26px = 312px，30s 走完 ≈ 10.4px/s */
+/* ===== 上下滚动 banner（ticker）===== */
 @keyframes scrollUp {
   from { transform: translateY(0); }
   to   { transform: translateY(-50%); }
@@ -338,7 +376,6 @@ body {
   animation-play-state: paused;
 }
 
-/* 上下渐隐遮罩，让边缘的滚动条有"被裁掉"的视觉感 */
 .ticker-mask {
   -webkit-mask-image: linear-gradient(
     to bottom,
@@ -372,11 +409,11 @@ body {
 .form-input::placeholder { color: rgb(156, 163, 175); }
 .form-input:focus {
   border-color: var(--accent-blue);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
 }
 :root[data-theme="dark"] .form-input {
   background-color: var(--bg-input);
   border-color: var(--border);
-  color: rgb(229, 231, 235);
+  color: rgb(238, 240, 250);
 }
-:root[data-theme="dark"] .form-input::placeholder { color: rgb(107, 114, 128); }
+:root[data-theme="dark"] .form-input::placeholder { color: rgb(100, 103, 140); }

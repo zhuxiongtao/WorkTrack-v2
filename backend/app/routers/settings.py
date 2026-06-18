@@ -492,9 +492,8 @@ def update_provider_model(provider_id: int, model_id: int, data: ModelUpdate, db
         if dup:
             raise HTTPException(status_code=409, detail="该模型名已存在")
         model.model_name = data.model_name
-    # P0: 更新所有 default_* / 能力 / 元数据 字段
     update_payload = data.model_dump(exclude={"model_type", "model_name"}, exclude_unset=True)
-    # P1 多模态：list → JSON 字符串
+    # 多模态：list → JSON 字符串
     if "supported_task_types" in update_payload and isinstance(update_payload["supported_task_types"], list):
         update_payload["supported_task_types"] = json.dumps(update_payload["supported_task_types"], ensure_ascii=False)
     for key, value in update_payload.items():
@@ -859,7 +858,7 @@ class TaskModelUpdate(BaseModel):
     task_type: str
     provider_id: Optional[int] = None
     model_name: str = ""
-    # P0: 任务级参数覆盖
+    # 任务级参数覆盖（None 表示继承模型默认）
     override_temperature: Optional[float] = None
     override_top_p: Optional[float] = None
     override_max_tokens: Optional[int] = None
@@ -872,28 +871,10 @@ class TaskModelUpdate(BaseModel):
     override_json_schema: Optional[str] = None
     override_extra_params_json: Optional[str] = None
     preset_id: Optional[int] = None
-    # P1: 任务级「需要能力」约束
-    # 可选值：function_calling / vision / json_mode / thinking / streaming / system_prompt
-    # 留空 = 不约束（向后兼容）
-    required_capabilities: Optional[list[str]] = None
 
 
 def _serialize_task_config(c: TaskModelConfig) -> dict:
-    """完整序列化 TaskModelConfig（含 P0 override 字段 + P1 required_capabilities）"""
-    # P1: required_capabilities 在 DB 里是 JSON 列，存的是 list；
-    # 但 SQLAlchemy + Pydantic str 字段配合时可能返回 string，这里防御性处理
-    raw_caps = c.required_capabilities
-    if raw_caps is None:
-        caps_out: list = []
-    elif isinstance(raw_caps, str):
-        try:
-            caps_out = json.loads(raw_caps) if raw_caps else []
-        except Exception:
-            caps_out = []
-    elif isinstance(raw_caps, list):
-        caps_out = raw_caps
-    else:
-        caps_out = []
+    """序列化 TaskModelConfig"""
     return {
         "task_type": c.task_type,
         "provider_id": c.provider_id,
@@ -911,8 +892,6 @@ def _serialize_task_config(c: TaskModelConfig) -> dict:
         "override_json_schema": c.override_json_schema,
         "override_extra_params_json": c.override_extra_params_json,
         "preset_id": c.preset_id,
-        # P1: 任务级「需要能力」约束
-        "required_capabilities": caps_out,
     }
 
 
@@ -935,39 +914,44 @@ def get_task_models(db: Session = Depends(get_session),
     configs = db.exec(
         select(TaskModelConfig).where(or_(*conditions))
     ).all()
+
+    # 批量预加载 provider 和 model，避免 N+1
+    provider_ids = {c.provider_id for c in configs if c.provider_id}
+    providers: dict[int, ModelProvider] = {}
+    if provider_ids:
+        for p in db.exec(select(ModelProvider).where(ModelProvider.id.in_(provider_ids))).all():
+            providers[p.id] = p
+
+    valid_models: set[tuple[int, str]] = set()
+    if provider_ids:
+        for m in db.exec(
+            select(ProviderModel.provider_id, ProviderModel.model_name).where(
+                ProviderModel.provider_id.in_(provider_ids)
+            )
+        ).all():
+            valid_models.add((m.provider_id, m.model_name))
+
     result = {}
     stale_ids = []
     for c in configs:
-        provider = db.get(ModelProvider, c.provider_id) if c.provider_id else None
+        provider = providers.get(c.provider_id) if c.provider_id else None
         if not provider:
             stale_ids.append(c.id)
             continue
-        # 检查模型是否仍存在于供应商下
-        if c.model_name:
-            model_exists = db.exec(
-                select(ProviderModel).where(
-                    ProviderModel.provider_id == c.provider_id,
-                    ProviderModel.model_name == c.model_name,
-                )
-            ).first()
-            if not model_exists:
-                stale_ids.append(c.id)
-                continue
+        if c.model_name and (c.provider_id, c.model_name) not in valid_models:
+            stale_ids.append(c.id)
+            continue
         cfg = _serialize_task_config(c)
-        if "provider_name" not in cfg:
-            cfg["provider_name"] = provider.name if provider else None
-        else:
-            cfg["provider_name"] = provider.name if provider else None
+        cfg["provider_name"] = provider.name
         if c.user_id is None and c.task_type not in result:
             result[c.task_type] = cfg
         elif c.user_id is not None:
             result[c.task_type] = cfg
-    # 清理无效配置
+    # 清理无效配置（批量删除）
     if stale_ids:
-        for sid in stale_ids:
-            stale = db.get(TaskModelConfig, sid)
-            if stale:
-                db.delete(stale)
+        stale_configs = db.exec(select(TaskModelConfig).where(TaskModelConfig.id.in_(stale_ids))).all()
+        for stale in stale_configs:
+            db.delete(stale)
         db.commit()
     return result
 
@@ -979,41 +963,6 @@ def update_task_model(data: TaskModelUpdate, db: Session = Depends(get_session),
     can_manage_shared = has_permission(current_user, "ai:manage_shared", db)
     uid = None if can_manage_shared else current_user.id
 
-    # P1: 校验 required_capabilities 与所选模型能力是否一致
-    caps = data.required_capabilities or []
-    valid_caps = {
-        "function_calling", "vision", "json_mode",
-        "thinking", "streaming", "system_prompt",
-    }
-    bad_caps = [c for c in caps if c not in valid_caps]
-    if bad_caps:
-        raise HTTPException(
-            status_code=422,
-            detail=f"未知的能力标识: {bad_caps}，可选: {sorted(valid_caps)}",
-        )
-    caps_warning: list[str] = []  # 模型不满足的能力
-    if caps and data.provider_id and data.model_name:
-        m = db.exec(
-            select(ProviderModel).where(
-                ProviderModel.provider_id == data.provider_id,
-                ProviderModel.model_name == data.model_name,
-            )
-        ).first()
-        if m:
-            cap_field_map = {
-                "function_calling": m.supports_function_calling,
-                "vision": m.supports_vision,
-                "json_mode": m.supports_json_mode,
-                "thinking": m.supports_thinking,
-                "streaming": m.supports_streaming,
-                "system_prompt": m.supports_system_prompt,
-            }
-            for c in caps:
-                if not cap_field_map.get(c):
-                    caps_warning.append(c)
-        else:
-            caps_warning.append(f"__model_not_found:{data.model_name}__")
-
     config = db.exec(
         select(TaskModelConfig).where(
             TaskModelConfig.task_type == data.task_type,
@@ -1021,7 +970,6 @@ def update_task_model(data: TaskModelUpdate, db: Session = Depends(get_session),
         )
     ).first()
     if not config:
-        # P0: 创建时携带 override 字段
         config = TaskModelConfig(
             task_type=data.task_type,
             provider_id=data.provider_id,
@@ -1039,24 +987,15 @@ def update_task_model(data: TaskModelUpdate, db: Session = Depends(get_session),
             override_json_schema=data.override_json_schema,
             override_extra_params_json=data.override_extra_params_json,
             preset_id=data.preset_id,
-            required_capabilities=json.dumps(caps, ensure_ascii=False) if caps else None,  # P1
         )
         db.add(config)
     else:
         config.provider_id = data.provider_id
         config.model_name = data.model_name
-        # P0: 更新 override 字段（仅在请求里显式带了的字段才更新）
         update_payload = data.model_dump(
             exclude={"task_type", "provider_id", "model_name"},
             exclude_unset=False,
         )
-        # P1: 序列化 required_capabilities 为 JSON 字符串
-        if "required_capabilities" in update_payload:
-            v = update_payload["required_capabilities"]
-            if v is None:
-                update_payload["required_capabilities"] = None
-            else:
-                update_payload["required_capabilities"] = json.dumps(v, ensure_ascii=False)
         for key, value in update_payload.items():
             setattr(config, key, value)
         db.add(config)
@@ -1066,9 +1005,6 @@ def update_task_model(data: TaskModelUpdate, db: Session = Depends(get_session),
     if config.provider_id:
         p = db.get(ModelProvider, config.provider_id)
         out["provider_name"] = p.name if p else None
-    if caps_warning:
-        # 不阻断保存，附带 warning 字段让前端展示
-        out["caps_warning"] = caps_warning
     return out
 
 
@@ -1080,14 +1016,9 @@ class PresetCreate(BaseModel):
     temperature: Optional[float] = None
     top_p: Optional[float] = None
     max_tokens: Optional[int] = None
-    frequency_penalty: Optional[float] = None
-    presence_penalty: Optional[float] = None
-    stop: Optional[str] = None
     thinking_mode: Optional[str] = None
     thinking_budget: Optional[int] = None
     response_format: Optional[str] = None
-    json_schema: Optional[str] = None
-    extra_params_json: Optional[str] = None
 
 
 class PresetUpdate(BaseModel):
@@ -1096,14 +1027,9 @@ class PresetUpdate(BaseModel):
     temperature: Optional[float] = None
     top_p: Optional[float] = None
     max_tokens: Optional[int] = None
-    frequency_penalty: Optional[float] = None
-    presence_penalty: Optional[float] = None
-    stop: Optional[str] = None
     thinking_mode: Optional[str] = None
     thinking_budget: Optional[int] = None
     response_format: Optional[str] = None
-    json_schema: Optional[str] = None
-    extra_params_json: Optional[str] = None
 
 
 def _serialize_preset(p: ModelParamPreset) -> dict:
@@ -1116,14 +1042,9 @@ def _serialize_preset(p: ModelParamPreset) -> dict:
         "temperature": p.temperature,
         "top_p": p.top_p,
         "max_tokens": p.max_tokens,
-        "frequency_penalty": p.frequency_penalty,
-        "presence_penalty": p.presence_penalty,
-        "stop": p.stop,
         "thinking_mode": p.thinking_mode,
         "thinking_budget": p.thinking_budget,
         "response_format": p.response_format,
-        "json_schema": p.json_schema,
-        "extra_params_json": p.extra_params_json,
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "updated_at": p.updated_at.isoformat() if p.updated_at else None,
     }
@@ -1337,20 +1258,24 @@ class TavilyConfigUpdate(BaseModel):
 
 @router.get("/tavily-config")
 def get_tavily_config(db: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
-    """获取当前用户的 Tavily API Key"""
+    """获取当前用户的 Tavily API Key（脱敏返回）"""
     pref = db.exec(
         select(SystemPreference).where(
             SystemPreference.key == "tavily_api_key",
             SystemPreference.user_id == current_user.id,
         )
     ).first()
-    return {"api_key": pref.value if pref else ""}
+    raw = pref.value if pref else ""
+    masked = (raw[:4] + "****" + raw[-4:]) if len(raw) > 8 else ("****" if raw else "")
+    return {"api_key": masked, "has_key": bool(raw)}
 
 
 @router.put("/tavily-config")
 def update_tavily_config(data: TavilyConfigUpdate, db: Session = Depends(get_session),
                          current_user: User = Depends(get_current_user)):
-    """更新当前用户的 Tavily API Key"""
+    """更新当前用户的 Tavily API Key；提交脱敏占位值时忽略"""
+    if not data.api_key or "****" in data.api_key:
+        return {"message": "Tavily API Key 未变更"}
     pref = db.exec(
         select(SystemPreference).where(
             SystemPreference.key == "tavily_api_key",
@@ -1373,7 +1298,7 @@ DEFAULT_PROMPTS = {
         "task_type": "daily_summary",
         "label": "📋 日报总结",
         "desc": "单篇日报 AI 总结时使用的提示词",
-        "system_prompt": "你是一个专业的工作助手，请用简洁的中文总结以下日报内容，提取关键工作事项和成果。",
+        "system_prompt": "你是工作效率助手。将日报内容提炼为简洁摘要，突出今日完成的关键事项与重要进展。输出 3-5 条以「•」开头的要点，每条不超过 30 字，语言简洁直接。",
         "user_prompt_template": "请总结以下工作日报：\n{content}",
         "variables": ["{content}"],
     },
@@ -1381,7 +1306,7 @@ DEFAULT_PROMPTS = {
         "task_type": "weekly_summary",
         "label": "📊 周报总结",
         "desc": "在周报页面生成整周 AI 总结时使用的提示词",
-        "system_prompt": "你是一个专业的周报总结助手。请根据本周的日报内容，生成一份简洁的工作周报总结。要求：1. 概括本周主要工作内容 2. 突出重要进展和成果 3. 指出待解决的问题 4. 用 markdown 格式输出，结构清晰。",
+        "system_prompt": "你是工作效率助手。根据本周日报内容生成结构化周报总结。\n要求：\n1. 本周主要完成事项（3-5 条要点）\n2. 重要进展与成果\n3. 待解决的问题或风险\n用 markdown 格式输出，结构清晰，总字数控制在 400 字以内。",
         "user_prompt_template": "请总结本周（{week_range}）的工作情况：\n\n{reports_content}",
         "variables": ["{week_range}", "{reports_content}"],
     },
@@ -1389,14 +1314,14 @@ DEFAULT_PROMPTS = {
         "task_type": "meeting_organize",
         "label": "🎙️ 会议纪要整理",
         "desc": "录音转文字后 AI 整理会议纪要时使用的提示词",
-        "system_prompt": "你是一个专业的会议纪要整理助手。请将以下语音转文字内容整理成结构化的会议纪要。\n要求：\n1. 修正转写错误，补充上下文使语句通顺\n2. 按讨论主题分段，每段有小标题\n3. 提取关键决策和待办事项\n4. 用 markdown 格式输出\n请直接输出整理后的会议纪要，不要加\"以下是整理后的...\"之类的引导语。",
+        "system_prompt": "你是专业的会议纪要助手。将语音转写内容整理为规范的会议纪要。\n要求：\n1. 修正转写错误，补充上下文，语句通顺\n2. 按讨论主题分段，每段有小标题\n3. 末尾单独列出「决议事项」和「待办清单」（含负责人）\n4. 用 markdown 格式输出\n直接输出纪要内容，不要加前缀引导语。",
         "user_prompt_template": "请整理以下会议录音转写内容：\n{content}",
         "variables": ["{content}"],
     },
     "meeting_extract": {
         "task_type": "meeting_extract",
         "label": "📝 会议结构化提取",
-        "desc": "从会议纪要中提取决议、待办等结构化信息时使用的提示词",
+        "desc": "从会议纪要中提取决议、待办等结构化信息（系统固定，不开放自定义）",
         "system_prompt": "你是一个专业的会议纪要分析助手。请从会议内容中提取结构化信息。\n以 JSON 格式返回，包含以下字段：\n- decisions: 会议决议列表\n- todos: 待办事项列表，每项包含 task 和 assignee\n- conclusions: 会议结论摘要\n只返回 JSON，不要有其他内容。",
         "user_prompt_template": "请以 json 格式分析以下会议纪要，返回 decisions、todos、conclusions 三个字段：\n{content}",
         "variables": ["{content}"],
@@ -1404,24 +1329,24 @@ DEFAULT_PROMPTS = {
     "project_analysis": {
         "task_type": "project_analysis",
         "label": "📈 项目分析",
-        "desc": "AI 分析项目状态时使用的提示词",
-        "system_prompt": "你是一个专业的项目管理助手，请分析项目状态并给出建议。",
-        "user_prompt_template": "请分析以下项目：\n项目名称: {name}\n状态: {status}\n截止日期: {deadline}\n关联会议: {meetings}\n请给出项目分析，包括：当前状态评估、风险提示、后续建议。",
-        "variables": ["{name}", "{status}", "{deadline}", "{meetings}"],
+        "desc": "AI 分析销售项目状态时使用的提示词",
+        "system_prompt": "你是专业的销售项目管理助手。综合分析销售项目的跟进现状，给出客观的状态评估、潜在风险和具体的下一步行动建议。结合客户背景、项目进展和历史会议作出判断，输出简洁专业，避免空洞套话。",
+        "user_prompt_template": "请分析以下项目：\n\n【基本信息】\n项目名称: {name}\n当前状态: {status}\n涉及产品: {product}\n项目场景: {scenario}\n销售负责人: {sales_person}\n商机金额: {amount}\n截止日期: {deadline}\n\n【客户信息】\n客户名称: {customer_name}\n客户行业: {customer_industry}\n客户规模: {customer_scale}\n核心产品: {customer_products}\n客户简介: {customer_profile}\n\n【跟进记录】\n{progress}\n\n【关联会议】\n{meetings}\n\n请给出：\n1. 当前状态评估（结合跟进记录和客户情况）\n2. 风险提示（考虑客户行业、规模、项目进展）\n3. 后续建议（具体的下一步行动）",
+        "variables": ["{name}", "{status}", "{product}", "{scenario}", "{sales_person}", "{amount}", "{deadline}", "{customer_name}", "{customer_industry}", "{customer_scale}", "{customer_products}", "{customer_profile}", "{progress}", "{meetings}"],
     },
     "insight_week": {
         "task_type": "insight_week",
         "label": "🔍 周度洞察",
         "desc": "数据看板中本周 AI 综合洞察使用的提示词",
-        "system_prompt": "你是 WorkTrack 的数据分析助手。请根据本周工作数据，从项目进展、日报提交、会议效率、客户动态等维度进行综合立体分析。\n要求：\n1. 发现本周最值得关注的 3 个点\n2. 每条洞察用「•」开头，不超过 50 字\n3. 侧重趋势发现和行动建议\n4. 直接输出 3 行，不要序号和其他内容",
-        "user_prompt_template": "请分析本周（{range}）工作数据：\n\n项目: {projects_summary}\n客户: {customers_summary}\n会议: {meetings_summary}\n日报: {reports_summary}\n周报: {weeklies_summary}",
-        "variables": ["{range}", "{projects_summary}", "{customers_summary}", "{meetings_summary}", "{reports_summary}", "{weeklies_summary}"],
+        "system_prompt": "你是 WorkTrack 数据分析助手。根据本周工作数据，从项目进展、日报完成、会议效率、客户动态等维度给出综合洞察。\n要求：\n1. 给出本周最值得关注的 3 个洞察点\n2. 每条以「•」开头，不超过 40 字\n3. 侧重趋势发现和行动建议\n4. 直接输出 3 行，不加序号或其他内容",
+        "user_prompt_template": "请分析本周（{range}）工作数据：\n\n项目: {projects_summary}\n客户: {customers_summary}\n会议: {meetings_summary}\n日报: {reports_summary}",
+        "variables": ["{range}", "{projects_summary}", "{customers_summary}", "{meetings_summary}", "{reports_summary}"],
     },
     "insight_month": {
         "task_type": "insight_month",
         "label": "📊 月度洞察",
         "desc": "数据看板中本月 AI 综合洞察使用的提示词",
-        "system_prompt": "你是 WorkTrack 的高级数据分析师。请根据本月工作数据进行综合深度分析，关注月度趋势变化、工作效率、团队协作模式。\n要求：\n1. 发现本月最值得关注的 3 个趋势或问题\n2. 每条洞察用「•」开头，不超过 50 字\n3. 侧重长期趋势和结构性建议\n4. 直接输出 3 行，不要序号和其他内容",
+        "system_prompt": "你是 WorkTrack 数据分析助手。根据本月工作数据，分析月度趋势变化、工作效率和团队协作情况，给出综合洞察。\n要求：\n1. 给出本月最值得关注的 3 个洞察点\n2. 每条以「•」开头，不超过 40 字\n3. 侧重月度趋势和结构性问题\n4. 直接输出 3 行，不加序号或其他内容",
         "user_prompt_template": "请分析本月（{range}）工作数据：\n\n项目: {projects_summary}\n客户: {customers_summary}\n会议: {meetings_summary}\n日报: {reports_summary}\n周报: {weeklies_summary}",
         "variables": ["{range}", "{projects_summary}", "{customers_summary}", "{meetings_summary}", "{reports_summary}", "{weeklies_summary}"],
     },
@@ -1429,15 +1354,15 @@ DEFAULT_PROMPTS = {
         "task_type": "insight_quarter",
         "label": "📋 季度洞察",
         "desc": "数据看板中本季度 AI 综合洞察使用的提示词",
-        "system_prompt": "你是 WorkTrack 的资深战略分析师。请根据本季度工作数据进行战略性综合分析，识别大局趋势、瓶颈模式和优化方向。\n要求：\n1. 给出本季度最关键的 3 个洞察\n2. 每条洞察用「•」开头，不超过 50 字\n3. 侧重战略层面和长期改进\n4. 直接输出 3 行，不要序号和其他内容",
+        "system_prompt": "你是 WorkTrack 数据分析助手。根据本季度工作数据，进行战略性综合分析，识别季度趋势、瓶颈和优化方向。\n要求：\n1. 给出本季度最关键的 3 个战略洞察\n2. 每条以「•」开头，不超过 40 字\n3. 侧重战略层面和长期改进方向\n4. 直接输出 3 行，不加序号或其他内容",
         "user_prompt_template": "请分析本季度（{range}）工作数据：\n\n项目: {projects_summary}\n客户: {customers_summary}\n会议: {meetings_summary}\n日报: {reports_summary}\n周报: {weeklies_summary}",
         "variables": ["{range}", "{projects_summary}", "{customers_summary}", "{meetings_summary}", "{reports_summary}", "{weeklies_summary}"],
     },
-    # ===== 以下为 P1 补全：覆盖代码中实际使用的 task_type =====
+    # ===== 以下仅供 AI 服务内部使用，不在设置页暴露 =====
     "chat": {
         "task_type": "chat",
         "label": "💬 通用对话",
-        "desc": "AI 助手/在线问答/自由聊天场景",
+        "desc": "AI 助手对话（系统固定）",
         "system_prompt": "你是一个专业、友好的工作助手。回答简洁准确，必要时用 markdown 格式。",
         "user_prompt_template": "{messages}",
         "variables": ["{messages}"],
@@ -1445,7 +1370,7 @@ DEFAULT_PROMPTS = {
     "speech_to_text": {
         "task_type": "speech_to_text",
         "label": "🎧 语音转文字",
-        "desc": "会议录音 → 文字（走 ASR 模型，无 LLM 提示词）",
+        "desc": "ASR 模型，无 LLM 提示词",
         "system_prompt": "",
         "user_prompt_template": "",
         "variables": [],
@@ -1453,7 +1378,7 @@ DEFAULT_PROMPTS = {
     "vision": {
         "task_type": "vision",
         "label": "🖼️ 图像理解",
-        "desc": "合同扫描件/图片 OCR 与结构化理解（vision 模型）",
+        "desc": "图像 OCR 与理解（系统固定）",
         "system_prompt": "你是一个专业的图像理解助手。请仔细阅读图片中的文字内容，准确识别并转写所有可读的中文/英文文字。保留原段落结构，修正明显错别字。如果是表格，请用 markdown 表格输出。",
         "user_prompt_template": "请识别并转写以下图片中的全部文字内容：\n{image_description}",
         "variables": ["{image_description}"],
@@ -1461,7 +1386,7 @@ DEFAULT_PROMPTS = {
     "contract_parse": {
         "task_type": "contract_parse",
         "label": "📑 合同解析",
-        "desc": "合同文字 → 关键字段结构化抽取（low temp + JSON）",
+        "desc": "合同关键字段结构化抽取（系统固定）",
         "system_prompt": "你是一个专业的合同解析助手。请从合同文本中抽取关键字段，以 JSON 格式返回。\n要求：\n1. 严格按给定 schema 输出，不要遗漏\n2. 没有的字段填空字符串或空数组\n3. 日期统一 ISO 格式 YYYY-MM-DD\n4. 只返回 JSON，不要其他文字",
         "user_prompt_template": "请解析以下合同文本：\n{content}\n\n字段：甲方、乙方、合同金额、签订日期、生效日期、截止日期、付款方式、违约条款、争议解决",
         "variables": ["{content}"],
@@ -1469,15 +1394,15 @@ DEFAULT_PROMPTS = {
     "company_info": {
         "task_type": "company_info",
         "label": "🏢 公司信息整合",
-        "desc": "Tavily 联网搜索结果 → 公司画像整合",
-        "system_prompt": "你是一个专业的企业信息分析师。请根据提供的搜索结果，整合该公司的关键信息（行业、规模、产品、近期动态）。\n要求：\n1. 客观准确，不编造\n2. 突出近期动态\n3. 用中文回答，结构清晰\n4. 总长不超过 300 字",
-        "user_prompt_template": "请整合以下公司的搜索信息：\n公司名: {company_name}\n\n搜索结果:\n{search_results}",
-        "variables": ["{company_name}", "{search_results}"],
+        "desc": "联网搜索结果整合为公司画像（系统固定）",
+        "system_prompt": "",
+        "user_prompt_template": "",
+        "variables": [],
     },
     "embedding": {
         "task_type": "embedding",
         "label": "🧬 文本向量化",
-        "desc": "知识库/语义检索的文本向量化（embedding 模型，无 LLM 提示词）",
+        "desc": "嵌入模型，无 LLM 提示词",
         "system_prompt": "",
         "user_prompt_template": "",
         "variables": [],
@@ -1966,8 +1891,9 @@ class MCPConfigUpdate(BaseModel):
 
 
 @router.get("/mcp-config")
-def get_mcp_config(db: Session = Depends(get_session)):
-    """获取 MCP 配置（API Key 脱敏展示）"""
+def get_mcp_config(db: Session = Depends(get_session),
+                   _user: User = Depends(require_permission("settings:read"))):
+    """获取 MCP 配置（需登录；完整 Key 仅对已认证用户返回，用于拷贝到外部工具）"""
     key_pref = db.exec(
         select(SystemPreference).where(
             SystemPreference.key == "mcp_api_key",
@@ -2037,3 +1963,111 @@ def generate_mcp_key(db: Session = Depends(get_session),
         db.add(SystemPreference(key="mcp_api_key", value=new_key, user_id=None))
     db.commit()
     return {"api_key": new_key, "message": "API Key 已重新生成，请妥善保存"}
+
+
+# ──────────────────────────── 邮件服务配置 ────────────────────────────
+
+EMAIL_CONFIG_KEYS = ["enabled", "host", "port", "username", "password", "from_name", "use_tls", "use_ssl", "provider"]
+
+
+class EmailConfigUpdate(BaseModel):
+    enabled: bool = False
+    host: str = ""
+    port: int = 587
+    username: str = ""
+    password: Optional[str] = None  # None 表示不更新密码
+    from_name: str = "WorkTrack 系统"
+    use_tls: bool = True
+    use_ssl: bool = False
+    provider: str = "smtp"
+
+
+class EmailTestRequest(BaseModel):
+    to: str
+
+
+@router.get("/email-config")
+def get_email_config(
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """获取邮件配置（密码以 *** 掩码返回）"""
+    if not current_user.is_admin:
+        raise HTTPException(403, "仅管理员可查看邮件配置")
+    rows = db.exec(
+        select(SystemPreference).where(
+            SystemPreference.user_id == None,
+            SystemPreference.key.startswith("email."),
+        )
+    ).all()
+    cfg: dict = {r.key[len("email."):]: r.value for r in rows}
+    result = {
+        "enabled": cfg.get("enabled") == "true",
+        "host": cfg.get("host", ""),
+        "port": int(cfg.get("port", 587)),
+        "username": cfg.get("username", ""),
+        "password_set": bool(cfg.get("password")),
+        "from_name": cfg.get("from_name", "WorkTrack 系统"),
+        "use_tls": cfg.get("use_tls", "true") == "true",
+        "use_ssl": cfg.get("use_ssl", "false") == "true",
+        "provider": cfg.get("provider", "smtp"),
+    }
+    from app.services.email_service import PROVIDER_PRESETS
+    result["presets"] = PROVIDER_PRESETS
+    return result
+
+
+@router.put("/email-config")
+def update_email_config(
+    data: EmailConfigUpdate,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """更新邮件配置（仅管理员）"""
+    if not current_user.is_admin:
+        raise HTTPException(403, "仅管理员可修改邮件配置")
+
+    updates: dict = {
+        "enabled": "true" if data.enabled else "false",
+        "host": data.host,
+        "port": str(data.port),
+        "username": data.username,
+        "from_name": data.from_name,
+        "use_tls": "true" if data.use_tls else "false",
+        "use_ssl": "true" if data.use_ssl else "false",
+        "provider": data.provider,
+    }
+    if data.password is not None:
+        updates["password"] = data.password
+
+    for field, value in updates.items():
+        key = f"email.{field}"
+        row = db.exec(
+            select(SystemPreference).where(
+                SystemPreference.key == key, SystemPreference.user_id == None
+            )
+        ).first()
+        if row:
+            row.value = value
+            db.add(row)
+        else:
+            db.add(SystemPreference(key=key, value=value, user_id=None))
+    db.commit()
+    return {"message": "邮件配置已保存"}
+
+
+@router.post("/email-config/test")
+def test_email_config(
+    data: EmailTestRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """发送测试邮件（仅管理员）"""
+    if not current_user.is_admin:
+        raise HTTPException(403, "仅管理员可发送测试邮件")
+    if not data.to or "@" not in data.to:
+        raise HTTPException(400, "请填写有效的收件邮箱")
+    from app.services.email_service import test_send
+    result = test_send(data.to)
+    if not result["ok"]:
+        raise HTTPException(400, result["message"])
+    return result

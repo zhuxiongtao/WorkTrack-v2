@@ -467,15 +467,15 @@ class _FakeResponse:
 # 统一默认提示词（单一来源，与 settings.py 中的 DEFAULT_PROMPTS 同步）
 _DEFAULT_PROMPTS = {
     "daily_summary": {
-        "system_prompt": "你是一个专业的工作助手，请用简洁的中文总结以下日报内容，提取关键工作事项和成果。",
+        "system_prompt": "你是工作效率助手。将日报内容提炼为简洁摘要，突出今日完成的关键事项与重要进展。输出 3-5 条以「•」开头的要点，每条不超过 30 字，语言简洁直接。",
         "user_prompt_template": "请总结以下工作日报：\n{content}",
     },
     "weekly_summary": {
-        "system_prompt": "你是一个专业的周报总结助手。请根据本周的日报内容，生成一份简洁的工作周报总结。要求：1. 概括本周主要工作内容 2. 突出重要进展和成果 3. 指出待解决的问题 4. 用 markdown 格式输出，结构清晰。",
+        "system_prompt": "你是工作效率助手。根据本周日报内容生成结构化周报总结。\n要求：\n1. 本周主要完成事项（3-5 条要点）\n2. 重要进展与成果\n3. 待解决的问题或风险\n用 markdown 格式输出，结构清晰，总字数控制在 400 字以内。",
         "user_prompt_template": "请总结本周（{week_range}）的工作情况：\n\n{reports_content}",
     },
     "meeting_organize": {
-        "system_prompt": "你是一个专业的会议纪要整理助手。请将以下语音转文字内容整理成结构化的会议纪要。\n要求：\n1. 修正转写错误，补充上下文使语句通顺\n2. 按讨论主题分段，每段有小标题\n3. 提取关键决策和待办事项\n4. 用 markdown 格式输出\n请直接输出整理后的会议纪要，不要加\"以下是整理后的...\"之类的引导语。",
+        "system_prompt": "你是专业的会议纪要助手。将语音转写内容整理为规范的会议纪要。\n要求：\n1. 修正转写错误，补充上下文，语句通顺\n2. 按讨论主题分段，每段有小标题\n3. 末尾单独列出「决议事项」和「待办清单」（含负责人）\n4. 用 markdown 格式输出\n直接输出纪要内容，不要加前缀引导语。",
         "user_prompt_template": "请整理以下会议录音转写内容：\n{content}",
     },
     "meeting_extract": {
@@ -483,19 +483,19 @@ _DEFAULT_PROMPTS = {
         "user_prompt_template": "请以 json 格式分析以下会议纪要，返回 decisions、todos、conclusions 三个字段：\n{content}",
     },
     "project_analysis": {
-        "system_prompt": "你是一个专业的项目管理助手，请基于项目跟进记录、客户情况、会议纪要等多维度信息，综合分析项目状态并给出专业建议。",
-        "user_prompt_template": "请分析以下项目：\n\n【基本信息】\n项目名称: {name}\n当前状态: {status}\n涉及产品: {product}\n项目场景: {scenario}\n销售负责人: {sales_person}\n商机金额: {amount}\n截止日期: {deadline}\n\n【客户信息】\n客户名称: {customer_name}\n客户行业: {customer_industry}\n客户规模: {customer_scale}\n核心产品: {customer_products}\n客户简介: {customer_profile}\n\n【跟进记录】\n{progress}\n\n【关联会议】\n{meetings}\n\n请基于以上信息给出全面的项目分析，包括：\n1. 当前状态评估（结合跟进记录和客户情况）\n2. 风险提示（考虑客户行业、规模、项目进展等）\n3. 后续建议（具体的下一步行动建议）",
+        "system_prompt": "你是专业的销售项目管理助手。综合分析销售项目的跟进现状，给出客观的状态评估、潜在风险和具体的下一步行动建议。结合客户背景、项目进展和历史会议作出判断，输出简洁专业，避免空洞套话。",
+        "user_prompt_template": "请分析以下项目：\n\n【基本信息】\n项目名称: {name}\n当前状态: {status}\n涉及产品: {product}\n项目场景: {scenario}\n销售负责人: {sales_person}\n商机金额: {amount}\n截止日期: {deadline}\n\n【客户信息】\n客户名称: {customer_name}\n客户行业: {customer_industry}\n客户规模: {customer_scale}\n核心产品: {customer_products}\n客户简介: {customer_profile}\n\n【跟进记录】\n{progress}\n\n【关联会议】\n{meetings}\n\n请给出：\n1. 当前状态评估（结合跟进记录和客户情况）\n2. 风险提示（考虑客户行业、规模、项目进展）\n3. 后续建议（具体的下一步行动）",
     },
     "insight_week": {
-        "system_prompt": "你是一个专业的业务洞察分析师，请根据提供的工作数据，给出简洁有价值的周度洞察分析。",
+        "system_prompt": "你是 WorkTrack 数据分析助手。根据本周工作数据，从项目进展、日报完成、会议效率、客户动态等维度给出综合洞察。\n要求：\n1. 给出本周最值得关注的 3 个洞察点\n2. 每条以「•」开头，不超过 40 字\n3. 侧重趋势发现和行动建议\n4. 直接输出 3 行，不加序号或其他内容",
         "user_prompt_template": "请分析本周（{range}）工作数据：\n\n项目: {projects_summary}\n客户: {customers_summary}\n会议: {meetings_summary}\n日报: {reports_summary}",
     },
     "insight_month": {
-        "system_prompt": "你是一个专业的业务洞察分析师，请根据提供的工作数据，给出简洁有价值的月度洞察分析。",
+        "system_prompt": "你是 WorkTrack 数据分析助手。根据本月工作数据，分析月度趋势变化、工作效率和团队协作情况，给出综合洞察。\n要求：\n1. 给出本月最值得关注的 3 个洞察点\n2. 每条以「•」开头，不超过 40 字\n3. 侧重月度趋势和结构性问题\n4. 直接输出 3 行，不加序号或其他内容",
         "user_prompt_template": "请分析本月（{range}）工作数据：\n\n项目: {projects_summary}\n客户: {customers_summary}\n会议: {meetings_summary}\n日报: {reports_summary}\n周报: {weeklies_summary}",
     },
     "insight_quarter": {
-        "system_prompt": "你是一个专业的业务洞察分析师，请根据提供的工作数据，给出简洁有价值的季度洞察分析，重点关注趋势和战略建议。",
+        "system_prompt": "你是 WorkTrack 数据分析助手。根据本季度工作数据，进行战略性综合分析，识别季度趋势、瓶颈和优化方向。\n要求：\n1. 给出本季度最关键的 3 个战略洞察\n2. 每条以「•」开头，不超过 40 字\n3. 侧重战略层面和长期改进方向\n4. 直接输出 3 行，不加序号或其他内容",
         "user_prompt_template": "请分析本季度（{range}）工作数据：\n\n项目: {projects_summary}\n客户: {customers_summary}\n会议: {meetings_summary}\n日报: {reports_summary}\n周报: {weeklies_summary}",
     },
 }

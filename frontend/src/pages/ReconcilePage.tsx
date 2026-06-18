@@ -89,6 +89,17 @@ function fmt(v: number | null | undefined) {
   return v.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 }
 
+/** 计费单位短标签（表格内展示用） */
+const UNIT_SHORT: Record<string, string> = {
+  per_1k_token: '1K',
+  per_1m_token: '1M',
+  per_request: '次',
+  per_month: '月',
+}
+function unitLabel(unit: string): string {
+  return UNIT_SHORT[unit] || unit
+}
+
 /** 提取默认对账月份：上个月 YYYY-MM */
 function defaultPeriod(): string {
   const d = new Date()
@@ -140,6 +151,7 @@ export default function ReconcilePage() {
   const [showDiffForm, setShowDiffForm] = useState(false)
   const [editingDiff, setEditingDiff] = useState<DiffRecord | null>(null)
   const [calculating, setCalculating] = useState(false)
+  const [submittingReview, setSubmittingReview] = useState(false)
 
   // 加载基础数据
   const loadBase = useCallback(async () => {
@@ -203,7 +215,7 @@ export default function ReconcilePage() {
   }, [])
 
   useEffect(() => { loadBase() }, [loadBase])
-  useEffect(() => { loadOverall() }, [loadOverall])
+  useEffect(() => { loadOverall(); loadSummary() }, [loadOverall, loadSummary])
   useEffect(() => {
     if (tab === 'overview') loadOverall()
     if (tab === 'sales') loadSales()
@@ -211,6 +223,13 @@ export default function ReconcilePage() {
     if (tab === 'summary') loadSummary()
     if (tab === 'diff') loadDiff()
   }, [tab, loadOverall, loadSales, loadSupply, loadSummary, loadDiff])
+
+  // 当期总账状态（用于按钮显隐和锁定提示）
+  const currentSummary = useMemo(
+    () => summary.find(s => s.period === period) ?? null,
+    [summary, period]
+  )
+  const periodLocked = currentSummary ? ['已复核', '已锁定'].includes(currentSummary.status) : false
 
   // 重新计算
   const handleCalculate = async () => {
@@ -225,6 +244,24 @@ export default function ReconcilePage() {
       showToast(String(e), 'error')
     } finally {
       setCalculating(false)
+    }
+  }
+
+  // 提交月结复核
+  const handleSubmitReview = async () => {
+    if (!period) return
+    setSubmittingReview(true)
+    try {
+      const res = await apiPost<{ message: string; status: string; approval_instance_id: number | null }>(
+        `/api/v1/reconcile/summary/${period}/submit-review`, {}
+      )
+      showToast(res.message ?? '已提交复核', 'success')
+      loadSummary()
+      setTab('summary')
+    } catch (e) {
+      showToast(String(e), 'error')
+    } finally {
+      setSubmittingReview(false)
     }
   }
 
@@ -258,11 +295,33 @@ export default function ReconcilePage() {
               className="px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none focus:border-purple-500/50">
               {periods.length === 0 ? <option value={period}>{period}</option> : periods.map(p => <option key={p} value={p}>{p}</option>)}
             </select>
-            <button onClick={handleCalculate} disabled={calculating}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-purple-500 to-indigo-500 rounded-lg hover:opacity-90 disabled:opacity-50">
-              {calculating ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-              生成 {period} 总账
-            </button>
+            {currentSummary && (
+              <span className="inline-flex items-center px-2 py-1 text-[10px] font-bold rounded-md"
+                style={{ background: (SUMMARY_STATUS_COLORS[currentSummary.status] || SUMMARY_STATUS_COLORS['草稿']).bg, color: (SUMMARY_STATUS_COLORS[currentSummary.status] || SUMMARY_STATUS_COLORS['草稿']).text }}>
+                {currentSummary.status}
+              </span>
+            )}
+            {!periodLocked && (
+              <button onClick={handleCalculate} disabled={calculating}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-purple-500 to-indigo-500 rounded-lg hover:opacity-90 disabled:opacity-50">
+                {calculating ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                生成 {period} 总账
+              </button>
+            )}
+            {currentSummary && currentSummary.status === '草稿' && (
+              <button onClick={handleSubmitReview} disabled={submittingReview}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-emerald-500 to-teal-500 rounded-lg hover:opacity-90 disabled:opacity-50">
+                {submittingReview ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+                提交复核
+              </button>
+            )}
+            {currentSummary && currentSummary.status === '已复核' && (
+              <button onClick={() => { window.location.href = '/approvals' }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-blue-300 border border-blue-500/30 bg-blue-500/10 rounded-lg hover:bg-blue-500/20">
+                <Clock size={12} />
+                查看审批进度
+              </button>
+            )}
           </div>
         }
         stats={[
@@ -320,6 +379,7 @@ export default function ReconcilePage() {
           projects={projects}
           projectMap={projectMap}
           loading={loading}
+          readOnly={periodLocked}
           onAdd={() => { setEditingSales(null); setShowSalesForm(true) }}
           onEdit={(r) => { setEditingSales(r); setShowSalesForm(true) }}
           onDelete={async (id) => {
@@ -343,6 +403,7 @@ export default function ReconcilePage() {
           channelMap={channelMap}
           supplierMap={supplierMap}
           loading={loading}
+          readOnly={periodLocked}
           onAdd={() => { setEditingSupply(null); setShowSupplyForm(true) }}
           onEdit={(r) => { setEditingSupply(r); setShowSupplyForm(true) }}
           onDelete={async (id) => {
@@ -370,6 +431,7 @@ export default function ReconcilePage() {
           projectMap={projectMap}
           channelMap={channelMap}
           loading={loading}
+          readOnly={periodLocked}
           onAdd={() => { setEditingDiff(null); setShowDiffForm(true) }}
           onEdit={(r) => { setEditingDiff(r); setShowDiffForm(true) }}
           onDelete={async (id) => {
@@ -580,7 +642,7 @@ function MiniList({ title, icon: Icon, count, total, tone, children }: { title: 
 
 /* ═══════════════════ 销售对账 ═══════════════════ */
 function SalesView({
-  records, period, projects, projectMap, loading,
+  records, period, projects, projectMap, loading, readOnly,
   onAdd, onEdit, onDelete, form, setForm, editing, onSaved,
 }: {
   records: SalesRecord[]
@@ -588,6 +650,7 @@ function SalesView({
   projects: Project[]
   projectMap: Record<number, Project>
   loading: boolean
+  readOnly?: boolean
   onAdd: () => void
   onEdit: (r: SalesRecord) => void
   onDelete: (id: number) => void
@@ -602,14 +665,17 @@ function SalesView({
       <div className="flex items-center justify-between">
         <div className="text-xs text-gray-500">
           {period} 销售对账 <span className="text-emerald-400 font-bold ml-2">${fmt(total)}</span> · {records.length} 条
+          {readOnly && <span className="ml-2 text-[10px] text-amber-400">（已复核/锁定，只读）</span>}
         </div>
-        <button onClick={onAdd}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-emerald-500 to-green-500 rounded-lg hover:opacity-90">
-          <Plus size={14} />新增销售对账
-        </button>
+        {!readOnly && (
+          <button onClick={onAdd}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-emerald-500 to-green-500 rounded-lg hover:opacity-90">
+            <Plus size={14} />新增销售对账
+          </button>
+        )}
       </div>
       {records.length === 0 ? (
-        <EmptyState icon={TrendingUp} title={`${period} 还没有销售对账记录`} description="录入本期每个项目的实际调用量与应收金额" actionLabel="新增" onAction={onAdd} tone="green" />
+        <EmptyState icon={TrendingUp} title={`${period} 还没有销售对账记录`} description="录入本期每个项目的实际调用量与应收金额" actionLabel={readOnly ? undefined : "新增"} onAction={readOnly ? undefined : onAdd} tone="green" />
       ) : (
         <div className="rounded-xl border border-white/5 bg-white/[0.02] overflow-hidden">
           <div className="overflow-x-auto">
@@ -623,7 +689,7 @@ function SalesView({
                   <th className="px-3 py-2 font-semibold text-right">应收</th>
                   <th className="px-3 py-2 font-semibold">状态</th>
                   <th className="px-3 py-2 font-semibold text-right">差异</th>
-                  <th className="px-3 py-2 font-semibold">操作</th>
+                  {!readOnly && <th className="px-3 py-2 font-semibold">操作</th>}
                 </tr>
               </thead>
               <tbody>
@@ -634,19 +700,21 @@ function SalesView({
                     <tr key={r.id} className="border-t border-white/5 hover:bg-white/[0.02]">
                       <td className="px-3 py-2 text-white font-semibold">{p?.name || `#${r.project_id}`}</td>
                       <td className="px-3 py-2 text-gray-400">{r.customer_name || p?.customer_name || '—'}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-cyan-300">{fmt(r.call_volume)} {r.call_volume_unit === 'per_1k_token' ? '1K' : r.call_volume_unit}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-cyan-300">{fmt(r.call_volume)} {unitLabel(r.call_volume_unit)}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-blue-300">${fmt(r.final_price)}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-emerald-300 font-bold">${fmt(r.amount_due)}</td>
                       <td className="px-3 py-2">
                         <span className="text-[10px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: c.bg, color: c.text }}>{r.invoice_status}</span>
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-orange-300">${fmt(r.diff_amount)}</td>
-                      <td className="px-3 py-2">
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => onEdit(r)} className="text-gray-400 hover:text-blue-400"><Edit3 size={12} /></button>
-                          <button onClick={() => onDelete(r.id)} className="text-gray-400 hover:text-rose-400"><Trash2 size={12} /></button>
-                        </div>
-                      </td>
+                      {!readOnly && (
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => onEdit(r)} className="text-gray-400 hover:text-blue-400"><Edit3 size={12} /></button>
+                            <button onClick={() => onDelete(r.id)} className="text-gray-400 hover:text-rose-400"><Trash2 size={12} /></button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   )
                 })}
@@ -661,7 +729,7 @@ function SalesView({
 
 /* ═══════════════════ 供应对账 ═══════════════════ */
 function SupplyView({
-  records, period, channels, suppliers, channelMap, supplierMap, loading,
+  records, period, channels, suppliers, channelMap, supplierMap, loading, readOnly,
   onAdd, onEdit, onDelete, form, setForm, editing, onSaved,
 }: {
   records: SupplyRecord[]
@@ -671,6 +739,7 @@ function SupplyView({
   channelMap: Record<number, Channel>
   supplierMap: Record<number, Supplier>
   loading: boolean
+  readOnly?: boolean
   onAdd: () => void
   onEdit: (r: SupplyRecord) => void
   onDelete: (id: number) => void
@@ -685,14 +754,17 @@ function SupplyView({
       <div className="flex items-center justify-between">
         <div className="text-xs text-gray-500">
           {period} 供应对账 <span className="text-rose-400 font-bold ml-2">${fmt(total)}</span> · {records.length} 条
+          {readOnly && <span className="ml-2 text-[10px] text-amber-400">（已复核/锁定，只读）</span>}
         </div>
-        <button onClick={onAdd}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-rose-500 to-red-500 rounded-lg hover:opacity-90">
-          <Plus size={14} />新增供应对账
-        </button>
+        {!readOnly && (
+          <button onClick={onAdd}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-rose-500 to-red-500 rounded-lg hover:opacity-90">
+            <Plus size={14} />新增供应对账
+          </button>
+        )}
       </div>
       {records.length === 0 ? (
-        <EmptyState icon={TrendingDown} title={`${period} 还没有供应对账记录`} description="录入本期每个通道的厂商账单与应付金额" actionLabel="新增" onAction={onAdd} tone="red" />
+        <EmptyState icon={TrendingDown} title={`${period} 还没有供应对账记录`} description="录入本期每个通道的厂商账单与应付金额" actionLabel={readOnly ? undefined : "新增"} onAction={readOnly ? undefined : onAdd} tone="red" />
       ) : (
         <div className="rounded-xl border border-white/5 bg-white/[0.02] overflow-hidden">
           <div className="overflow-x-auto">
@@ -706,7 +778,7 @@ function SupplyView({
                   <th className="px-3 py-2 font-semibold text-right">应付</th>
                   <th className="px-3 py-2 font-semibold">付款状态</th>
                   <th className="px-3 py-2 font-semibold text-right">差异</th>
-                  <th className="px-3 py-2 font-semibold">操作</th>
+                  {!readOnly && <th className="px-3 py-2 font-semibold">操作</th>}
                 </tr>
               </thead>
               <tbody>
@@ -718,19 +790,21 @@ function SupplyView({
                     <tr key={r.id} className="border-t border-white/5 hover:bg-white/[0.02]">
                       <td className="px-3 py-2 text-white font-semibold">{c?.name || `#${r.channel_id}`}</td>
                       <td className="px-3 py-2 text-gray-400">{sup?.name || '—'}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-cyan-300">{fmt(r.call_volume)} {r.call_volume_unit === 'per_1k_token' ? '1K' : r.call_volume_unit}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-cyan-300">{fmt(r.call_volume)} {unitLabel(r.call_volume_unit)}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-blue-300">${fmt(r.cost_price)}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-rose-300 font-bold">${fmt(r.amount_payable)}</td>
                       <td className="px-3 py-2">
                         <span className="text-[10px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: bs.bg, color: bs.text }}>{r.bill_status}</span>
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-orange-300">${fmt(r.diff_amount)}</td>
-                      <td className="px-3 py-2">
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => onEdit(r)} className="text-gray-400 hover:text-blue-400"><Edit3 size={12} /></button>
-                          <button onClick={() => onDelete(r.id)} className="text-gray-400 hover:text-rose-400"><Trash2 size={12} /></button>
-                        </div>
-                      </td>
+                      {!readOnly && (
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => onEdit(r)} className="text-gray-400 hover:text-blue-400"><Edit3 size={12} /></button>
+                            <button onClick={() => onDelete(r.id)} className="text-gray-400 hover:text-rose-400"><Trash2 size={12} /></button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   )
                 })}
@@ -793,7 +867,7 @@ function SummaryItem({ label, value, tone }: { label: string; value: string; ton
 
 /* ═══════════════════ 差异分析 ═══════════════════ */
 function DiffView({
-  records, period, projects, channels, projectMap, channelMap, loading,
+  records, period, projects, channels, projectMap, channelMap, loading, readOnly,
   onAdd, onEdit, onDelete, form, setForm, editing, onSaved,
 }: {
   records: DiffRecord[]
@@ -803,6 +877,7 @@ function DiffView({
   projectMap: Record<number, Project>
   channelMap: Record<number, Channel>
   loading: boolean
+  readOnly?: boolean
   onAdd: () => void
   onEdit: (r: DiffRecord) => void
   onDelete: (id: number) => void
@@ -816,14 +891,17 @@ function DiffView({
       <div className="flex items-center justify-between">
         <div className="text-xs text-gray-500">
           {period} 差异记录 · {records.length} 条
+          {readOnly && <span className="ml-2 text-[10px] text-amber-400">（已复核/锁定，只读）</span>}
         </div>
-        <button onClick={onAdd}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-orange-500 to-yellow-500 rounded-lg hover:opacity-90">
-          <Plus size={14} />新增差异
-        </button>
+        {!readOnly && (
+          <button onClick={onAdd}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-orange-500 to-yellow-500 rounded-lg hover:opacity-90">
+            <Plus size={14} />新增差异
+          </button>
+        )}
       </div>
       {records.length === 0 ? (
-        <EmptyState icon={AlertTriangle} title={`${period} 还没有差异记录`} description="记录销售与供应两侧的调用量/金额差异，便于月末复盘" actionLabel="新增" onAction={onAdd} tone="orange" />
+        <EmptyState icon={AlertTriangle} title={`${period} 还没有差异记录`} description="记录销售与供应两侧的调用量/金额差异，便于月末复盘" actionLabel={readOnly ? undefined : "新增"} onAction={readOnly ? undefined : onAdd} tone="orange" />
       ) : (
         <div className="rounded-xl border border-white/5 bg-white/[0.02] overflow-hidden">
           <div className="overflow-x-auto">
@@ -838,7 +916,7 @@ function DiffView({
                   <th className="px-3 py-2 font-semibold text-right">%</th>
                   <th className="px-3 py-2 font-semibold">原因</th>
                   <th className="px-3 py-2 font-semibold">状态</th>
-                  <th className="px-3 py-2 font-semibold">操作</th>
+                  {!readOnly && <th className="px-3 py-2 font-semibold">操作</th>}
                 </tr>
               </thead>
               <tbody>
@@ -857,12 +935,14 @@ function DiffView({
                       <td className="px-3 py-2">
                         <span className="text-[10px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: c.bg, color: c.text }}>{r.status}</span>
                       </td>
-                      <td className="px-3 py-2">
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => onEdit(r)} className="text-gray-400 hover:text-blue-400"><Edit3 size={12} /></button>
-                          <button onClick={() => onDelete(r.id)} className="text-gray-400 hover:text-rose-400"><Trash2 size={12} /></button>
-                        </div>
-                      </td>
+                      {!readOnly && (
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => onEdit(r)} className="text-gray-400 hover:text-blue-400"><Edit3 size={12} /></button>
+                            <button onClick={() => onDelete(r.id)} className="text-gray-400 hover:text-rose-400"><Trash2 size={12} /></button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   )
                 })}
@@ -968,6 +1048,7 @@ function SalesFormModal({ period, projects, projectMap, editing, onClose, onSave
           <select value={form.call_volume_unit} onChange={e => setForm({ ...form, call_volume_unit: e.target.value })}
             className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 transition-all">
             <option value="per_1k_token">/ 1K tokens</option>
+            <option value="per_1m_token">/ 1M tokens（百万）</option>
             <option value="per_request">/ 次</option>
             <option value="per_month">/ 月</option>
           </select>
@@ -1094,6 +1175,7 @@ function SupplyFormModal({ period, channels, suppliers, channelMap, supplierMap,
           <select value={form.call_volume_unit} onChange={e => setForm({ ...form, call_volume_unit: e.target.value })}
             className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/15 transition-all">
             <option value="per_1k_token">/ 1K tokens</option>
+            <option value="per_1m_token">/ 1M tokens（百万）</option>
             <option value="per_request">/ 次</option>
             <option value="per_month">/ 月</option>
           </select>

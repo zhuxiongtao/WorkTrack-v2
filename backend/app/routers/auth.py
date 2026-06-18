@@ -246,3 +246,47 @@ def serve_avatar(filename: str):
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="头像文件不存在")
     return FileResponse(filepath)
+
+
+# ──────────────────────────── 密码重置 ────────────────────────────
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
+@router.post("/forgot-password")
+def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_session)):
+    """发起密码重置：根据邮箱查用户，生成 token 发邮件。
+    为防止邮箱枚举攻击，无论用户是否存在均返回相同响应。"""
+    from app.services import email_service
+    user = db.exec(select(User).where(User.email == req.email, User.is_active == True)).first()
+    if user:
+        if not email_service.is_email_configured():
+            raise HTTPException(503, "系统邮件服务未配置，请联系管理员")
+        token = email_service.create_password_reset_token(user.id)
+        frontend_base = settings.frontend_url if hasattr(settings, "frontend_url") else ""
+        email_service.send_password_reset_email(req.email, token, frontend_base)
+    return {"message": "如果该邮箱已注册，重置邮件将在几分钟内发出"}
+
+
+@router.post("/reset-password")
+def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_session)):
+    """使用 token 重置密码（一次性有效，1 小时过期）"""
+    from app.services import email_service
+    user_id = email_service.consume_password_reset_token(req.token)
+    if not user_id:
+        raise HTTPException(400, "重置链接无效或已过期，请重新申请")
+    pwd_err = validate_password_strength(req.new_password)
+    if pwd_err:
+        raise HTTPException(400, pwd_err)
+    user = db.get(User, user_id)
+    if not user or not user.is_active:
+        raise HTTPException(400, "用户不存在或已停用")
+    user.password_hash = hash_password(req.new_password)
+    bump_token_version(user, db)
+    return {"message": "密码已重置，请使用新密码登录"}

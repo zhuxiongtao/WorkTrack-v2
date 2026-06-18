@@ -252,8 +252,14 @@ def get_contract(contract_id: int, current_user: User = Depends(require_permissi
 @router.put("/{contract_id}", response_model=ContractOut)
 def update_contract(contract_id: int, data: ContractUpdate, current_user: User = Depends(require_permission("contract:edit")), db: Session = Depends(get_session)):
     contract = db.get(Contract, contract_id)
-    if not contract or contract.user_id != current_user.id:
+    if not contract:
         raise HTTPException(status_code=404, detail="合同不存在")
+    if contract.user_id is not None and not check_data_access(contract.user_id, current_user, db):
+        raise HTTPException(status_code=403, detail="无权编辑该合同")
+    # 审批进行中禁止编辑（管理员除外），保证审批所依据的内容不被中途篡改
+    from app.services import approval_engine
+    if not current_user.is_admin and approval_engine.get_active_instance("contract", contract_id, db):
+        raise HTTPException(status_code=400, detail="合同正在审批中，暂不可编辑")
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(contract, key, value)
     db.add(contract)
@@ -265,8 +271,10 @@ def update_contract(contract_id: int, data: ContractUpdate, current_user: User =
 @router.delete("/{contract_id}", status_code=204)
 def delete_contract(contract_id: int, current_user: User = Depends(require_permission("contract:delete")), db: Session = Depends(get_session)):
     contract = db.get(Contract, contract_id)
-    if not contract or contract.user_id != current_user.id:
+    if not contract:
         raise HTTPException(status_code=404, detail="合同不存在")
+    if contract.user_id is not None and not check_data_access(contract.user_id, current_user, db):
+        raise HTTPException(status_code=403, detail="无权删除该合同")
     if contract.file_path and os.path.exists(contract.file_path):
         try:
             os.remove(contract.file_path)
@@ -274,6 +282,52 @@ def delete_contract(contract_id: int, current_user: User = Depends(require_permi
             logger.error("删除合同文件失败: %s", e)
     db.delete(contract)
     db.commit()
+
+
+@router.post("/{contract_id}/submit-approval")
+def submit_contract_approval(
+    contract_id: int,
+    current_user: User = Depends(require_permission("contract:edit")),
+    db: Session = Depends(get_session),
+):
+    """提交合同审批：按合同审批模板发起多级审批流。
+    无匹配模板（如未达金额阈值）则直接生效。"""
+    from datetime import datetime, timezone
+    from app.services import approval_engine
+
+    contract = db.get(Contract, contract_id)
+    if not contract:
+        raise HTTPException(status_code=404, detail="合同不存在")
+    if contract.user_id is not None and not check_data_access(contract.user_id, current_user, db):
+        raise HTTPException(status_code=403, detail="无权操作该合同")
+    if approval_engine.get_active_instance("contract", contract_id, db):
+        raise HTTPException(status_code=400, detail="该合同已有进行中的审批")
+
+    try:
+        inst = approval_engine.start_approval(
+            "contract", contract_id, contract,
+            f"合同《{contract.title}》审批", current_user, db,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if inst is None:
+        contract.status = "生效中"
+        contract.updated_at = datetime.now(timezone.utc)
+        db.add(contract)
+        db.commit()
+        write_log("info", "contract", f"合同 #{contract_id} 无需审批，直接生效", db=db)
+        return {"approval_id": None, "status": contract.status, "message": "该合同无需审批，已直接生效"}
+
+    # 实例仍在审批中才置「审批中」；若节点被自动跳过而即时通过，引擎已回写状态
+    if inst.status == "pending":
+        contract.status = "审批中"
+        contract.updated_at = datetime.now(timezone.utc)
+        db.add(contract)
+        db.commit()
+    db.refresh(contract)
+    write_log("info", "contract", f"合同 #{contract_id} 提交审批（实例 #{inst.id}）", db=db)
+    return {"approval_id": inst.id, "status": contract.status, "message": "已提交审批"}
 
 
 @router.get("/{contract_id}/file")

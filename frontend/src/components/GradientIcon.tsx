@@ -88,14 +88,16 @@ export function GradientIcon({
 }
 
 /**
- * 侧边栏图标 - 专为导航设计的图标样式
+ * 侧边栏图标 - Void Indigo 极简风格：无背景方块，纯色图标
+ * active 时颜色跟随 --accent-blue CSS 变量（深色=薰衣草 / 浅色=靛蓝）
  */
 export function SidebarIcon({
   icon: Icon,
-  gradientFrom,
-  gradientTo,
   isActive = false,
-  size = 20,
+  size = 16,
+  // 以下两个 prop 保留签名兼容性，不再使用
+  gradientFrom: _gradientFrom,
+  gradientTo: _gradientTo,
 }: {
   icon: LucideIcon
   gradientFrom?: string
@@ -103,44 +105,16 @@ export function SidebarIcon({
   isActive?: boolean
   size?: number
 }) {
-  const iconSize = Math.max(9, Math.round(size * 0.6))
   return (
-    <div className="relative">
-      {/* 图标容器 */}
-      <div
-        className="relative flex items-center justify-center rounded transition-all duration-200 group-hover:scale-105"
-        style={{
-          width: size,
-          height: size,
-          background: isActive
-            ? (gradientFrom || '#3B82F6')
-            : (gradientFrom || '#3B82F6') + 'CC',
-          boxShadow: isActive
-            ? `0 2px 6px ${gradientFrom || '#3B82F6'}55, inset 0 1px 1px rgba(255, 255, 255, 0.25), inset 0 -1px 2px rgba(0, 0, 0, 0.15)`
-            : `0 1px 2px ${gradientFrom || '#3B82F6'}30`,
-        }}
-      >
-        {/* 顶部高光 */}
-        <div
-          className="pointer-events-none absolute inset-0 rounded"
-          style={{
-            background: isActive
-              ? 'linear-gradient(180deg, rgba(255,255,255,0.22) 0%, transparent 55%)'
-              : 'linear-gradient(180deg, rgba(255,255,255,0.18) 0%, transparent 55%)',
-          }}
-        />
-        {/* 图标 */}
-        <Icon
-          size={iconSize}
-          className="relative z-10"
-          style={{
-            color: '#ffffff',
-            filter: isActive ? 'drop-shadow(0 1px 1px rgba(0,0,0,0.2))' : 'drop-shadow(0 1px 1px rgba(0,0,0,0.12))',
-          }}
-          strokeWidth={isActive ? 2.5 : 2}
-        />
-      </div>
-    </div>
+    <Icon
+      size={size}
+      strokeWidth={isActive ? 2.4 : 2}
+      style={{
+        color: isActive ? 'var(--accent-blue)' : 'currentColor',
+        flexShrink: 0,
+        transition: 'color 0.15s',
+      }}
+    />
   )
 }
 

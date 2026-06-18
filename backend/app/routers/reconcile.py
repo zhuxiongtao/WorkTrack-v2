@@ -20,8 +20,18 @@ from app.schemas.reconcile import (
     ReconcileOverallSummary,
 )
 from app.auth import require_permission
+from app.services import approval_engine
 
 router = APIRouter(prefix="/api/v1/reconcile", tags=["对账核算"])
+
+_LOCKED_STATUSES = {"已复核", "已锁定"}
+
+
+def _ensure_period_editable(period: str, db: Session) -> None:
+    """若该月份的总账已进入复核/锁定状态，禁止修改任何明细"""
+    summary = db.exec(select(ReconcileSummary).where(ReconcileSummary.period == period)).first()
+    if summary and summary.status in _LOCKED_STATUSES:
+        raise HTTPException(400, f"该月份（{period}）已处于「{summary.status}」状态，不可修改明细")
 
 
 # ──── 销售对账 ────
@@ -48,6 +58,7 @@ def create_reconcile_sales(
     db: Session = Depends(get_session),
     current_user=Depends(require_permission("project:edit")),
 ):
+    _ensure_period_editable(body.period, db)
     if db.get(Project, body.project_id) is None:
         raise HTTPException(400, f"项目 {body.project_id} 不存在")
     obj = ReconcileSales(**body.model_dump())
@@ -67,6 +78,7 @@ def update_reconcile_sales(
     obj = db.get(ReconcileSales, rid)
     if not obj:
         raise HTTPException(404, "记录不存在")
+    _ensure_period_editable(obj.period, db)
     for k, v in body.model_dump(exclude_unset=True).items():
         setattr(obj, k, v)
     db.add(obj)
@@ -84,6 +96,7 @@ def delete_reconcile_sales(
     obj = db.get(ReconcileSales, rid)
     if not obj:
         raise HTTPException(404, "记录不存在")
+    _ensure_period_editable(obj.period, db)
     db.delete(obj)
     db.commit()
     return {"ok": True}
@@ -115,6 +128,7 @@ def create_reconcile_supply(
     db: Session = Depends(get_session),
     current_user=Depends(require_permission("project:edit")),
 ):
+    _ensure_period_editable(body.period, db)
     if db.get(Channel, body.channel_id) is None:
         raise HTTPException(400, f"通道 {body.channel_id} 不存在")
     if db.get(Supplier, body.supplier_id) is None:
@@ -139,6 +153,7 @@ def update_reconcile_supply(
     obj = db.get(ReconcileSupply, rid)
     if not obj:
         raise HTTPException(404, "记录不存在")
+    _ensure_period_editable(obj.period, db)
     for k, v in body.model_dump(exclude_unset=True).items():
         setattr(obj, k, v)
     db.add(obj)
@@ -156,6 +171,7 @@ def delete_reconcile_supply(
     obj = db.get(ReconcileSupply, rid)
     if not obj:
         raise HTTPException(404, "记录不存在")
+    _ensure_period_editable(obj.period, db)
     db.delete(obj)
     db.commit()
     return {"ok": True}
@@ -190,7 +206,8 @@ def calculate_summary(
     db: Session = Depends(get_session),
     current_user=Depends(require_permission("project:edit")),
 ):
-    """根据销售/供应对账自动汇总生成总账"""
+    """根据销售/供应对账自动汇总生成总账（已复核/已锁定状态禁止重算）"""
+    _ensure_period_editable(period, db)
     sales = db.exec(select(ReconcileSales).where(ReconcileSales.period == period)).all()
     supply = db.exec(select(ReconcileSupply).where(ReconcileSupply.period == period)).all()
     diffs = db.exec(select(ReconcileDiff).where(ReconcileDiff.period == period)).all()
@@ -235,6 +252,60 @@ def calculate_summary(
         return obj
 
 
+@router.post("/summary/{period}/submit-review")
+def submit_reconcile_review(
+    period: str,
+    db: Session = Depends(get_session),
+    current_user=Depends(require_permission("project:edit")),
+):
+    """提交月结复核：触发审批流（财务复核 → 总经理锁定）。
+    若无匹配审批模板，直接置「已锁定」。"""
+    summary = db.exec(select(ReconcileSummary).where(ReconcileSummary.period == period)).first()
+    if not summary:
+        raise HTTPException(404, f"月份 {period} 尚无总账，请先执行汇总计算")
+    if summary.status != "草稿":
+        raise HTTPException(400, f"当前状态为「{summary.status}」，只有草稿状态才可提交复核")
+    if approval_engine.get_active_instance("reconcile_summary", summary.id, db):
+        raise HTTPException(400, "已有进行中的复核审批，请勿重复提交")
+
+    try:
+        instance = approval_engine.start_approval(
+            target_type="reconcile_summary",
+            target_id=summary.id,
+            target_obj=summary,
+            title=f"对账月结复核 {period}",
+            submitter=current_user,
+            db=db,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    from datetime import datetime, timezone
+    _now = datetime.now(timezone.utc)
+
+    if instance is None:
+        # 无审批模板 → 直接锁定
+        summary.status = "已锁定"
+        summary.finalized_at = _now
+        summary.updated_at = _now
+        db.add(summary)
+        db.commit()
+        db.refresh(summary)
+        return {"message": "无需审批，已直接锁定", "status": summary.status, "approval_instance_id": None}
+
+    # 有审批流 → 置复核中
+    summary.status = "已复核"
+    summary.updated_at = _now
+    db.add(summary)
+    db.commit()
+    db.refresh(summary)
+    return {
+        "message": "已提交复核，等待审批",
+        "status": summary.status,
+        "approval_instance_id": instance.id,
+    }
+
+
 # ──── 差异分析 ────
 
 @router.get("/diff", response_model=list[ReconcileDiffOut])
@@ -261,6 +332,7 @@ def create_reconcile_diff(
     db: Session = Depends(get_session),
     current_user=Depends(require_permission("project:edit")),
 ):
+    _ensure_period_editable(body.period, db)
     if body.project_id is not None and db.get(Project, body.project_id) is None:
         raise HTTPException(400, f"项目 {body.project_id} 不存在")
     if body.channel_id is not None and db.get(Channel, body.channel_id) is None:
@@ -284,6 +356,7 @@ def update_reconcile_diff(
     obj = db.get(ReconcileDiff, rid)
     if not obj:
         raise HTTPException(404, "记录不存在")
+    _ensure_period_editable(obj.period, db)
     for k, v in body.model_dump(exclude_unset=True).items():
         setattr(obj, k, v)
     # 重新计算 diff_pct
@@ -304,6 +377,7 @@ def delete_reconcile_diff(
     obj = db.get(ReconcileDiff, rid)
     if not obj:
         raise HTTPException(404, "记录不存在")
+    _ensure_period_editable(obj.period, db)
     db.delete(obj)
     db.commit()
     return {"ok": True}

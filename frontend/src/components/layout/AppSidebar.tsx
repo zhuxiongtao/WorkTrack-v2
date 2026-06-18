@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import {
-  Sparkles, Sun, Moon, LogOut,
-  ArrowRight, Wand2, ChevronDown, FileText,
+  Sparkles, Sun, Moon, Monitor, LogOut,
+  ArrowRight, Wand2, ChevronDown, Settings,
 } from 'lucide-react'
 import { SidebarIcon } from '../GradientIcon'
 import { useTheme } from '../../contexts/ThemeContext'
@@ -168,35 +168,15 @@ function AppSidebar({ sidebarOpen, onCloseSidebar, brandLogo, brandTitle, isInsi
                 {/* 分类头 */}
                 <button
                   onClick={() => toggleCategory(cat.id)}
-                  className="w-full flex items-center gap-2.5 px-2 py-2 rounded-md hover:bg-bg-hover-secondary/40 transition-colors group/cat"
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-bg-hover-secondary/30 transition-colors group/cat"
                   aria-expanded={!isCollapsed}
                 >
-                  {/* 分类级 IconBox (compact) */}
-                  <div
-                    className="relative w-6 h-6 rounded flex items-center justify-center shrink-0"
-                    style={{
-                      background: ICON_TONE_BG[cat.iconTone],
-                      boxShadow: `0 1px 2px ${ICON_TONE_SHADOW[cat.iconTone]}`,
-                    }}
-                  >
-                    <div
-                      className="pointer-events-none absolute inset-0 rounded"
-                      style={{
-                        background: 'linear-gradient(180deg, rgba(255,255,255,0.22) 0%, transparent 55%)',
-                      }}
-                    />
-                    <cat.icon
-                      size={13}
-                      strokeWidth={2.4}
-                      style={{ position: 'relative', zIndex: 1, color: '#ffffff' }}
-                    />
-                  </div>
-                  <span className={`text-[14px] flex-1 text-left ${hasActive ? 'text-gray-900 dark:text-white font-bold' : 'text-gray-700 dark:text-gray-300 font-medium'} group-hover/cat:text-gray-900 dark:group-hover/cat:text-white group-hover/cat:font-semibold transition-colors`}>
+                  <span className="text-[9.5px] font-bold tracking-widest uppercase flex-1 text-left text-gray-500 group-hover/cat:text-gray-400 dark:text-gray-500 dark:group-hover/cat:text-gray-400 transition-colors">
                     {cat.title}
                   </span>
                   <ChevronDown
-                    size={14}
-                    className={`transition-transform duration-200 ${isCollapsed ? '-rotate-90' : 'rotate-0'} ${hasActive ? 'text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300'} group-hover/cat:text-gray-900 dark:group-hover/cat:text-white`}
+                    size={12}
+                    className={`transition-transform duration-200 ${isCollapsed ? '-rotate-90' : 'rotate-0'} text-gray-500`}
                   />
                 </button>
                 {/* 子项 */}
@@ -210,20 +190,20 @@ function AppSidebar({ sidebarOpen, onCloseSidebar, brandLogo, brandTitle, isInsi
                         className={({ isActive }) =>
                           `relative group flex items-center gap-2.5 pl-3 pr-2 py-1.5 rounded-lg text-[12.5px] transition-all ${
                             isActive
-                              ? 'text-white bg-bg-hover font-medium'
-                              : 'text-gray-300 hover:text-white hover:bg-bg-hover-secondary/60'
+                              ? 'bg-bg-hover font-semibold text-gray-900 dark:text-white'
+                              : 'text-gray-400 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-bg-hover-secondary/50'
                           }`
                         }
                       >
                         {({ isActive }) => (
                           <>
-                            {/* 当前项左侧色条 */}
+                            {/* 当前项左侧色条：统一使用 accent 主色 */}
                             <span
                               className={`absolute left-0 w-0.5 h-4 rounded-r-full transition-all ${isActive ? 'opacity-100' : 'opacity-0'}`}
-                              style={{ background: `linear-gradient(to bottom, ${it.gradientFrom}, ${it.gradientTo})` }}
+                              style={{ background: 'var(--accent-blue)' }}
                             />
-                            <SidebarIcon icon={it.icon} gradientFrom={it.gradientFrom} gradientTo={it.gradientTo} isActive={isActive} />
-                            <span className="flex-1 truncate" style={{ color: 'inherit', opacity: 1 }}>{it.label}</span>
+                            <SidebarIcon icon={it.icon} isActive={isActive} size={15} />
+                            <span className="flex-1 truncate">{it.label}</span>
                             {it.adminOnly && (
                               <span className="text-[8px] font-bold px-1 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 ring-1 ring-amber-500/20">ADMIN</span>
                             )}
@@ -241,6 +221,18 @@ function AppSidebar({ sidebarOpen, onCloseSidebar, brandLogo, brandTitle, isInsi
 
       {/* 底部状态栏 + 用户信息 */}
       <div className="px-4 py-3 border-t border-border">
+        {/* 管理后台入口（仅 admin 可见） */}
+        {isAdmin && (
+          <button
+            onClick={() => { navigate('/admin'); onCloseSidebar() }}
+            className="w-full flex items-center gap-2 px-3 py-1.5 mb-2.5 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 hover:border-purple-500/35 text-purple-300/80 hover:text-purple-200 transition-all text-[11.5px] font-medium"
+            title="进入系统管理后台"
+          >
+            <Settings size={12} />
+            <span className="flex-1 text-left">管理后台</span>
+            <span className="text-[9px] opacity-60">→</span>
+          </button>
+        )}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className={`w-1.5 h-1.5 rounded-full ${backendStatus === 'online' ? 'bg-[#10B981] animate-pulse' : backendStatus === 'checking' ? 'bg-yellow-400 animate-pulse' : 'bg-red-500'}`} />
@@ -250,23 +242,20 @@ function AppSidebar({ sidebarOpen, onCloseSidebar, brandLogo, brandTitle, isInsi
           </div>
           <div className="flex items-center gap-1">
             <button
-              onClick={() => { navigate('/logs'); onCloseSidebar() }}
-              className={`p-1.5 rounded-lg hover:bg-bg-hover text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors ${hasPermission('log:read') ? '' : 'hidden'}`}
-              title="运行日志"
-            >
-              <FileText size={14} />
-            </button>
-            <button
               onClick={toggle}
               className="p-1.5 rounded-lg hover:bg-bg-hover text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
-              title={theme === 'dark' ? '切换亮色模式' : '切换暗色模式'}
+              title={theme === 'dark' ? '切换浅色' : theme === 'light' ? '跟随系统' : '切换深色'}
             >
-              {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+              {theme === 'dark' ? <Moon size={14} /> : theme === 'light' ? <Sun size={14} /> : <Monitor size={14} />}
             </button>
           </div>
         </div>
         <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/50">
-          <div className="flex items-center gap-2 min-w-0">
+          <button
+            onClick={() => { navigate('/settings'); onCloseSidebar() }}
+            className="flex items-center gap-2 min-w-0 flex-1 rounded-lg hover:bg-bg-hover px-1 py-0.5 transition-colors text-left"
+            title="个人设置"
+          >
             {user?.avatar ? (
               <img src={user.avatar} alt="头像" className="w-6 h-6 rounded-full object-cover shrink-0" />
             ) : (
@@ -280,7 +269,7 @@ function AppSidebar({ sidebarOpen, onCloseSidebar, brandLogo, brandTitle, isInsi
                 {isAdmin ? '管理员' : user?.roles?.includes('dept_leader') ? '部门负责人' : user?.roles?.includes('boss') ? '老板' : ''}
               </p>
             </div>
-          </div>
+          </button>
           <button
             onClick={() => { logout(); navigate('/login', { replace: true }) }}
             className="p-1.5 rounded-lg hover:bg-red-500/10 text-gray-500 hover:text-red-400 transition-colors"
@@ -292,28 +281,6 @@ function AppSidebar({ sidebarOpen, onCloseSidebar, brandLogo, brandTitle, isInsi
       </div>
     </aside>
   )
-}
-
-/** 分类级 IconBox 纯色背景：与设计系统 tone 500 对齐（与主题无关，浅深一致） */
-const ICON_TONE_BG: Record<'blue' | 'green' | 'orange' | 'purple' | 'pink' | 'gray' | 'cyan' | 'red', string> = {
-  blue:   '#3B82F6',
-  green:  '#10B981',
-  orange: '#F59E0B',
-  purple: '#8B5CF6',
-  pink:   '#EC4899',
-  gray:   '#6B7280',
-  cyan:   '#06B6D4',
-  red:    '#EF4444',
-}
-const ICON_TONE_SHADOW: Record<'blue' | 'green' | 'orange' | 'purple' | 'pink' | 'gray' | 'cyan' | 'red', string> = {
-  blue:   'rgba(59, 130, 246, 0.45)',
-  green:  'rgba(16, 185, 129, 0.45)',
-  orange: 'rgba(245, 158, 11, 0.45)',
-  purple: 'rgba(139, 92, 246, 0.45)',
-  pink:   'rgba(236, 72, 153, 0.45)',
-  gray:   'rgba(107, 114, 128, 0.30)',
-  cyan:   'rgba(6, 182, 212, 0.45)',
-  red:    'rgba(239, 68, 68, 0.45)',
 }
 
 export default AppSidebar

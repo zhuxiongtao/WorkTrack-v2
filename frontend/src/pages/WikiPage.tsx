@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Plus, Trash2, ChevronRight, ChevronDown, FileText, FolderOpen,
   ArrowLeft, Loader2, X, Check, BookOpen, Maximize2, Minimize2,
-  Sun, Moon, Edit3, Share2, Users, Shield, Copy, Globe,
+  Sun, Moon, Monitor, Edit3, Share2, Users, Shield, Copy, Globe,
   Lock, Info, Calendar, UserCheck, ShieldAlert, Key, Clock, RefreshCw,
   Sparkles, Send, ArrowRightLeft, CornerDownLeft, Building2, Search, UserPlus,
   Crown, ArrowUpRight
@@ -334,7 +334,7 @@ const API = {
 export default function WikiPage() {
   const { user: currentUser } = useAuth()
   const { toast: showToast } = useToast()
-  const { theme, toggle: toggleTheme } = useTheme()
+  const { theme, resolvedTheme, toggle: toggleTheme } = useTheme()
   const navigate = useNavigate()
   const { spaceId: spaceIdParam } = useParams<{ spaceId: string }>()
   const [searchParams] = useSearchParams()
@@ -1599,9 +1599,9 @@ export default function WikiPage() {
                 <button
                   onClick={toggleTheme}
                   className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-bg-card text-gray-500 dark:hover:text-gray-200 cursor-pointer"
-                  title={theme === 'dark' ? '进入浅色呼吸模式' : '进入护眼深色模式'}
+                  title={theme === 'dark' ? '切换浅色' : theme === 'light' ? '跟随系统' : '切换深色'}
                 >
-                  {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+                  {theme === 'dark' ? <Moon size={14} /> : theme === 'light' ? <Sun size={14} /> : <Monitor size={14} />}
                 </button>
               </div>
             </div>
@@ -2119,7 +2119,7 @@ export default function WikiPage() {
                       <select
                         value={shareScope}
                         onChange={e => setShareScope(e.target.value as any)}
-                        style={{ colorScheme: theme }}
+                        style={{ colorScheme: resolvedTheme }}
                         className="w-full px-2.5 py-2 rounded-xl bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-xs text-gray-700 dark:text-gray-200 outline-none focus:border-accent-blue font-semibold cursor-pointer"
                       >
                         <option value="space" className="bg-white dark:bg-bg-input text-gray-800 dark:text-gray-200">整知识库空间所有文档</option>
@@ -2144,7 +2144,7 @@ export default function WikiPage() {
                             }
                             await syncShareConfig(isSpacePublic, usePassword, sharePassword, val, nextExpire)
                           }}
-                          style={{ colorScheme: theme }}
+                          style={{ colorScheme: resolvedTheme }}
                           className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-xs text-gray-700 dark:text-gray-200 outline-none focus:border-accent-blue font-semibold cursor-pointer"
                         >
                           <option value="permanent" className="bg-white dark:bg-bg-input text-gray-800 dark:text-gray-200">永久有效</option>
@@ -2162,7 +2162,7 @@ export default function WikiPage() {
                             onBlur={async () => {
                               await syncShareConfig(isSpacePublic, usePassword, sharePassword, expireMode, shareExpiresAt)
                             }}
-                            style={{ colorScheme: theme }}
+                            style={{ colorScheme: resolvedTheme }}
                             className="w-full px-2.5 py-1 rounded-xl bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-xs text-gray-700 dark:text-gray-200 outline-none focus:border-accent-blue font-semibold font-mono"
                           />
                         </div>
@@ -2350,7 +2350,7 @@ export default function WikiPage() {
                     <select
                       value={selectedPermission}
                       onChange={e => setSelectedPermission(e.target.value as any)}
-                      style={{ colorScheme: theme }}
+                      style={{ colorScheme: resolvedTheme }}
                       className="flex-1 h-8 px-2.5 rounded-lg bg-gray-50 dark:bg-bg-input border border-gray-200 dark:border-border/60 text-xs text-gray-700 dark:text-gray-200 outline-none focus:border-accent-blue cursor-pointer font-bold"
                     >
                       <option value="viewer">查看者 (只读)</option>

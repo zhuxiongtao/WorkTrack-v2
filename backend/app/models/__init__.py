@@ -29,6 +29,7 @@ from app.models.reconcile import (
     ReconcileDiff,
 )
 from app.models.model_catalog import ModelCatalog
+from app.models.approval import ApprovalFlow, ApprovalInstance, ApprovalRecord
 
 __all__ = [
     "User",
@@ -76,4 +77,7 @@ __all__ = [
     "ReconcileSummary",
     "ReconcileDiff",
     "ModelCatalog",
+    "ApprovalFlow",
+    "ApprovalInstance",
+    "ApprovalRecord",
 ]

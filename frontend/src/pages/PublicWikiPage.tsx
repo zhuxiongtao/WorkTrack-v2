@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import {
-  FileText, BookOpen, Key, Calendar, Sun, Moon,
+  FileText, BookOpen, Key, Calendar, Sun, Moon, Monitor,
   ChevronRight, ChevronDown, Loader2, Clock, Info, Check, UserCheck
 } from 'lucide-react'
 import { useToast } from '../contexts/ToastContext'
@@ -299,9 +299,9 @@ export default function PublicWikiPage() {
           <button
             onClick={toggleTheme}
             className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-bg-card text-gray-400 hover:text-gray-800 transition-colors cursor-pointer border border-transparent hover:border-gray-200 dark:hover:border-border/10 shadow-sm"
-            title={theme === 'dark' ? '进入浅色呼吸模式' : '进入护眼深色模式'}
+            title={theme === 'dark' ? '切换浅色' : theme === 'light' ? '跟随系统' : '切换深色'}
           >
-            {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+            {theme === 'dark' ? <Moon size={14} /> : theme === 'light' ? <Sun size={14} /> : <Monitor size={14} />}
           </button>
         </div>
 

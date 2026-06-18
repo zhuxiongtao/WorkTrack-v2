@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Plus, X, Save, Trash2, Loader2, Key, Globe, Cpu, Settings2, ListChecks, Sparkles, Brain, Eye, EyeOff, Mic, MessageSquare, Search, ChevronDown, Home, RotateCcw, Edit3, Server, User, Package, MapPin, Activity, Cloud, Palette, Upload, Copy, Terminal, Zap, Pencil, AlertTriangle, Sliders, Layers, Megaphone, RefreshCw, CheckCircle2, Power } from 'lucide-react'
+import { Plus, X, Save, Trash2, Loader2, Key, Globe, Cpu, Settings2, ListChecks, Sparkles, Brain, Eye, EyeOff, Mic, MessageSquare, Search, ChevronDown, Home, RotateCcw, Edit3, Server, User, Package, MapPin, Activity, Cloud, Palette, Upload, Copy, Terminal, Zap, Pencil, AlertTriangle, Sliders, Layers, Megaphone, RefreshCw, CheckCircle2, Power, Mail, Send } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useSearchParams } from 'react-router-dom'
@@ -74,14 +74,9 @@ interface Preset {
   temperature: number | null
   top_p: number | null
   max_tokens: number | null
-  frequency_penalty: number | null
-  presence_penalty: number | null
-  stop: string | null
   thinking_mode: string | null
   thinking_budget: number | null
   response_format: string | null
-  json_schema: string | null
-  extra_params_json: string | null
 }
 
 // 任务组：按功能性质聚类。同一组的所有 task 共享同一个模型配置。
@@ -133,27 +128,201 @@ const modelSupportsAnyOf = (m: ProviderModelItem, taskTypes: string[]): boolean 
   return taskTypes.some((t) => modelSupports(m, t))
 }
 
-// P1 任务级「需要能力」：检查模型是否满足全部勾选的能力
-// - 未勾选（caps 为空）一律返回 true（不约束）
-// - 支持乐观默认：streaming/system_prompt 字段为 null/undefined 时视为支持
-const modelMatchesCaps = (m: ProviderModelItem, caps: string[]): boolean => {
-  if (!caps || caps.length === 0) return true
-  for (const c of caps) {
-    switch (c) {
-      case 'function_calling': if (!m.supports_function_calling) return false; break
-      case 'vision':          if (!m.supports_vision)          return false; break
-      case 'json_mode':       if (!m.supports_json_mode)       return false; break
-      case 'thinking':        if (!m.supports_thinking)        return false; break
-      case 'streaming':       if (m.supports_streaming === false) return false; break
-      case 'system_prompt':   if (m.supports_system_prompt === false) return false; break
-      default: break
+// ==================== 邮件服务配置 ====================
+type ToastFn = (msg: string, type?: 'success' | 'error' | 'info' | 'warning') => void
+
+const EMAIL_PRESETS: Record<string, { label: string; host: string; port: number; use_tls: boolean; use_ssl: boolean; note: string }> = {
+  gmail:   { label: 'Gmail（App Password）',    host: 'smtp.gmail.com',     port: 587, use_tls: true,  use_ssl: false, note: '在 Google 账号「安全→两步验证→应用专用密码」生成密码' },
+  qq:      { label: 'QQ邮箱',                   host: 'smtp.qq.com',        port: 587, use_tls: true,  use_ssl: false, note: '在 QQ 邮箱「设置→账户→POP3/SMTP」开启并获取授权码' },
+  '163':   { label: '163邮箱',                  host: 'smtp.163.com',       port: 465, use_tls: false, use_ssl: true,  note: '在 163「设置→POP3/SMTP/IMAP」开启客户端授权码' },
+  outlook: { label: 'Outlook / Office 365',     host: 'smtp.office365.com', port: 587, use_tls: true,  use_ssl: false, note: '使用 Microsoft 账号密码或应用专用密码' },
+  smtp:    { label: '自定义 SMTP',              host: '',                   port: 587, use_tls: true,  use_ssl: false, note: '适用于公司自建邮箱或其他 SMTP 服务商' },
+}
+
+function EmailConfigSection({ showToast }: { showToast: ToastFn }) {
+  const [cfg, setCfg] = useState({
+    enabled: false, host: '', port: 587, username: '', password: '',
+    from_name: 'WorkTrack 系统', use_tls: true, use_ssl: false,
+    provider: 'smtp', password_set: false,
+  })
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [testTo, setTestTo] = useState('')
+  const [testing, setTesting] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/v1/settings/email-config', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setCfg(prev => ({ ...prev, ...d, password: '' })) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const applyPreset = (key: string) => {
+    const p = EMAIL_PRESETS[key]
+    if (p) setCfg(prev => ({ ...prev, provider: key, host: p.host, port: p.port, use_tls: p.use_tls, use_ssl: p.use_ssl }))
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const payload: Record<string, unknown> = {
+        enabled: cfg.enabled, host: cfg.host, port: cfg.port,
+        username: cfg.username, from_name: cfg.from_name,
+        use_tls: cfg.use_tls, use_ssl: cfg.use_ssl, provider: cfg.provider,
+      }
+      if (cfg.password) payload.password = cfg.password
+      const r = await fetch('/api/v1/settings/email-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+        body: JSON.stringify(payload),
+      })
+      if (!r.ok) throw new Error((await r.json()).detail || '保存失败')
+      showToast('邮件配置已保存', 'success')
+      setCfg(prev => ({ ...prev, password: '', password_set: prev.password_set || !!prev.password }))
+    } catch (e: any) {
+      showToast(e.message || '保存失败', 'error')
+    } finally {
+      setSaving(false)
     }
   }
-  return true
+
+  const handleTest = async () => {
+    if (!testTo || !testTo.includes('@')) return showToast('请填写有效的收件邮箱', 'error')
+    setTesting(true)
+    try {
+      const r = await fetch('/api/v1/settings/email-config/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+        body: JSON.stringify({ to: testTo }),
+      })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.detail || d.message || '发送失败')
+      showToast(d.message || '测试邮件已发送', 'success')
+    } catch (e: any) {
+      showToast(e.message || '发送失败', 'error')
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  if (loading) return null
+  const presetNote = EMAIL_PRESETS[cfg.provider]?.note
+
+  return (
+    <div className="mb-10 p-5 max-md:p-4 rounded-xl bg-bg-card border border-border">
+      <h3 className="text-base font-medium text-gray-900 dark:text-white mb-1 flex items-center gap-2">
+        <Mail size={18} className="text-[#3B82F6]" /> 邮件服务配置
+      </h3>
+      <p className="text-xs text-gray-500 mb-5">配置 SMTP 邮件服务，用于审批通知、密码重置等系统邮件发送</p>
+
+      {/* 启用开关 */}
+      <div className="flex items-center justify-between mb-5 p-3 rounded-lg bg-bg-hover border border-border">
+        <div>
+          <p className="text-sm font-medium text-gray-900 dark:text-white">启用邮件服务</p>
+          <p className="text-[11px] text-gray-500 mt-0.5">开启后系统将通过配置的 SMTP 发送通知邮件</p>
+        </div>
+        <button
+          onClick={() => setCfg(prev => ({ ...prev, enabled: !prev.enabled }))}
+          className={`relative w-11 h-6 rounded-full transition-colors ${cfg.enabled ? 'bg-[#3B82F6]' : 'bg-gray-600'}`}
+        >
+          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${cfg.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
+        </button>
+      </div>
+
+      {/* 服务商预设 */}
+      <div className="mb-4">
+        <label className="block text-xs text-gray-500 mb-2">选择邮件服务商（预设参数）</label>
+        <div className="grid grid-cols-5 gap-2 max-md:grid-cols-3">
+          {Object.entries(EMAIL_PRESETS).map(([key, p]) => (
+            <button key={key} onClick={() => applyPreset(key)}
+              className={`px-2 py-2 text-[11px] rounded-lg border text-center transition-colors ${cfg.provider === key ? 'border-[#3B82F6] bg-[#3B82F6]/10 text-[#60A5FA]' : 'border-border text-gray-400 hover:border-gray-400'}`}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+        {presetNote && <p className="text-[11px] text-amber-400/80 mt-2">💡 {presetNote}</p>}
+      </div>
+
+      {/* SMTP 参数 */}
+      <div className="grid grid-cols-2 gap-3 mb-4 max-md:grid-cols-1">
+        <div>
+          <label className="block text-xs text-gray-500 mb-1.5">SMTP 主机</label>
+          <input value={cfg.host} onChange={e => setCfg(prev => ({ ...prev, host: e.target.value }))}
+            placeholder="如 smtp.gmail.com"
+            className="w-full px-3 py-2 text-xs bg-bg-input border border-border rounded-lg text-gray-900 dark:text-white focus:outline-none focus:border-[#3B82F6]" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1.5">端口</label>
+          <input type="number" value={cfg.port} onChange={e => setCfg(prev => ({ ...prev, port: parseInt(e.target.value) || 587 }))}
+            className="w-full px-3 py-2 text-xs bg-bg-input border border-border rounded-lg text-gray-900 dark:text-white focus:outline-none focus:border-[#3B82F6]" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1.5">发件邮箱（用户名）</label>
+          <input value={cfg.username} onChange={e => setCfg(prev => ({ ...prev, username: e.target.value }))}
+            placeholder="your@email.com"
+            className="w-full px-3 py-2 text-xs bg-bg-input border border-border rounded-lg text-gray-900 dark:text-white focus:outline-none focus:border-[#3B82F6]" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1.5">
+            密码 / 授权码{cfg.password_set && !cfg.password && <span className="ml-1 text-emerald-400">（已设置）</span>}
+          </label>
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={cfg.password}
+              onChange={e => setCfg(prev => ({ ...prev, password: e.target.value }))}
+              placeholder={cfg.password_set ? '留空则不修改' : '邮箱密码或应用专用密码'}
+              className="w-full px-3 py-2 pr-8 text-xs bg-bg-input border border-border rounded-lg text-gray-900 dark:text-white focus:outline-none focus:border-[#3B82F6]"
+            />
+            <button onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
+              {showPassword ? <EyeOff size={13} /> : <Eye size={13} />}
+            </button>
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1.5">发件人显示名称</label>
+          <input value={cfg.from_name} onChange={e => setCfg(prev => ({ ...prev, from_name: e.target.value }))}
+            placeholder="WorkTrack 系统"
+            className="w-full px-3 py-2 text-xs bg-bg-input border border-border rounded-lg text-gray-900 dark:text-white focus:outline-none focus:border-[#3B82F6]" />
+        </div>
+        <div className="flex items-center gap-4 pt-5">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={cfg.use_tls} onChange={e => setCfg(prev => ({ ...prev, use_tls: e.target.checked, use_ssl: e.target.checked ? false : prev.use_ssl }))} />
+            <span className="text-xs text-gray-400">STARTTLS</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={cfg.use_ssl} onChange={e => setCfg(prev => ({ ...prev, use_ssl: e.target.checked, use_tls: e.target.checked ? false : prev.use_tls }))} />
+            <span className="text-xs text-gray-400">SSL（465端口）</span>
+          </label>
+        </div>
+      </div>
+
+      {/* 操作区 */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <button onClick={handleSave} disabled={saving}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#3B82F6] text-white text-xs font-medium hover:bg-blue-600 disabled:opacity-50">
+          {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+          {saving ? '保存中...' : '保存配置'}
+        </button>
+        <div className="flex items-center gap-2">
+          <input value={testTo} onChange={e => setTestTo(e.target.value)}
+            placeholder="发送测试邮件至..."
+            className="px-3 py-2 text-xs bg-bg-input border border-border rounded-lg text-gray-900 dark:text-white focus:outline-none focus:border-[#3B82F6] w-48" />
+          <button onClick={handleTest} disabled={testing}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-bg-hover border border-border text-xs text-gray-400 hover:text-white disabled:opacity-50">
+            {testing ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+            {testing ? '发送中...' : '发送测试'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ==================== 系统公告 & AI 资讯 管理 Tab ====================
-type ToastFn = (msg: string, type?: 'success' | 'error' | 'info' | 'warning') => void
 
 function AnnouncementTab({
   fetchWithAuth, showToast,
@@ -1167,7 +1336,7 @@ export default function SettingsPage() {
             <h3 className="text-[13px] font-semibold text-gray-900 dark:text-white whitespace-nowrap">参数预设模板</h3>
             <span className="text-[11px] text-gray-500 truncate">常用参数组合一键引用</span>
           </div>
-          {canManageModels && (
+          {canManageShared && (
             <button onClick={() => openPresetEditor(null)}
               className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#A78BFA] text-white text-xs hover:bg-purple-600 shrink-0">
               <Plus size={12} />新建预设
@@ -1205,7 +1374,7 @@ export default function SettingsPage() {
                       </div>
                       {p.description && <p className="text-[11px] text-gray-500 line-clamp-2">{p.description}</p>}
                     </div>
-                    {!p.is_system && canManageModels && (
+                    {!p.is_system && canManageShared && (
                       <div className="flex items-center gap-0.5 shrink-0">
                         <button onClick={() => openPresetEditor(p)}
                           title="编辑"
@@ -1240,7 +1409,9 @@ export default function SettingsPage() {
           <div className="flex items-center gap-2 min-w-0">
             <Sparkles size={15} className="text-[#F59E0B] shrink-0" />
             <h3 className="text-[13px] font-semibold text-gray-900 dark:text-white whitespace-nowrap">任务模型配置</h3>
-            <span className="text-[11px] text-gray-500 truncate">为不同 AI 任务组指定模型，同组共享 · 参数差异由覆盖或预设控制</span>
+            <span className="text-[11px] text-gray-500 truncate">
+              {canManageShared ? '为不同 AI 任务组配置模型及参数（管理员配置，对全局生效）' : '为每个任务组选择使用的模型，参数由管理员统一配置'}
+            </span>
           </div>
         </div>
         {getActiveProviders().length === 0 ? (
@@ -1290,27 +1461,17 @@ export default function SettingsPage() {
                       const spId = cfg?.provider_id
                       const sp = spId ? providers.find((p) => p.id === spId) : null
                       const providerDeleted = spId && !sp
-                      const allModels = providerModels[spId || 0] || []
-                      // P1: 任务级「需要能力」列表
-                      const requiredCaps: string[] = Array.isArray(cfg?.required_capabilities) ? cfg!.required_capabilities : []
-                      // 多模态组：按单 task 过滤；普通组：按组内任一 task 过滤
-                      const filteredModels = isMultimodal
-                        ? allModels.filter((m) => modelSupports(m, tk) && modelMatchesCaps(m, requiredCaps))
-                        : (group.compatibleTypes.length > 0
-                          ? allModels.filter((m) => modelSupportsAnyOf(m, group.compatibleTypes) && modelMatchesCaps(m, requiredCaps))
-                          : allModels.filter((m) => modelMatchesCaps(m, requiredCaps)))
-                      const showFallback = filteredModels.length === 0 && allModels.length > 0
-                      const selectedModel = cfg?.model_name ? allModels.find((m) => m.model_name === cfg.model_name) : null
-                      const modelDeleted = cfg?.model_name && sp && allModels.length > 0 && !selectedModel
-                      // 修复：非多模态组用 compatibleTypes 判定（模型只要支持组内任一类型即可），多模态组用具体 task
+                      const allSelectedModels = providerModels[spId || 0] || []
+                      const selectedModel = cfg?.model_name ? allSelectedModels.find((m) => m.model_name === cfg.model_name) : null
+                      const modelDeleted = cfg?.model_name && sp && allSelectedModels.length > 0 && !selectedModel
                       const typeMismatch = selectedModel && (isMultimodal
                         ? !modelSupports(selectedModel, tk)
                         : !modelSupportsAnyOf(selectedModel, group.compatibleTypes))
-                      // P1: 已选模型是否满足 required_capabilities
-                      const capsMismatch = selectedModel && !modelMatchesCaps(selectedModel, requiredCaps)
                       const RowIcon = rt.icon
                       const c = cfg
-                      const hasOverride = c && (c.override_temperature != null || c.override_max_tokens != null || c.override_thinking_mode != null || c.preset_id != null || (Array.isArray(c.required_capabilities) && c.required_capabilities.length > 0))
+                      const hasOverride = c && (c.override_temperature != null || c.override_max_tokens != null || c.override_thinking_mode != null || c.preset_id != null)
+                      // 合并 供应商|模型 value，格式 "providerId|modelName"
+                      const combinedValue = spId && cfg?.model_name ? `${spId}|${cfg.model_name}` : ''
                       return (
                         <div key={tk} className="flex items-center gap-1.5 group/row">
                           {/* 行首小标签 */}
@@ -1322,58 +1483,55 @@ export default function SettingsPage() {
                               group.color
                             }} />{rt.label}
                           </span>
-                          {/* 供应商 select */}
+                          {/* 供应商 + 模型合并 select，按供应商分组 */}
                           <select
-                            value={spId || ''}
+                            value={combinedValue}
                             onChange={(e) => {
-                              const v = e.target.value ? Number(e.target.value) : null
-                              if (isMultimodal) saveTaskConfig(tk, v, '')
-                              else saveTaskConfig(group.taskKeys, v, '')
+                              const v = e.target.value
+                              if (!v) {
+                                if (isMultimodal) saveTaskConfig(tk, null, '')
+                                else saveTaskConfig(group.taskKeys, null, '')
+                              } else {
+                                const sep = v.indexOf('|')
+                                const pid = Number(v.slice(0, sep))
+                                const mn = v.slice(sep + 1)
+                                if (isMultimodal) saveTaskConfig(tk, pid, mn)
+                                else saveTaskConfig(group.taskKeys, pid, mn)
+                              }
                             }}
-                            className="w-[120px] px-2 py-1 rounded-md bg-bg-input border border-border text-[11px] text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6] shrink-0">
-                            <option value="">供应商…</option>
-                            {getActiveProviders().map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                          </select>
-                          {/* 模型 select（选了供应商且有模型才出现） */}
-                          {spId && allModels.length > 0 && (
-                            <select
-                              value={cfg?.model_name || ''}
-                              onChange={(e) => {
-                                if (isMultimodal) saveTaskConfig(tk, spId, e.target.value)
-                                else saveTaskConfig(group.taskKeys, spId, e.target.value)
-                              }}
-                              className="flex-1 min-w-[140px] max-w-[260px] px-2 py-1 rounded-md bg-bg-input border border-border text-[11px] text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6] truncate">
-                              <option value="">模型…</option>
-                              {filteredModels.map((m) => (
-                                <option key={m.model_name} value={m.model_name}>
-                                  {m.model_name} · {TYPE_LABEL[m.model_type] || m.model_type}
-                                </option>
-                              ))}
-                              {showFallback && (
-                                <optgroup label="-- 无匹配类型 --">
-                                  {allModels.map((m) => (
-                                    <option key={m.model_name} value={m.model_name}>
+                            className="flex-1 min-w-[180px] max-w-[340px] px-2 py-1 rounded-md bg-bg-input border border-border text-[11px] text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6] truncate">
+                            <option value="">选择模型…</option>
+                            {getActiveProviders().map((p) => {
+                              const pModels = providerModels[p.id] || []
+                              const filtered = isMultimodal
+                                ? pModels.filter((m) => modelSupports(m, tk))
+                                : (group.compatibleTypes.length > 0
+                                  ? pModels.filter((m) => modelSupportsAnyOf(m, group.compatibleTypes))
+                                  : pModels)
+                              if (filtered.length === 0) return null
+                              return (
+                                <optgroup key={p.id} label={p.name}>
+                                  {filtered.map((m) => (
+                                    <option key={`${p.id}|${m.model_name}`} value={`${p.id}|${m.model_name}`}>
                                       {m.model_name} · {TYPE_LABEL[m.model_type] || m.model_type}
                                     </option>
                                   ))}
                                 </optgroup>
-                              )}
-                            </select>
-                          )}
-                          {/* 类型不匹配警告 / 能力不匹配警告 / 已选状态 */}
+                              )
+                            })}
+                          </select>
+                          {/* 类型不匹配警告 / 已配置状态 */}
                           {cfg?.model_name && !providerDeleted && !modelDeleted && (
                             typeMismatch ? (
                               <StatusBadge variant="warning" title="此模型不支持该任务类型">类型不匹配</StatusBadge>
-                            ) : capsMismatch ? (
-                              <StatusBadge variant="danger" title={`此模型不满足任务要求的能力: ${requiredCaps.join(', ')}`}>能力不足</StatusBadge>
                             ) : (
                               <StatusBadge variant="success" title="已配置">已配置</StatusBadge>
                             )
                           )}
                           {/* 加载中 */}
                           {taskSaving === tk && <Loader2 size={12} className="animate-spin text-gray-400 shrink-0" />}
-                          {/* 覆盖参数按钮（最右，常驻显示避免触屏用户发现不了） */}
-                          {cfg?.model_name && canManageModels && (
+                          {/* 覆盖参数按钮：仅管理员（ai:manage_shared）可配置参数，普通自管用户只换模型 */}
+                          {cfg?.model_name && canManageShared && (
                             <button onClick={() => setOverrideModal({ open: true, taskType: tk, taskLabel: isMultimodal ? `${group.label}/${rt.label}` : `${group.label}` })}
                               title={hasOverride ? '已配置覆盖参数，点击修改' : '为此任务配置参数覆盖'}
                               className={`ml-auto flex items-center gap-1 px-1.5 py-1 rounded text-[10px] border shrink-0 transition-colors ${hasOverride ? 'text-[#F59E0B] border-[#F59E0B]/60 bg-[#F59E0B]/10' : 'text-gray-500 hover:text-amber-300 border-border bg-bg-hover'}`}>
@@ -1428,7 +1586,7 @@ export default function SettingsPage() {
       {/* AI 提示词配置 */}
       <div className="mb-10">
         <h3 className="text-base font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2"><Edit3 size={18} className="text-[#8B5CF6]" /> AI 提示词配置</h3>
-        <p className="text-xs text-gray-500 mb-4 dark:text-gray-400">自定义各 AI 任务的 System Prompt 和用户消息模板，让 AI 输出更符合你的预期。使用 <code className="px-1.5 py-0.5 rounded bg-bg-input text-[10px] text-[#8B5CF6]">{'{变量名}'}</code> 表示动态内容占位。</p>
+        <p className="text-xs text-gray-500 mb-4 dark:text-gray-400">自定义 AI 任务的提示词，影响输出风格和内容结构。使用 <code className="px-1.5 py-0.5 rounded bg-bg-input text-[10px] text-[#8B5CF6]">{'{变量名}'}</code> 表示动态占位。结构化抽取、图像理解、通用对话、ASR / 嵌入等任务的提示词由系统固定，不开放自定义。</p>
         {isAdmin && <p className="text-xs text-indigo-500 mb-3">管理员提示：你可以编辑全局默认提示词，新用户将自动继承。普通用户可自行覆盖为个人提示词。</p>}
         {Object.keys(aiPrompts).length === 0 ? (
           <div className="p-6 rounded-xl bg-bg-card border border-dashed border-border text-center">
@@ -1437,7 +1595,15 @@ export default function SettingsPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {Object.entries(aiPrompts).map(([taskType, prompt]) => {
+            {Object.entries(aiPrompts).filter(([taskType]) => ![
+              'speech_to_text', // ASR 模型，无 LLM 提示词
+              'embedding',      // 嵌入模型，无 LLM 提示词
+              'meeting_extract',  // JSON schema 由代码硬解析，改提示词会报错
+              'contract_parse',   // 同上
+              'vision',           // 图像理解，提示词无实际定制价值
+              'chat',             // ai_chat() 不调用 _get_prompt()，配置不生效
+              'company_info',     // fetch_company_info() 内联硬编码提示词，配置不生效
+            ].includes(taskType)).map(([taskType, prompt]) => {
               const isEditing = editingPrompt === taskType
               const sourceLabel = prompt.source === 'user' ? '个人自定义' : prompt.source === 'global' ? '全局默认' : '系统默认'
               const sourceColor = prompt.source === 'user' ? 'bg-[#8B5CF6]/10 text-[#A78BFA]' : prompt.source === 'global' ? 'bg-indigo-500/10 text-indigo-400' : 'bg-gray-500/10 text-gray-400'
@@ -1554,6 +1720,7 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+
       </>
       )}
 
@@ -2042,6 +2209,11 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+
+      {/* ==================== 邮件服务配置 ==================== */}
+      {canEditSettings && (
+        <EmailConfigSection showToast={showToast} />
+      )}
       </>
       )}
 
@@ -2389,21 +2561,15 @@ export default function SettingsPage() {
 
       {/* 任务参数覆盖弹窗 */}
       {overrideModal.open && (() => {
-        // P1: 把当前任务绑定的模型传给弹窗，用于能力 chips 红/绿勾对照
         const cfg = taskConfigs[overrideModal.taskType]
-        const spId = cfg?.provider_id
-        const mn = cfg?.model_name
-        const models = spId ? (providerModels[spId] || []) : []
-        const selectedModel = (spId && mn) ? models.find((m) => m.model_name === mn) || null : null
         return (
           <TaskOverrideModal
             taskType={overrideModal.taskType}
             taskLabel={overrideModal.taskLabel}
             current={cfg || null}
-            selectedModel={selectedModel}
             onClose={() => setOverrideModal({ open: false, taskType: '', taskLabel: '' })}
             onSaved={loadTaskConfigs}
-            canEdit={canManageModels}
+            canEdit={canManageShared}
           />
         )
       })()}
@@ -2457,6 +2623,9 @@ export default function SettingsPage() {
                     placeholder="4000" />
                 </div>
               </div>
+              {presetForm.temperature !== '' && presetForm.top_p !== '' && (
+                <p className="text-[10px] text-amber-400">建议 Temperature 和 Top P 只设其一，同时设置效果不可预期</p>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-gray-400 mb-1.5">Thinking Mode</label>
@@ -2485,7 +2654,6 @@ export default function SettingsPage() {
                   <option value="">不设置</option>
                   <option value="text">纯文本</option>
                   <option value="json_object">JSON 对象</option>
-                  <option value="json_schema">JSON Schema</option>
                 </select>
               </div>
             </div>

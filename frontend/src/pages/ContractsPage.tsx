@@ -56,8 +56,11 @@ interface ExtractionMeta { confidence?: number; source_text?: string; [k: string
 interface CustomerSimple { id: number; name: string }
 interface ProjectSimple { id: number; name: string; customer_id: number | null }
 
-const STATUS_OPTIONS = ['生效中', '即将到期', '已到期', '已终止']
+const STATUS_OPTIONS = ['草稿', '生效中', '即将到期', '已到期', '已终止']
 const STATUS_COLORS: Record<string, string> = {
+  '草稿': 'text-gray-400 bg-gray-500/10 border-gray-500/30',
+  '审批中': 'text-amber-400 bg-amber-500/10 border-amber-500/30',
+  '已驳回': 'text-red-400 bg-red-500/10 border-red-500/30',
   '生效中': 'text-green-400 bg-green-500/10 border-green-500/30',
   '即将到期': 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30',
   '已到期': 'text-red-400 bg-red-500/10 border-red-500/30',
@@ -313,6 +316,20 @@ export default function ContractsPage() {
       method: 'DELETE',
     })
     if (res.ok) { showToast('已删除', 'success'); loadContracts() }
+  }
+
+  const handleSubmitApproval = async (id: number) => {
+    const ok = await showConfirm('确认提交该合同进入审批流程？提交后在审批完成前不可编辑。')
+    if (!ok) return
+    const res = await fetch(`/api/v1/contracts/${id}/submit-approval`, { method: 'POST' })
+    if (res.ok) {
+      const data = await res.json()
+      showToast(data.message || '已提交审批', 'success')
+      loadContracts()
+    } else {
+      const err = await res.json().catch(() => ({}))
+      showToast(err.detail || '提交审批失败', 'error')
+    }
   }
 
   const handleDownload = async (id: number, fileName: string) => {
@@ -722,10 +739,22 @@ export default function ContractsPage() {
                         </button>
                       </>
                     )}
-                     {hasPermission('contract:edit') && (
+                     {hasPermission('contract:edit') && c.status !== '审批中' && (
                       <button onClick={() => startEdit(c)}
                         className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-bg-hover border border-border">
                         <Pencil size={10} />编辑
+                      </button>
+                    )}
+                    {hasPermission('contract:edit') && c.status !== '审批中' && c.status !== '生效中' && (
+                      <button onClick={() => handleSubmitApproval(c.id)}
+                        className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/20">
+                        <FileSignature size={10} />提交审批
+                      </button>
+                    )}
+                    {c.status === '审批中' && (
+                      <button onClick={() => { window.location.href = '/approvals' }}
+                        className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/20">
+                        <Eye size={10} />查看审批进度
                       </button>
                     )}
                     {hasPermission('contract:delete') && (

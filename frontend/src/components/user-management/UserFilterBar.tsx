@@ -19,7 +19,7 @@ export function UserFilterBar({
   status, onStatusChange,
   roles,
 }: UserFilterBarProps) {
-  const { theme } = useTheme()
+  const { resolvedTheme: theme } = useTheme()
   const [localSearch, setLocalSearch] = useState(search)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 

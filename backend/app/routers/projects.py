@@ -173,11 +173,13 @@ def get_project(project_id: int, current_user: User = Depends(require_permission
 @router.put("/{project_id}", response_model=ProjectOut)
 def update_project(project_id: int, data: ProjectUpdate, background_tasks: BackgroundTasks, current_user: User = Depends(require_permission("project:edit")), db: Session = Depends(get_session)):
     project = db.get(Project, project_id)
-    if not project or project.user_id != current_user.id:
+    if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
+    from app.auth import check_data_access
+    if not check_data_access(project.user_id, current_user, db):
+        raise HTTPException(status_code=403, detail="无权编辑该项目")
     meeting_ids = data.meeting_ids
-    # 不使用 exclude_unset：保证所有字段写入 DB
-    update_data = data.model_dump(exclude={"meeting_ids"})
+    update_data = data.model_dump(exclude={"meeting_ids"}, exclude_unset=True)
     for key, value in update_data.items():
         setattr(project, key, value)
     if project.deal_amount and project.deal_amount > 0:
@@ -231,8 +233,11 @@ def get_project_contracts(project_id: int, current_user: User = Depends(require_
 @router.delete("/{project_id}", status_code=204)
 def delete_project(project_id: int, background_tasks: BackgroundTasks, current_user: User = Depends(require_permission("project:delete")), db: Session = Depends(get_session)):
     project = db.get(Project, project_id)
-    if not project or project.user_id != current_user.id:
+    if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
+    from app.auth import check_data_access
+    if not check_data_access(project.user_id, current_user, db):
+        raise HTTPException(status_code=403, detail="无权删除该项目")
     db.delete(project)
     db.commit()
     background_tasks.add_task(delete_document, "projects", str(project_id))
@@ -242,8 +247,11 @@ def delete_project(project_id: int, background_tasks: BackgroundTasks, current_u
 def ai_analyze_project(project_id: int, current_user: User = Depends(require_permission("project:edit")), db: Session = Depends(get_session)):
     """触发 AI 项目分析，结果自动保存到项目"""
     project = db.get(Project, project_id)
-    if not project or project.user_id != current_user.id:
+    if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
+    from app.auth import check_data_access
+    if not check_data_access(project.user_id, current_user, db):
+        raise HTTPException(status_code=403, detail="无权分析该项目")
     analysis = generate_project_analysis(project_id, db, current_user.id)
     project.analysis = analysis
     project.updated_at = utc_now()
@@ -256,8 +264,11 @@ def ai_analyze_project(project_id: int, current_user: User = Depends(require_per
 def get_project_meetings(project_id: int, current_user: User = Depends(require_permission("project:read")), db: Session = Depends(get_session)):
     """获取关联到项目的会议列表"""
     project = db.get(Project, project_id)
-    if not project or project.user_id != current_user.id:
+    if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
+    from app.auth import check_data_access
+    if not check_data_access(project.user_id, current_user, db):
+        raise HTTPException(status_code=403, detail="无权查看该项目")
     meetings = db.exec(
         select(MeetingNote).where(MeetingNote.project_id == project_id).order_by(MeetingNote.meeting_date.desc())
     ).all()

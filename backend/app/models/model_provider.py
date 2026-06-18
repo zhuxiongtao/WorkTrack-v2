@@ -101,10 +101,6 @@ class TaskModelConfig(SQLModel, table=True):
     # 预设引用
     preset_id: Optional[int] = Field(default=None, foreign_key="modelparampreset.id")  # 可选：引用预设模板
 
-    # 任务级「需要能力」约束（None / [] 表示不约束）
-    # 可选值：function_calling / vision / json_mode / thinking / streaming / system_prompt
-    # 保存的是 JSON 数组字符串（和 supported_task_types 一致），router 层负责序列化
-    # 选中的能力必须在所选模型的 supports_* 字段中为 true，否则保存时返回 422 警告
     required_capabilities: Optional[str] = Field(
         default=None,
         sa_column=Column("required_capabilities", JSON),

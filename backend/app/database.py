@@ -42,6 +42,9 @@ def init_db():
         LogEntry,
         AIPrompt,
         WeeklySummary,
+        ApprovalFlow,
+        ApprovalInstance,
+        ApprovalRecord,
     )
     logger = logging.getLogger("worktrack")
     # 注意：表结构由 Alembic 迁移管理（entrypoint.sh 中自动执行 alembic upgrade head）
@@ -74,6 +77,8 @@ def init_db():
     _init_default_options(engine)
     # 初始化 RBAC 权限和角色
     _init_rbac_data(engine)
+    # 初始化审批流预置模板
+    _init_approval_flows(engine)
 
 
 def _ensure_admin_user(engine):
@@ -332,6 +337,31 @@ ROLE_DEFS = {
             "share:create", "share:read", "share:comment",
         ],
     },
+    "finance": {
+        "name": "财务",
+        "description": "财务人员，负责对账复核、合同财务审批与回款管理；作为合同审批链的财务节点",
+        "ensure_exists": True,
+        "perms": [
+            "contract:read", "contract:view_all",
+            "project:read", "customer:read",
+            "report:read", "report:submit",
+            "ai:use", "wiki:read",
+            "dashboard:read",
+            "share:create", "share:read", "share:comment",
+        ],
+    },
+    "legal": {
+        "name": "法务",
+        "description": "法务人员，负责合同审查与合规把关；作为合同审批链的法务节点",
+        "ensure_exists": True,
+        "perms": [
+            "contract:read", "contract:view_all", "contract:parse",
+            "project:read", "customer:read",
+            "ai:use", "wiki:read",
+            "dashboard:read",
+            "share:create", "share:read", "share:comment",
+        ],
+    },
     "boss": {
         "name": "老板",
         "description": "企业老板，拥有全系统所有业务板块的查看与审查权限，不具备创建和编辑特权",
@@ -366,6 +396,61 @@ ROLE_DEFS = {
         ],
     },
 }
+
+
+# ===== 审批流预置数据 =====
+# 节点 approver_type: role（按角色 code）| leader（直属上级）| dept_manager（部门负责人）| user（指定 user_id）
+# trigger_condition: None=该类业务一律走审批；或 {"field","op","value"} 按业务字段触发
+#   例：{"field":"contract_amount","op":">=","value":500000} 仅 50 万以上合同走审批
+APPROVAL_FLOW_DEFS = [
+    {
+        "code": "contract_approval",
+        "name": "合同审批",
+        "business_type": "contract",
+        "is_system": True,
+        "trigger_condition": None,
+        "description": "合同提交后依次经法务审查、财务审批、总经理审批，全部通过方可生效",
+        "nodes": [
+            {"name": "法务审查", "approver_type": "role", "approver_value": "legal", "order": 1},
+            {"name": "财务审批", "approver_type": "role", "approver_value": "finance", "order": 2},
+            {"name": "总经理审批", "approver_type": "role", "approver_value": "boss", "order": 3},
+        ],
+    },
+    {
+        "code": "reconcile_monthly",
+        "name": "财务月结复核",
+        "business_type": "reconcile_summary",
+        "is_system": True,
+        "trigger_condition": None,
+        "description": "月度财务总账提交后经财务复核、总经理锁定，锁定后明细只读不可修改",
+        "nodes": [
+            {"name": "财务复核", "approver_type": "role", "approver_value": "finance", "order": 1},
+            {"name": "总经理锁定", "approver_type": "role", "approver_value": "boss", "order": 2},
+        ],
+    },
+]
+
+
+def _init_approval_flows(engine):
+    """初始化审批流预置模板（幂等）。已存在的系统模板仅补建，不覆盖用户修改。"""
+    import json as _json
+    from app.models.approval import ApprovalFlow
+    with Session(engine) as session:
+        existing_codes = {f.code for f in session.exec(select(ApprovalFlow)).all()}
+        for fd in APPROVAL_FLOW_DEFS:
+            if fd["code"] in existing_codes:
+                continue
+            session.add(ApprovalFlow(
+                code=fd["code"],
+                name=fd["name"],
+                business_type=fd["business_type"],
+                is_active=True,
+                is_system=fd.get("is_system", False),
+                trigger_condition=_json.dumps(fd["trigger_condition"], ensure_ascii=False) if fd.get("trigger_condition") else None,
+                nodes=_json.dumps(fd["nodes"], ensure_ascii=False),
+                description=fd.get("description", ""),
+            ))
+        session.commit()
 
 
 def _init_rbac_data(engine):
@@ -425,8 +510,9 @@ def _init_rbac_data(engine):
                     if _code in perm_map and perm_map[_code].id not in existing_perm_ids:
                         session.add(RolePermission(role_id=role.id, permission_id=perm_map[_code].id))
                 session.commit()
-            elif is_first_deploy:
-                # 首次部署：创建所有预置角色
+            elif is_first_deploy or role_def.get("ensure_exists"):
+                # 首次部署创建全部预置角色；标记 ensure_exists 的关键角色（如审批链依赖）
+                # 在后续版本新增时也确保创建，不受"已删除角色不重建"策略影响
                 role = Role(
                     name=role_def["name"],
                     code=role_code,
