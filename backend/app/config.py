@@ -59,9 +59,9 @@ class Settings(BaseSettings):
 
     # AI 对话历史保留策略
     # 超过 retention_days 天未更新的对话自动删除（0 = 永不按时间删除）
-    ai_chat_retention_days: int = 90
-    # 每个用户最多保留的对话数，超出后删除最旧的（0 = 不限数量）
-    ai_chat_max_per_user: int = 100
+    ai_chat_retention_days: int = 30
+    # 每个用户最多保留的消息条数（user + assistant 合计），超出后删除最旧的对话（0 = 不限）
+    ai_chat_max_messages_per_user: int = 200
 
     @property
     def effective_data_root(self) -> str:

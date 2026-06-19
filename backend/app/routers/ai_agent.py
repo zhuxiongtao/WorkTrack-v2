@@ -293,7 +293,7 @@ def get_chat_stats(
         "message_count": msg_count,
         "oldest_updated_at": oldest.updated_at.isoformat() if oldest else None,
         "retention_days": cfg.ai_chat_retention_days,
-        "max_per_user": cfg.ai_chat_max_per_user,
+        "max_messages_per_user": cfg.ai_chat_max_messages_per_user,
     }
 
 

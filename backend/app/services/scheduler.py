@@ -193,17 +193,17 @@ def _execute_model_catalog_refresh():
 def cleanup_chat_history():
     """系统级任务：清理过期 AI 对话历史（每天凌晨自动执行）
 
-    规则一：conversation.updated_at < now - retention_days  → 删除（按时间过期）
-    规则二：每个用户对话数 > max_per_user → 删除最旧的（按数量上限）
+    规则一：conversation.updated_at < now - retention_days → 删整个对话（按时间过期）
+    规则二：用户消息总条数 > max_messages_per_user → 删最旧的对话，直到降回上限
     两个规则都可通过 config 关闭（设为 0）。
     """
     from datetime import timedelta, timezone
-    from sqlalchemy import delete as sa_delete
+    from sqlalchemy import delete as sa_delete, func
     from app.models.chat import ChatConversation, ChatMessage
     from app.routers.logs import write_log
 
     retention_days = settings.ai_chat_retention_days
-    max_per_user = settings.ai_chat_max_per_user
+    max_messages = settings.ai_chat_max_messages_per_user
     deleted_age = 0
     deleted_count = 0
 
@@ -220,27 +220,40 @@ def cleanup_chat_history():
                 deleted_age += 1
             db.commit()
 
-        # ── 规则二：每用户数量上限 ────────────────────────────────────────
-        if max_per_user > 0:
-            user_ids = db.exec(
-                select(ChatConversation.user_id).distinct()
-            ).all()
+        # ── 规则二：每用户消息条数上限 ────────────────────────────────────
+        if max_messages > 0:
+            user_ids = db.exec(select(ChatConversation.user_id).distinct()).all()
             for uid in user_ids:
-                convs = db.exec(
+                # 当前用户消息总条数
+                total = db.exec(
+                    select(func.count(ChatMessage.id))
+                    .join(ChatConversation, ChatConversation.id == ChatMessage.conversation_id)
+                    .where(ChatConversation.user_id == uid)
+                ).one()
+                if total <= max_messages:
+                    continue
+                # 按最旧优先逐个删对话，直到降回上限
+                old_convs = db.exec(
                     select(ChatConversation)
                     .where(ChatConversation.user_id == uid)
-                    .order_by(ChatConversation.updated_at.desc())
+                    .order_by(ChatConversation.updated_at.asc())
                 ).all()
-                if len(convs) > max_per_user:
-                    for conv in convs[max_per_user:]:
-                        db.execute(sa_delete(ChatMessage).where(ChatMessage.conversation_id == conv.id))
-                        db.delete(conv)
-                        deleted_count += 1
+                for conv in old_convs:
+                    if total <= max_messages:
+                        break
+                    msg_cnt = db.exec(
+                        select(func.count(ChatMessage.id))
+                        .where(ChatMessage.conversation_id == conv.id)
+                    ).one()
+                    db.execute(sa_delete(ChatMessage).where(ChatMessage.conversation_id == conv.id))
+                    db.delete(conv)
+                    total -= msg_cnt
+                    deleted_count += 1
             db.commit()
 
         write_log(
             "info", "system",
-            f"AI 对话历史清理完成：过期删 {deleted_age} 条，超量删 {deleted_count} 条",
+            f"AI 对话历史清理完成：过期删 {deleted_age} 个会话，超量删 {deleted_count} 个会话",
             db=db,
         )
 
