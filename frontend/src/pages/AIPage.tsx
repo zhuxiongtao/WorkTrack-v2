@@ -485,41 +485,39 @@ export default function AIPage() {
               )}
             </div>
 
-            {/* 存储用量 & 保留策略 */}
-            {chatStats && (
-              <div className="mx-3 mb-3 px-3 py-2.5 rounded-lg bg-bg-hover/60 border border-border/60">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[10px] font-medium text-gray-500 dark:text-gray-500 uppercase tracking-wide">存储用量</span>
-                  {chatStats.max_per_user > 0 && (
-                    <span className={`text-[10px] font-medium ${
-                      chatStats.conversation_count >= chatStats.max_per_user * 0.8
-                        ? 'text-amber-500'
-                        : 'text-gray-500'
-                    }`}>
-                      {chatStats.conversation_count} / {chatStats.max_per_user}
-                    </span>
-                  )}
-                </div>
-                {chatStats.max_per_user > 0 && (
-                  <div className="w-full h-1 bg-border rounded-full overflow-hidden mb-2">
-                    <div
-                      className={`h-full rounded-full transition-all ${
-                        chatStats.conversation_count / chatStats.max_per_user > 0.8
-                          ? 'bg-amber-500'
-                          : 'bg-accent-blue/60'
-                      }`}
-                      style={{ width: `${Math.min(100, (chatStats.conversation_count / chatStats.max_per_user) * 100)}%` }}
-                    />
+            {/* 存储用量 & 保留策略（始终显示，无需等 stats 接口） */}
+            {(() => {
+              const maxPerUser = chatStats?.max_per_user ?? 100
+              const retentionDays = chatStats?.retention_days ?? 90
+              const convCount = conversations.length
+              const msgCount = chatStats?.message_count
+              const pct = maxPerUser > 0 ? Math.min(100, (convCount / maxPerUser) * 100) : 0
+              const nearLimit = maxPerUser > 0 && convCount >= maxPerUser * 0.8
+              return (
+                <div className="mx-3 mb-3 px-3 py-2.5 rounded-lg bg-bg-hover/60 border border-border/60">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">存储用量</span>
+                    {maxPerUser > 0 && (
+                      <span className={`text-[10px] font-medium ${nearLimit ? 'text-amber-500' : 'text-gray-500'}`}>
+                        {convCount} / {maxPerUser}
+                      </span>
+                    )}
                   </div>
-                )}
-                <p className="text-[10px] text-gray-500 leading-relaxed">
-                  {chatStats.message_count} 条消息
-                  {chatStats.retention_days > 0 && (
-                    <> · 超 {chatStats.retention_days} 天自动清理</>
+                  {maxPerUser > 0 && (
+                    <div className="w-full h-1 bg-border rounded-full overflow-hidden mb-2">
+                      <div
+                        className={`h-full rounded-full transition-all ${nearLimit ? 'bg-amber-500' : 'bg-accent-blue/60'}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
                   )}
-                </p>
-              </div>
-            )}
+                  <p className="text-[10px] text-gray-500 leading-relaxed">
+                    {msgCount != null ? `${msgCount} 条消息 · ` : ''}{convCount} 个对话
+                    {retentionDays > 0 && <> · 超 {retentionDays} 天自动清理</>}
+                  </p>
+                </div>
+              )
+            })()}
           </div>
         )}
       </aside>
