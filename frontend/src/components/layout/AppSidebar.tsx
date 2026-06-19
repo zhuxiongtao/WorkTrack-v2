@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
-import { NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import {
   Sparkles, Sun, Moon, Monitor, LogOut,
-  ArrowRight, Wand2, ChevronDown, Settings,
+  ArrowRight, Wand2, Settings,
 } from 'lucide-react'
 import { SidebarIcon } from '../GradientIcon'
 import { useTheme } from '../../contexts/ThemeContext'
@@ -18,34 +18,11 @@ interface AppSidebarProps {
   isInsideSpace: boolean
 }
 
-const STORAGE_KEY = 'worktrack:sidebar:collapsed-categories'
-
 function AppSidebar({ sidebarOpen, onCloseSidebar, brandLogo, brandTitle, isInsideSpace }: AppSidebarProps) {
   const navigate = useNavigate()
-  const location = useLocation()
   const { theme, toggle } = useTheme()
   const { user, logout, isAdmin, hasPermission } = useAuth()
   const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking')
-
-  // 折叠记忆：{ categoryId: boolean }，true 表示折叠
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') } catch { return {} }
-  })
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(collapsed))
-  }, [collapsed])
-
-  // 自动展开当前路由所在分类（仅首次路由进入时）
-  useEffect(() => {
-    const activeCat = MENU_CATEGORIES.find((c) =>
-      c.items.some((it) => it.to === location.pathname || (it.to !== '/' && location.pathname.startsWith(it.to)))
-    )
-    if (activeCat && collapsed[activeCat.id]) {
-      setCollapsed((prev) => ({ ...prev, [activeCat.id]: false }))
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname])
 
   // 可见分类 = 至少一项对当前用户可见
   // adminOnly 标记会进一步限制：仅 isAdmin=true 才可见
@@ -61,10 +38,6 @@ function AppSidebar({ sidebarOpen, onCloseSidebar, brandLogo, brandTitle, isInsi
       }))
       .filter((c) => c.items.length > 0)
   }, [hasPermission, isAdmin])
-
-  const toggleCategory = (id: string) => {
-    setCollapsed((prev) => ({ ...prev, [id]: !prev[id] }))
-  }
 
   useEffect(() => {
     const check = async () => {
@@ -158,31 +131,17 @@ function AppSidebar({ sidebarOpen, onCloseSidebar, brandLogo, brandTitle, isInsi
       {/* 4 大分类导航 */}
       <nav className="flex-1 px-3 py-2 overflow-y-auto">
         <div className="space-y-3">
-          {visibleCategories.map((cat) => {
-            const isCollapsed = collapsed[cat.id] === true
-            const hasActive = cat.items.some((it) =>
-              it.to === location.pathname || (it.to !== '/' && location.pathname.startsWith(it.to + '/'))
-            )
-            return (
+          {visibleCategories.map((cat) => (
               <div key={cat.id}>
                 {/* 分类头 */}
-                <button
-                  onClick={() => toggleCategory(cat.id)}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-bg-hover-secondary/30 transition-colors group/cat"
-                  aria-expanded={!isCollapsed}
-                >
-                  <span className="text-[9.5px] font-bold tracking-widest uppercase flex-1 text-left text-gray-500 group-hover/cat:text-gray-400 dark:text-gray-500 dark:group-hover/cat:text-gray-400 transition-colors">
+                <div className="px-2 py-1.5">
+                  <span className="text-[9.5px] font-bold tracking-widest uppercase text-gray-500 dark:text-gray-500">
                     {cat.title}
                   </span>
-                  <ChevronDown
-                    size={12}
-                    className={`transition-transform duration-200 ${isCollapsed ? '-rotate-90' : 'rotate-0'} text-gray-500`}
-                  />
-                </button>
+                </div>
                 {/* 子项 */}
-                {!isCollapsed && (
-                  <div className="mt-1 space-y-0.5">
-                    {cat.items.map((it) => (
+                <div className="mt-0.5 space-y-0.5">
+                  {cat.items.map((it) => (
                       <NavLink
                         key={it.to}
                         to={it.to}
@@ -211,11 +170,9 @@ function AppSidebar({ sidebarOpen, onCloseSidebar, brandLogo, brandTitle, isInsi
                         )}
                       </NavLink>
                     ))}
-                  </div>
-                )}
+                </div>
               </div>
-            )
-          })}
+          ))}
         </div>
       </nav>
 

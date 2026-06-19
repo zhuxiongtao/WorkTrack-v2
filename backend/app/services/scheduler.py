@@ -131,6 +131,12 @@ def start_scheduler():
         _register_model_catalog_refresh()
     except Exception as e:
         print(f"[scheduler] 注册 model_catalog_refresh 失败: {e}", flush=True)
+    # 注册内置的「AI 对话历史清理」任务
+    try:
+        _register_chat_cleanup()
+        print("[scheduler] 已注册 system_chat_cleanup (每天 03:10)", flush=True)
+    except Exception as e:
+        print(f"[scheduler] 注册 system_chat_cleanup 失败: {e}", flush=True)
 
 
 def _register_model_catalog_refresh():
@@ -182,6 +188,81 @@ def _execute_model_catalog_refresh():
     except Exception as e:
         from app.routers.logs import write_log
         write_log("error", "task", f"模型目录刷新异常: {e}", details=str(e), db=None)
+
+
+def cleanup_chat_history():
+    """系统级任务：清理过期 AI 对话历史（每天凌晨自动执行）
+
+    规则一：conversation.updated_at < now - retention_days  → 删除（按时间过期）
+    规则二：每个用户对话数 > max_per_user → 删除最旧的（按数量上限）
+    两个规则都可通过 config 关闭（设为 0）。
+    """
+    from datetime import timedelta, timezone
+    from sqlalchemy import delete as sa_delete
+    from app.models.chat import ChatConversation, ChatMessage
+    from app.routers.logs import write_log
+
+    retention_days = settings.ai_chat_retention_days
+    max_per_user = settings.ai_chat_max_per_user
+    deleted_age = 0
+    deleted_count = 0
+
+    with Session(engine) as db:
+        # ── 规则一：时间过期 ──────────────────────────────────────────────
+        if retention_days > 0:
+            cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+            old_convs = db.exec(
+                select(ChatConversation).where(ChatConversation.updated_at < cutoff)
+            ).all()
+            for conv in old_convs:
+                db.execute(sa_delete(ChatMessage).where(ChatMessage.conversation_id == conv.id))
+                db.delete(conv)
+                deleted_age += 1
+            db.commit()
+
+        # ── 规则二：每用户数量上限 ────────────────────────────────────────
+        if max_per_user > 0:
+            user_ids = db.exec(
+                select(ChatConversation.user_id).distinct()
+            ).all()
+            for uid in user_ids:
+                convs = db.exec(
+                    select(ChatConversation)
+                    .where(ChatConversation.user_id == uid)
+                    .order_by(ChatConversation.updated_at.desc())
+                ).all()
+                if len(convs) > max_per_user:
+                    for conv in convs[max_per_user:]:
+                        db.execute(sa_delete(ChatMessage).where(ChatMessage.conversation_id == conv.id))
+                        db.delete(conv)
+                        deleted_count += 1
+            db.commit()
+
+        write_log(
+            "info", "system",
+            f"AI 对话历史清理完成：过期删 {deleted_age} 条，超量删 {deleted_count} 条",
+            db=db,
+        )
+
+    return {"deleted_by_age": deleted_age, "deleted_by_count": deleted_count}
+
+
+def _register_chat_cleanup():
+    """注册 AI 对话历史清理任务（每天 03:10 执行，避免与模型刷新撞车）"""
+    try:
+        scheduler.remove_job("system_chat_cleanup")
+    except Exception:
+        pass
+    scheduler.add_job(
+        cleanup_chat_history,
+        trigger=CronTrigger(hour=3, minute=10),
+        id="system_chat_cleanup",
+        name="AI 对话历史自动清理",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=3600,
+    )
 
 
 def shutdown_scheduler():

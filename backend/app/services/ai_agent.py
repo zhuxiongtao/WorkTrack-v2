@@ -634,8 +634,11 @@ def execute_tool(tool_name: str, arguments: dict, db: Session, user_id: int = 1)
     return json.dumps({"error": f"未知工具: {tool_name}"})
 
 
-def run_agent_chat(user_message: str, history: list[dict], db: Session, user_id: int = 1) -> str:
-    """运行 AI Agent 对话，支持多轮工具调用"""
+def run_agent_chat(user_message: str, history: list[dict], db: Session, user_id: int = 1, on_event=None) -> str:
+    """运行 AI Agent 对话，支持多轮工具调用
+
+    on_event: 可选回调 fn(event_type: str, data: dict)，用于 SSE 流式推送工具调用事件
+    """
     messages = [
         {
             "role": "system",
@@ -775,6 +778,9 @@ def run_agent_chat(user_message: str, history: list[dict], db: Session, user_id:
                 tool_name = tool_call.function.name
                 arguments = json.loads(tool_call.function.arguments)
 
+                if on_event:
+                    on_event("tool_start", {"tool": tool_name})
+
                 # 执行工具
                 try:
                     result = execute_tool(tool_name, arguments, db, user_id)
@@ -782,6 +788,9 @@ def run_agent_chat(user_message: str, history: list[dict], db: Session, user_id:
                     error_msg = f"工具执行失败 [{tool_name}]: {str(e)[:150]}"
                     write_log("error", "ai", error_msg, details=str(e), db=db)
                     result = json.dumps({"error": error_msg}, ensure_ascii=False)
+
+                if on_event:
+                    on_event("tool_done", {"tool": tool_name})
 
                 # 将工具结果加入历史
                 messages.append(
@@ -797,6 +806,8 @@ def run_agent_chat(user_message: str, history: list[dict], db: Session, user_id:
             if not final_text:
                 write_log("warning", "ai", "AI返回空内容", details=f"模型: {model}, 用户消息: {user_message[:100]}", db=db)
                 return "抱歉，我无法处理这个请求。"
+            if on_event:
+                on_event("text", {"content": final_text})
             return final_text
 
     write_log("warning", "ai", "工具调用次数过多(>5轮)", details=f"用户消息: {user_message[:100]}", db=db)

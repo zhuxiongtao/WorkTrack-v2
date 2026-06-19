@@ -1,9 +1,13 @@
+import asyncio
+import json
+import threading
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlmodel import Session, select, func
 from sqlalchemy import delete as sa_delete
-from app.database import get_session
+from app.database import get_session, engine
 from app.services.ai_agent import run_agent_chat
 from app.models.chat import ChatConversation, ChatMessage
 from app.models.user import User
@@ -183,6 +187,125 @@ def chat_in_conversation(conv_id: int, request: ConversationChatRequest, current
 
     db.commit()
     return {"reply": reply}
+
+
+# ===== 流式对话（SSE） =====
+
+@router.post("/conversations/{conv_id}/stream")
+async def stream_chat_conversation(
+    conv_id: int,
+    request: ConversationChatRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    """SSE 流式对话：实时推送工具调用事件和最终回复"""
+    conv = db.get(ChatConversation, conv_id)
+    if not conv or conv.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="对话不存在")
+
+    history_msgs = db.exec(
+        select(ChatMessage).where(ChatMessage.conversation_id == conv_id).order_by(ChatMessage.created_at)
+    ).all()
+    history = [{"role": m.role, "content": m.content} for m in history_msgs]
+    is_first = len(history_msgs) == 0
+    user_id = current_user.id
+    user_message = request.message
+
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue = asyncio.Queue()
+
+    def on_event(event_type: str, data: dict):
+        loop.call_soon_threadsafe(queue.put_nowait, {"type": event_type, **data})
+
+    def run_in_thread():
+        from sqlmodel import Session as ThreadSession
+        with ThreadSession(engine) as tdb:
+            try:
+                # 在线程里统一写入 user 消息 + AI 回复，避免 HTTP 层写了一半
+                tdb.add(ChatMessage(conversation_id=conv_id, role="user", content=user_message))
+                tdb.flush()
+                reply = run_agent_chat(user_message, history, tdb, user_id=user_id, on_event=on_event)
+                tdb.add(ChatMessage(conversation_id=conv_id, role="assistant", content=reply))
+                cv = tdb.get(ChatConversation, conv_id)
+                if cv:
+                    if is_first:
+                        cv.title = user_message[:40]
+                    cv.updated_at = utc_now()
+                    tdb.add(cv)
+                tdb.commit()
+            except Exception as e:
+                loop.call_soon_threadsafe(
+                    queue.put_nowait, {"type": "error", "message": str(e)[:300]}
+                )
+            finally:
+                loop.call_soon_threadsafe(queue.put_nowait, {"type": "done"})
+
+    threading.Thread(target=run_in_thread, daemon=True).start()
+
+    async def event_gen():
+        while True:
+            try:
+                event = await asyncio.wait_for(queue.get(), timeout=120.0)
+            except asyncio.TimeoutError:
+                yield f"data: {json.dumps({'type': 'error', 'message': '响应超时，请重试'})}\n\n"
+                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                break
+            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+            if event.get("type") == "done":
+                break
+
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"},
+    )
+
+
+# ===== 存储统计 & 管理员清理 =====
+
+@router.get("/stats")
+def get_chat_stats(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    """返回当前用户的对话存储统计 + 全局保留策略"""
+    from sqlmodel import func
+    from app.config import settings as cfg
+
+    conv_count = db.exec(
+        select(func.count(ChatConversation.id)).where(ChatConversation.user_id == current_user.id)
+    ).one()
+
+    msg_count = db.exec(
+        select(func.count(ChatMessage.id))
+        .join(ChatConversation, ChatConversation.id == ChatMessage.conversation_id)
+        .where(ChatConversation.user_id == current_user.id)
+    ).one()
+
+    oldest = db.exec(
+        select(ChatConversation)
+        .where(ChatConversation.user_id == current_user.id)
+        .order_by(ChatConversation.updated_at.asc())
+    ).first()
+
+    return {
+        "conversation_count": conv_count,
+        "message_count": msg_count,
+        "oldest_updated_at": oldest.updated_at.isoformat() if oldest else None,
+        "retention_days": cfg.ai_chat_retention_days,
+        "max_per_user": cfg.ai_chat_max_per_user,
+    }
+
+
+@router.post("/cleanup")
+def manual_cleanup(current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+    """管理员手动触发 AI 对话历史清理"""
+    if not current_user.is_admin:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="仅管理员可手动触发清理")
+    from app.services.scheduler import cleanup_chat_history
+    result = cleanup_chat_history()
+    return {"success": True, **result}
 
 
 # ===== 通用 Chat（无会话） =====

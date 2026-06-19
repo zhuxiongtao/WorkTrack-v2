@@ -57,6 +57,12 @@ class Settings(BaseSettings):
     # 头像存储目录（留空则自动推导，可通过 AVATAR_DIR 环境变量覆盖）
     avatar_dir: str = ""
 
+    # AI 对话历史保留策略
+    # 超过 retention_days 天未更新的对话自动删除（0 = 永不按时间删除）
+    ai_chat_retention_days: int = 90
+    # 每个用户最多保留的对话数，超出后删除最旧的（0 = 不限数量）
+    ai_chat_max_per_user: int = 100
+
     @property
     def effective_data_root(self) -> str:
         """统一存储根目录，默认为 backend/ 目录下的 data"""
