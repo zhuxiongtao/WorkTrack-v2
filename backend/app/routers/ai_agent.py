@@ -170,7 +170,7 @@ def chat_in_conversation(conv_id: int, request: ConversationChatRequest, current
 
     # 调用 AI
     try:
-        reply = run_agent_chat(request.message, history, db, user_id=current_user.id)
+        reply = run_agent_chat(request.message, history, db, user=current_user)
     except Exception as e:
         write_log("error", "ai", f"AI对话失败: {str(e)[:150]}", details=str(e), db=db)
         reply = f"AI 调用失败: {str(e)[:200]}"
@@ -208,7 +208,7 @@ async def stream_chat_conversation(
     ).all()
     history = [{"role": m.role, "content": m.content} for m in history_msgs]
     is_first = len(history_msgs) == 0
-    user_id = current_user.id
+    user_id = current_user.id   # 只传 id，不跨 session 传 ORM 实体
     user_message = request.message
 
     loop = asyncio.get_running_loop()
@@ -219,12 +219,16 @@ async def stream_chat_conversation(
 
     def run_in_thread():
         from sqlmodel import Session as ThreadSession
+        from app.models.user import User as UserModel
         with ThreadSession(engine) as tdb:
             try:
-                # 在线程里统一写入 user 消息 + AI 回复，避免 HTTP 层写了一半
+                # 在线程 session 中重新加载 user（不能跨 session 传 ORM 实体）
+                thread_user = tdb.get(UserModel, user_id)
+                if not thread_user:
+                    raise ValueError("用户不存在")
                 tdb.add(ChatMessage(conversation_id=conv_id, role="user", content=user_message))
                 tdb.flush()
-                reply = run_agent_chat(user_message, history, tdb, user_id=user_id, on_event=on_event)
+                reply = run_agent_chat(user_message, history, tdb, user=thread_user, on_event=on_event)
                 tdb.add(ChatMessage(conversation_id=conv_id, role="assistant", content=reply))
                 cv = tdb.get(ChatConversation, conv_id)
                 if cv:
@@ -313,7 +317,7 @@ def manual_cleanup(current_user: User = Depends(get_current_user), db: Session =
 @router.post("/chat", response_model=ChatResponse)
 def chat(request: ChatRequest, db: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
     try:
-        reply = run_agent_chat(request.message, request.history, db, user_id=current_user.id)
+        reply = run_agent_chat(request.message, request.history, db, user=current_user)
     except Exception as e:
         write_log("error", "ai", f"通用AI对话失败: {str(e)[:150]}", details=str(e), db=db)
         reply = f"AI 调用失败: {str(e)[:200]}"

@@ -1,13 +1,15 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   Calculator, Plus, X, Edit3, Trash2, Loader2, Search,
   TrendingUp, TrendingDown, Briefcase, Network, BarChart3, AlertTriangle,
   FileText, RefreshCw, Calendar, DollarSign, Activity, Hash,
   CheckCircle2, Clock, AlertCircle, FileBarChart,
+  Upload, FileSpreadsheet, Eye, ChevronDown, ChevronRight, Filter, Info, Send, ClipboardCheck,
 } from 'lucide-react'
 import { PageHeader, IconBox, EmptyState, SectionHeader, Modal, ModalFooter, SectionLabel, Field } from '../components/design-system'
 import { useToast } from '../contexts/ToastContext'
 import { apiFetch, apiPost, apiPut, apiDelete } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
 
 /* ──── 类型 ──── */
 interface Project { id: number; name: string; customer_name?: string | null; currency?: string }
@@ -120,7 +122,7 @@ function periodList(): string[] {
 }
 
 /* ──── 主页面 ──── */
-type Tab = 'overview' | 'sales' | 'supply' | 'summary' | 'diff'
+type Tab = 'overview' | 'sales' | 'supply' | 'summary' | 'diff' | 'token'
 
 export default function ReconcilePage() {
   const { toast: showToast } = useToast()
@@ -340,6 +342,7 @@ export default function ReconcilePage() {
           { key: 'supply' as const, label: '供应对账', icon: TrendingDown },
           { key: 'summary' as const, label: '财务总账', icon: FileBarChart },
           { key: 'diff' as const, label: '差异分析', icon: AlertTriangle },
+          { key: 'token' as const, label: 'Token三方对账', icon: FileSpreadsheet },
         ].map(t => (
           <button
             key={t.key}
@@ -445,6 +448,8 @@ export default function ReconcilePage() {
           onSaved={() => { loadDiff(); loadOverall() }}
         />
       )}
+
+      {tab === 'token' && <TokenTab />}
 
       {/* 弹窗 */}
       {showSalesForm && (
@@ -1319,3 +1324,490 @@ function DiffFormModal({ period, projects, channels, editing, onClose, onSaved }
 }
 
 /* 通用弹窗 / 字段已统一从 design-system/Modal 引入，移除本地实现以保持风格统一 */
+
+/* ═══════════════════ Token 三方对账 ═══════════════════ */
+
+interface TBillUpload {
+  id: number; period: string
+  source_type: 'supplier' | 'maas' | 'customer'
+  source_name: string | null; filename: string | null
+  row_count: number; status: 'parsed' | 'error'; parse_error: string | null
+  uploaded_by: number | null; created_at: string
+}
+interface TReconcileSession {
+  id: number; period: string
+  status: 'draft' | 'compared' | 'pending_review' | 'approved' | 'rejected'
+  model_count: number; diff_supplier_count: number; diff_customer_count: number
+  has_maas_bill: boolean; has_supplier_bill: boolean; has_customer_bill: boolean
+  notes: string | null; approval_instance_id: number | null
+  created_at: string; updated_at: string
+}
+interface TReconcileItem {
+  id: number; model_id: string; model_name: string | null
+  maas_input_tokens: number; maas_output_tokens: number
+  maas_cache_read_tokens: number; maas_cache_write_tokens: number; maas_total_tokens: number
+  supplier_input_tokens: number | null; supplier_output_tokens: number | null; supplier_total_tokens: number | null
+  customer_input_tokens: number | null; customer_output_tokens: number | null; customer_total_tokens: number | null
+  supplier_diff_tokens: number | null; supplier_diff_pct: number | null; has_supplier_diff: boolean
+  customer_diff_tokens: number | null; customer_diff_pct: number | null; has_customer_diff: boolean
+  review_status: 'ok' | 'pending' | 'confirmed' | 'disputed'; review_note: string | null
+}
+
+function fmtT(n: number | null | undefined): string {
+  if (n == null) return '—'
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return String(n)
+}
+function tDefaultPeriod(): string {
+  const d = new Date(); d.setMonth(d.getMonth() - 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+function tPeriodList(): string[] {
+  const out: string[] = []; const d = new Date()
+  for (let i = 0; i < 12; i++) {
+    out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+    d.setMonth(d.getMonth() - 1)
+  }
+  return out
+}
+const T_SOURCE_LABELS: Record<string, string> = { supplier: '供应商账单', maas: 'MaaS平台账单', customer: '客户账单' }
+const T_SOURCE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  supplier: { bg: '#3B82F610', text: '#60A5FA', border: '#3B82F640' },
+  maas:     { bg: '#10B98110', text: '#34D399', border: '#10B98140' },
+  customer: { bg: '#F59E0B10', text: '#FBBF24', border: '#F59E0B40' },
+}
+const T_STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  draft:          { label: '草稿',   color: 'text-gray-400' },
+  compared:       { label: '已比对', color: 'text-blue-400' },
+  pending_review: { label: '审批中', color: 'text-yellow-400' },
+  approved:       { label: '已通过', color: 'text-emerald-400' },
+  rejected:       { label: '已驳回', color: 'text-rose-400' },
+}
+
+function TokenUploadCard({ sourceType, period, uploads, locked, onUploaded, onDeleted }: {
+  sourceType: 'supplier' | 'maas' | 'customer'
+  period: string; uploads: TBillUpload[]; locked: boolean
+  onUploaded: () => void; onDeleted: () => void
+}) {
+  const { fetchWithAuth } = useAuth()
+  const { toast } = useToast()
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+  const [sourceName, setSourceName] = useState('')
+  const [showRows, setShowRows] = useState<number | null>(null)
+  const [rows, setRows] = useState<any[]>([])
+  const [loadingRows, setLoadingRows] = useState(false)
+
+  const c = T_SOURCE_COLORS[sourceType]
+  const mine = uploads.filter(u => u.source_type === sourceType)
+
+  const handleFile = async (file: File) => {
+    if (!file.name.match(/\.(xlsx|xls)$/i)) { toast('仅支持 .xlsx / .xls 格式', 'error'); return }
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('period', period); fd.append('source_type', sourceType)
+      if (sourceName.trim()) fd.append('source_name', sourceName.trim())
+      fd.append('file', file)
+      const r = await fetchWithAuth!('/api/v1/bill-reconcile/upload', { method: 'POST', body: fd })
+      if (!r?.ok) { const err = await r?.json().catch(() => ({})); toast(err?.detail || '上传失败', 'error') }
+      else { toast('账单上传成功', 'success'); onUploaded() }
+    } catch (e: any) { toast(e?.message || '上传异常', 'error') }
+    finally { setUploading(false); if (fileRef.current) fileRef.current.value = '' }
+  }
+
+  const loadRows = async (uploadId: number) => {
+    if (showRows === uploadId) { setShowRows(null); return }
+    setShowRows(uploadId); setLoadingRows(true)
+    try {
+      const r = await fetchWithAuth!(`/api/v1/bill-reconcile/upload/${uploadId}/rows`)
+      if (r?.ok) setRows(await r.json())
+    } finally { setLoadingRows(false) }
+  }
+
+  const deleteUpload = async (id: number) => {
+    if (!confirm('确认删除此账单？')) return
+    const r = await fetchWithAuth!(`/api/v1/bill-reconcile/upload/${id}`, { method: 'DELETE' })
+    if (r?.ok) { toast('已删除', 'success'); onDeleted() }
+    else { const e = await r?.json().catch(() => ({})); toast(e?.detail || '删除失败', 'error') }
+  }
+
+  return (
+    <div className="rounded-xl border p-4 space-y-3" style={{ background: c.bg, borderColor: c.border }}>
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-sm font-semibold" style={{ color: c.text }}>{T_SOURCE_LABELS[sourceType]}</div>
+          <div className="text-xs text-gray-500 mt-0.5">{mine.length > 0 ? `已上传 ${mine.length} 份` : '尚未上传'}</div>
+        </div>
+        {!locked && (
+          <button onClick={() => fileRef.current?.click()} disabled={uploading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-blue-600 hover:brightness-110 disabled:opacity-50 transition-all">
+            {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+            {uploading ? '上传中…' : '上传账单'}
+          </button>
+        )}
+        <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden"
+          onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+      </div>
+
+      {!locked && (
+        <input value={sourceName} onChange={e => setSourceName(e.target.value)}
+          placeholder={sourceType === 'supplier' ? '供应商名称（可选）' : sourceType === 'customer' ? '客户名称（可选）' : 'MaaS平台名称（可选）'}
+          className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-bg-input border border-border outline-none" />
+      )}
+
+      {mine.map(u => (
+        <div key={u.id} className="bg-bg-card rounded-lg border border-border p-2.5 space-y-1">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <FileSpreadsheet size={13} className="shrink-0 text-gray-400" />
+              <span className="text-xs font-medium text-gray-200 truncate">{u.filename}</span>
+              {u.source_name && <span className="text-[10px] px-1.5 py-0.5 rounded bg-bg-input text-gray-400">{u.source_name}</span>}
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <button onClick={() => loadRows(u.id)} className="p-1 rounded hover:bg-bg-hover text-gray-400 hover:text-gray-200"><Eye size={11} /></button>
+              {!locked && <button onClick={() => deleteUpload(u.id)} className="p-1 rounded hover:bg-rose-500/15 text-rose-500"><Trash2 size={11} /></button>}
+            </div>
+          </div>
+          <div className="text-[10px] text-gray-500 flex gap-3">
+            <span>{u.row_count} 个模型</span>
+            <span>{new Date(u.created_at).toLocaleString('zh-CN', { hour12: false })}</span>
+            {u.status === 'error' && <span className="text-rose-400">解析失败</span>}
+          </div>
+          {u.parse_error && <div className="text-[10px] text-rose-400 bg-rose-500/10 rounded p-1.5">{u.parse_error}</div>}
+          {showRows === u.id && (
+            <div className="mt-2 rounded-lg overflow-auto max-h-48 border border-border">
+              {loadingRows ? (
+                <div className="py-4 text-center text-xs text-gray-500"><Loader2 size={14} className="animate-spin inline mr-1" />加载中…</div>
+              ) : (
+                <table className="w-full text-[10px]">
+                  <thead className="bg-bg-input sticky top-0">
+                    <tr>{['模型ID', '输入', '输出', '总计', '金额'].map(h => <th key={h} className="px-2 py-1 text-left text-gray-400 font-medium">{h}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r, i) => (
+                      <tr key={i} className="border-t border-border hover:bg-bg-hover">
+                        <td className="px-2 py-1 font-mono text-gray-300">{r.model_id}</td>
+                        <td className="px-2 py-1 text-gray-400">{fmtT(r.input_tokens)}</td>
+                        <td className="px-2 py-1 text-gray-400">{fmtT(r.output_tokens)}</td>
+                        <td className="px-2 py-1 font-semibold text-gray-200">{fmtT(r.total_tokens)}</td>
+                        <td className="px-2 py-1 text-gray-400">{r.amount != null ? `¥${r.amount}` : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+        </div>
+      ))}
+      {mine.length === 0 && <div className="text-center py-4 text-xs text-gray-600">点击「上传账单」选择 Excel 文件</div>}
+    </div>
+  )
+}
+
+function TokenItemRow({ item, locked, onReviewed }: { item: TReconcileItem; locked: boolean; onReviewed: () => void }) {
+  const { fetchWithAuth } = useAuth()
+  const { toast } = useToast()
+  const [expanded, setExpanded] = useState(false)
+  const [note, setNote] = useState(item.review_note || '')
+  const [saving, setSaving] = useState(false)
+
+  const hasDiff = item.has_supplier_diff || item.has_customer_diff
+
+  const mark = async (status: 'confirmed' | 'disputed') => {
+    setSaving(true)
+    try {
+      const r = await fetchWithAuth!(`/api/v1/bill-reconcile/item/${item.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ review_status: status, review_note: note }),
+      })
+      if (r?.ok) { toast('已标注', 'success'); onReviewed() }
+      else { const e = await r?.json().catch(() => ({})); toast(e?.detail || '操作失败', 'error') }
+    } finally { setSaving(false) }
+  }
+
+  const diffBg = hasDiff ? 'bg-rose-500/5 border-rose-500/20' : 'bg-bg-card border-border'
+  const reviewColor = item.review_status === 'confirmed' ? 'text-emerald-400'
+    : item.review_status === 'disputed' ? 'text-orange-400'
+    : item.review_status === 'ok' ? 'text-gray-500' : 'text-yellow-400'
+
+  return (
+    <div className={`rounded-xl border ${diffBg} transition-all`}>
+      <div className="flex items-center gap-3 px-4 py-3 cursor-pointer select-none" onClick={() => setExpanded(e => !e)}>
+        <div className="shrink-0 text-gray-500">{expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-mono text-xs font-semibold text-gray-200">{item.model_id}</span>
+            {item.model_name && item.model_name !== item.model_id && <span className="text-[10px] text-gray-500">{item.model_name}</span>}
+            {hasDiff ? (
+              <span className="flex items-center gap-0.5 text-[10px] text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded"><AlertTriangle size={9} />差异</span>
+            ) : (
+              <span className="text-[10px] text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded">✓ 一致</span>
+            )}
+          </div>
+        </div>
+        <div className="hidden md:flex items-center gap-6 text-xs">
+          <div className="text-center min-w-[70px]">
+            <div className="text-[10px] text-emerald-400 mb-0.5">MaaS</div>
+            <div className="font-semibold text-gray-200">{fmtT(item.maas_total_tokens)}</div>
+          </div>
+          {item.supplier_total_tokens != null && (
+            <div className="text-center min-w-[70px]">
+              <div className="text-[10px] text-blue-400 mb-0.5">供应商</div>
+              <div className={`font-semibold ${item.has_supplier_diff ? 'text-rose-400' : 'text-gray-200'}`}>{fmtT(item.supplier_total_tokens)}</div>
+              {item.supplier_diff_pct != null && (
+                <div className={`text-[10px] ${item.has_supplier_diff ? 'text-rose-400' : 'text-gray-500'}`}>
+                  {item.supplier_diff_tokens! > 0 ? '+' : ''}{fmtT(item.supplier_diff_tokens)} ({item.supplier_diff_pct.toFixed(2)}%)
+                </div>
+              )}
+            </div>
+          )}
+          {item.customer_total_tokens != null && (
+            <div className="text-center min-w-[70px]">
+              <div className="text-[10px] text-yellow-400 mb-0.5">客户</div>
+              <div className={`font-semibold ${item.has_customer_diff ? 'text-rose-400' : 'text-gray-200'}`}>{fmtT(item.customer_total_tokens)}</div>
+              {item.customer_diff_pct != null && (
+                <div className={`text-[10px] ${item.has_customer_diff ? 'text-rose-400' : 'text-gray-500'}`}>
+                  {item.customer_diff_tokens! > 0 ? '+' : ''}{fmtT(item.customer_diff_tokens)} ({item.customer_diff_pct.toFixed(2)}%)
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <div className={`text-[10px] font-semibold ${reviewColor} shrink-0`}>
+          {item.review_status === 'ok' ? '无差异' : item.review_status === 'confirmed' ? '已确认' : item.review_status === 'disputed' ? '有争议' : '待审核'}
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="border-t border-border px-4 pb-4 pt-3 space-y-3">
+          <div className="overflow-auto rounded-lg border border-border">
+            <table className="w-full text-xs">
+              <thead className="bg-bg-input">
+                <tr>
+                  <th className="px-3 py-1.5 text-left text-gray-400 font-medium">维度</th>
+                  <th className="px-3 py-1.5 text-right text-emerald-400 font-medium">MaaS平台</th>
+                  {item.supplier_total_tokens != null && <th className="px-3 py-1.5 text-right text-blue-400 font-medium">供应商</th>}
+                  {item.customer_total_tokens != null && <th className="px-3 py-1.5 text-right text-yellow-400 font-medium">客户</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  ['输入 tokens', item.maas_input_tokens, item.supplier_input_tokens, item.customer_input_tokens],
+                  ['输出 tokens', item.maas_output_tokens, item.supplier_output_tokens, item.customer_output_tokens],
+                  ['缓存读 tokens', item.maas_cache_read_tokens, null, null],
+                  ['缓存写 tokens', item.maas_cache_write_tokens, null, null],
+                  ['总计 tokens', item.maas_total_tokens, item.supplier_total_tokens, item.customer_total_tokens],
+                ].map(([label, maas, sup, cust]) => (
+                  <tr key={String(label)} className="border-t border-border">
+                    <td className="px-3 py-1.5 text-gray-400">{label}</td>
+                    <td className="px-3 py-1.5 text-right font-mono text-gray-200">{fmtT(maas as number)}</td>
+                    {item.supplier_total_tokens != null && <td className="px-3 py-1.5 text-right font-mono text-gray-200">{fmtT(sup as number)}</td>}
+                    {item.customer_total_tokens != null && <td className="px-3 py-1.5 text-right font-mono text-gray-200">{fmtT(cust as number)}</td>}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {hasDiff && !locked && item.review_status !== 'ok' && (
+            <div className="space-y-2">
+              <textarea value={note} onChange={e => setNote(e.target.value)}
+                placeholder="差异说明（可选）：例如协议口径不同、数据延迟等"
+                rows={2} className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-bg-input border border-border outline-none resize-none" />
+              <div className="flex gap-2">
+                <button onClick={() => mark('confirmed')} disabled={saving}
+                  className="flex items-center gap-1 px-3 py-1 text-xs rounded-lg bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 transition-colors">
+                  <CheckCircle2 size={11} />确认通过
+                </button>
+                <button onClick={() => mark('disputed')} disabled={saving}
+                  className="flex items-center gap-1 px-3 py-1 text-xs rounded-lg bg-orange-500/15 text-orange-400 hover:bg-orange-500/25 transition-colors">
+                  <AlertTriangle size={11} />标记争议
+                </button>
+              </div>
+            </div>
+          )}
+          {item.review_note && (
+            <div className="text-[11px] text-gray-400 bg-bg-input rounded-lg px-2.5 py-1.5">📝 {item.review_note}</div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TokenTab() {
+  const { fetchWithAuth } = useAuth()
+  const { toast } = useToast()
+
+  const [period, setPeriod] = useState(tDefaultPeriod())
+  const [uploads, setUploads] = useState<TBillUpload[]>([])
+  const [session, setSession] = useState<TReconcileSession | null>(null)
+  const [items, setItems] = useState<TReconcileItem[]>([])
+  const [onlyDiff, setOnlyDiff] = useState(false)
+  const [comparing, setComparing] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [loadingItems, setLoadingItems] = useState(false)
+  const [periods, setPeriods] = useState<string[]>(tPeriodList())
+
+  const locked = session?.status === 'approved'
+
+  const loadPeriodData = useCallback(async () => {
+    const [uRes, sRes, pRes] = await Promise.all([
+      fetchWithAuth!(`/api/v1/bill-reconcile/${period}/uploads`),
+      fetchWithAuth!(`/api/v1/bill-reconcile/${period}/session`),
+      fetchWithAuth!(`/api/v1/bill-reconcile/periods`),
+    ])
+    if (uRes?.ok) setUploads(await uRes.json())
+    setSession(sRes?.ok ? await sRes.json() : null)
+    if (pRes?.ok) {
+      const remote: string[] = await pRes.json()
+      setPeriods(prev => Array.from(new Set([...prev, ...remote])).sort().reverse())
+    }
+  }, [period, fetchWithAuth])
+
+  const loadItems = useCallback(async () => {
+    if (!session) return
+    setLoadingItems(true)
+    try {
+      const r = await fetchWithAuth!(`/api/v1/bill-reconcile/${period}/items?only_diff=${onlyDiff}`)
+      if (r?.ok) setItems(await r.json())
+    } finally { setLoadingItems(false) }
+  }, [session, period, onlyDiff, fetchWithAuth])
+
+  useEffect(() => { loadPeriodData() }, [loadPeriodData])
+  useEffect(() => { if (session) { loadItems() } else { setItems([]) } }, [loadItems, session])
+
+  const handleCompare = async () => {
+    setComparing(true)
+    try {
+      const r = await fetchWithAuth!(`/api/v1/bill-reconcile/${period}/compare`, { method: 'POST' })
+      if (r?.ok) {
+        const s = await r.json(); setSession(s)
+        toast(`比对完成：${s.model_count} 个模型，供应商差异 ${s.diff_supplier_count} 个，客户差异 ${s.diff_customer_count} 个`, 'success')
+        await loadItems()
+      } else { const e = await r?.json().catch(() => ({})); toast(e?.detail || '比对失败', 'error') }
+    } finally { setComparing(false) }
+  }
+
+  const handleSubmit = async () => {
+    setSubmitting(true)
+    try {
+      const r = await fetchWithAuth!(`/api/v1/bill-reconcile/${period}/submit-review`, { method: 'POST' })
+      if (r?.ok) { const d = await r.json(); toast(d.message || '已提交', 'success'); await loadPeriodData() }
+      else { const e = await r?.json().catch(() => ({})); toast(e?.detail || '提交失败', 'error') }
+    } finally { setSubmitting(false) }
+  }
+
+  const totalDiff = (session?.diff_supplier_count ?? 0) + (session?.diff_customer_count ?? 0)
+  const statusInfo = session ? T_STATUS_LABELS[session.status] : null
+
+  return (
+    <div className="space-y-5">
+      {/* 月份 + 状态 */}
+      <div className="flex items-center gap-4 flex-wrap pt-1">
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-gray-500">对账月份</label>
+          <select value={period} onChange={e => setPeriod(e.target.value)}
+            className="px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none">
+            {periods.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        {statusInfo && (
+          <div className={`flex items-center gap-1.5 text-sm font-semibold ${statusInfo.color}`}>
+            <div className="w-2 h-2 rounded-full bg-current opacity-70" />
+            {statusInfo.label}
+            {session && <span className="text-xs font-normal text-gray-500">· {session.model_count} 个模型</span>}
+          </div>
+        )}
+        {session?.status === 'approved' && (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-semibold">✓ 月度账单已确认</span>
+        )}
+      </div>
+
+      {/* 三列账单上传 */}
+      <div>
+        <SectionHeader icon={Upload} title="上传账单" />
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+          {(['maas', 'supplier', 'customer'] as const).map(st => (
+            <TokenUploadCard key={st} sourceType={st} period={period} uploads={uploads}
+              locked={locked} onUploaded={loadPeriodData} onDeleted={loadPeriodData} />
+          ))}
+        </div>
+        <div className="mt-3 flex items-start gap-2 text-xs text-gray-500 bg-bg-input rounded-lg px-3 py-2">
+          <Info size={13} className="shrink-0 mt-0.5 text-blue-400" />
+          <span>
+            Excel 需含表头行，支持中英文列名：<strong className="text-gray-400">model_id（必填）</strong>、
+            input_tokens、output_tokens、cache_read_tokens、cache_write_tokens、total_tokens、amount。
+            同一账单中相同 model_id 的行会自动合并求和。
+          </span>
+        </div>
+      </div>
+
+      {/* 操作按钮 */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <button onClick={handleCompare} disabled={comparing || uploads.length === 0 || locked}
+          className="flex items-center gap-2 px-5 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:brightness-110 disabled:opacity-50 transition-all">
+          {comparing ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+          {comparing ? '比对中…' : '执行三方比对'}
+        </button>
+        {session?.status === 'compared' && (
+          <button onClick={handleSubmit} disabled={submitting}
+            className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold transition-all disabled:opacity-50
+              ${totalDiff > 0 ? 'bg-orange-500/15 text-orange-400 hover:bg-orange-500/25' : 'bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25'}`}>
+            {submitting ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+            {submitting ? '提交中…' : totalDiff > 0 ? `提交审批（${totalDiff} 个差异待确认）` : '确认通过（无差异）'}
+          </button>
+        )}
+        {session?.status === 'pending_review' && (
+          <div className="flex items-center gap-2 text-sm text-yellow-400">
+            <ClipboardCheck size={15} />审批进行中（审批ID #{session.approval_instance_id}）
+          </div>
+        )}
+      </div>
+
+      {/* 比对结果 */}
+      {session && items.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <SectionHeader icon={FileSpreadsheet} title="比对明细" />
+            <div className="flex items-center gap-3">
+              {totalDiff > 0 && (
+                <div className="flex items-center gap-1.5 text-xs text-rose-400">
+                  <AlertTriangle size={13} />
+                  {session.diff_supplier_count > 0 && `供应商差异 ${session.diff_supplier_count} 个`}
+                  {session.diff_supplier_count > 0 && session.diff_customer_count > 0 && ' · '}
+                  {session.diff_customer_count > 0 && `客户差异 ${session.diff_customer_count} 个`}
+                </div>
+              )}
+              <button onClick={() => setOnlyDiff(v => !v)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg border transition-colors
+                  ${onlyDiff ? 'bg-rose-500/15 border-rose-500/30 text-rose-400' : 'bg-bg-input border-border text-gray-400 hover:text-gray-200'}`}>
+                <Filter size={11} />{onlyDiff ? '仅看差异' : '全部'}
+              </button>
+            </div>
+          </div>
+          {loadingItems ? (
+            <div className="text-center py-12 text-gray-500"><Loader2 size={20} className="animate-spin mx-auto mb-2" />加载中…</div>
+          ) : (
+            <div className="space-y-2">
+              {items.map(item => <TokenItemRow key={item.id} item={item} locked={locked} onReviewed={loadItems} />)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {session && items.length === 0 && !loadingItems && (
+        <EmptyState icon={BarChart3} title={onlyDiff ? '无差异模型' : '暂无比对结果'}
+          description={onlyDiff ? '所有模型数据一致，无需人工审核' : '请先上传账单并执行比对'} />
+      )}
+      {!session && uploads.length > 0 && (
+        <div className="flex items-center gap-2 text-sm text-gray-500 bg-bg-input rounded-xl p-4">
+          <Info size={15} className="text-blue-400 shrink-0" />
+          已上传 {uploads.length} 份账单，点击「执行三方比对」生成对账明细
+        </div>
+      )}
+    </div>
+  )
+}

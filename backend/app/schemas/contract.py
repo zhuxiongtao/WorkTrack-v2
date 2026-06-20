@@ -33,6 +33,7 @@ class ContractUpdate(BaseModel):
     payment_terms: Optional[str] = None
     status: Optional[str] = None
     remarks: Optional[str] = None
+    content_html: Optional[str] = None
 
 
 class ContractOut(BaseModel):
@@ -79,6 +80,15 @@ class ContractOut(BaseModel):
     parse_error: str = ""
     parsed_at: Optional[datetime] = None
     extraction_meta: str = ""
+
+    # 来源与模板
+    source: str = "external"
+    template_id: Optional[int] = None
+    content_html: Optional[str] = None
+
+    # 签章归档
+    signed_file_path: str = ""
+    signed_file_name: str = ""
 
     created_at: datetime
     updated_at: datetime

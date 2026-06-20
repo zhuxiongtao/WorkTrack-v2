@@ -374,6 +374,58 @@ def _on_finished(instance: ApprovalInstance, db: Session) -> None:
             db.add(s)
             db.commit()
 
+    elif instance.target_type == "project":
+        from app.models.project import Project
+        p = db.get(Project, instance.target_id)
+        if p:
+            if instance.status == "approved":
+                p.status = "进行中"
+            elif instance.status == "rejected":
+                p.status = "已驳回"
+            elif instance.status == "cancelled":
+                p.status = "待立项"
+            p.updated_at = _now()
+            db.add(p)
+            db.commit()
+
+    elif instance.target_type == "supplier":
+        from app.models.supplier import Supplier
+        s = db.get(Supplier, instance.target_id)
+        if s:
+            if instance.status == "approved":
+                s.status = "合作中"
+            elif instance.status == "rejected":
+                s.status = "已拒绝"
+            elif instance.status == "cancelled":
+                s.status = "待审批"
+            s.updated_at = _now()
+            db.add(s)
+            db.commit()
+
+    elif instance.target_type == "channel":
+        from app.models.channel import Channel
+        c = db.get(Channel, instance.target_id)
+        if c:
+            if instance.status == "approved":
+                c.status = "合作中"
+            elif instance.status in ("rejected", "cancelled"):
+                c.status = "待确认"
+            c.updated_at = _now()
+            db.add(c)
+            db.commit()
+
+    elif instance.target_type == "bill_reconcile":
+        from app.models.bill_reconcile import BillReconcileSession
+        s = db.get(BillReconcileSession, instance.target_id)
+        if s:
+            if instance.status == "approved":
+                s.status = "approved"
+            elif instance.status in ("rejected", "cancelled"):
+                s.status = "compared"  # 退回到已比对，可重新修改再提交
+            s.updated_at = _now()
+            db.add(s)
+            db.commit()
+
 
 # ──────────────────────────── 待办查询 ────────────────────────────
 

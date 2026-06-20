@@ -137,6 +137,54 @@ def start_scheduler():
         print("[scheduler] 已注册 system_chat_cleanup (每天 03:10)", flush=True)
     except Exception as e:
         print(f"[scheduler] 注册 system_chat_cleanup 失败: {e}", flush=True)
+    # 注册内置的「AI 资讯自动抓取」任务（每天 08:00 / 12:00 / 17:00）
+    try:
+        _register_ai_news_fetch()
+        print("[scheduler] 已注册 system_ai_news_fetch (08:00 / 12:00 / 17:00)", flush=True)
+    except Exception as e:
+        print(f"[scheduler] 注册 system_ai_news_fetch 失败: {e}", flush=True)
+
+
+def _execute_ai_news_fetch():
+    """scheduler 回调：执行 AI 资讯抓取 + 写日志"""
+    from app.services.news_fetcher import fetch_ai_news
+    from app.routers.logs import write_log
+    try:
+        result = fetch_ai_news()
+        if result.get("success"):
+            write_log("info", "task",
+                      f"AI 资讯自动抓取: 新增 {result.get('inserted',0)}, "
+                      f"更新 {result.get('updated',0)}, 共 {result.get('total',0)} 条",
+                      db=None)
+        else:
+            write_log("error", "task",
+                      f"AI 资讯自动抓取失败: {result.get('error','unknown')}",
+                      db=None)
+    except Exception as exc:
+        write_log("error", "task", f"AI 资讯自动抓取异常: {exc}", details=str(exc), db=None)
+
+
+def _register_ai_news_fetch():
+    """注册 AI 资讯自动抓取内置任务（每天 08:00 / 12:00 / 17:00，Asia/Shanghai）"""
+    for job_id, hour in [
+        ("system_ai_news_08", 8),
+        ("system_ai_news_12", 12),
+        ("system_ai_news_17", 17),
+    ]:
+        try:
+            scheduler.remove_job(job_id)
+        except Exception:
+            pass
+        scheduler.add_job(
+            _execute_ai_news_fetch,
+            trigger=CronTrigger(hour=hour, minute=0),
+            id=job_id,
+            name=f"AI 资讯自动抓取（{hour:02d}:00）",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=1800,
+        )
 
 
 def _register_model_catalog_refresh():

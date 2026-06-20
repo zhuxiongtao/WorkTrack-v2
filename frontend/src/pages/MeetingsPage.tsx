@@ -47,6 +47,7 @@ export default function MeetingsPage() {
   // 弹窗详情
   const [modalMeeting, setModalMeeting] = useState<Meeting | null>(null)
   const [linkedProject, setLinkedProject] = useState<ProjectBrief | null>(null)
+  const [audioBlobUrl, setAudioBlobUrl] = useState<string | null>(null)
 
   // 分享弹窗
   const [showShareModal, setShowShareModal] = useState(false)
@@ -168,6 +169,29 @@ export default function MeetingsPage() {
       if (audioRef.current) audioRef.current.pause()
     }
   }, [recordedUrl])
+
+  // 详情弹窗的音频：<audio src> 是原生请求，不走 fetch 拦截器，无法带 Authorization header
+  // 改为用 fetch 拉取（会自动携带 Bearer token），转成 blob URL 再赋给 <audio>
+  useEffect(() => {
+    let blobUrl = ''
+    if (modalMeeting?.audio_url) {
+      fetch(modalMeeting.audio_url)
+        .then(res => {
+          if (!res.ok) throw new Error(`audio fetch ${res.status}`)
+          return res.blob()
+        })
+        .then(blob => {
+          blobUrl = URL.createObjectURL(blob)
+          setAudioBlobUrl(blobUrl)
+        })
+        .catch(() => setAudioBlobUrl(null))
+    } else {
+      setAudioBlobUrl(null)
+    }
+    return () => {
+      if (blobUrl) URL.revokeObjectURL(blobUrl)
+    }
+  }, [modalMeeting?.audio_url])
 
   // 打开表单时枚举音频设备（用于多麦克风场景的选择器）
   useEffect(() => {
@@ -374,7 +398,10 @@ export default function MeetingsPage() {
 
   // === 保存会议（新建 / 编辑）===
   const handleSave = async () => {
-    if (!form.title.trim()) return
+    if (!form.title.trim()) {
+      showToast('请先填写会议标题', 'warning')
+      return
+    }
     // 如果正在录音，提示用户
     if (recording) {
       if (!await showConfirm('录音仍在进行中，是否停止录音并一起保存？\n\n点击"取消"可返回继续录音。')) return
@@ -424,7 +451,11 @@ export default function MeetingsPage() {
         if (recordedBlobRef.current && meeting.id) {
           const formData = new FormData()
           formData.append('file', recordedBlobRef.current, `recording_${Date.now()}.webm`)
-          await fetch(`/api/v1/meetings/${meeting.id}/upload-audio`, { method: 'POST', body: formData })
+          const uploadRes = await fetch(`/api/v1/meetings/${meeting.id}/upload-audio`, { method: 'POST', body: formData })
+          if (!uploadRes.ok) {
+            const errData = await uploadRes.json().catch(() => ({}))
+            showToast(`录音上传失败: ${errData.detail || uploadRes.statusText}，会议文本已保存`, 'error')
+          }
         }
       }
       setShowForm(false)
@@ -540,6 +571,7 @@ export default function MeetingsPage() {
     setComments([])
     setNewComment('')
     setShowShareModal(false)
+    setAudioBlobUrl(null)
   }
 
   const handleAiExtract = async (id: number) => {
@@ -851,11 +883,34 @@ export default function MeetingsPage() {
                 } catch { return null }
               })()}
 
-              {/* 音频 */}
+              {/* 音频：使用 audioBlobUrl（由 fetch+Bearer token 获取），而非原始 API 路径 */}
               {modalMeeting.audio_url && (
                 <div className="p-3 rounded-xl bg-bg-input border border-border">
-                  <p className="text-xs text-gray-500 mb-2 flex items-center gap-2"><Mic size={12} className="text-red-400" />录音回放</p>
-                  <audio controls className="w-full h-9" src={modalMeeting.audio_url} preload="metadata" />
+                  <p className="text-xs text-gray-500 mb-2 flex items-center gap-2">
+                    <Mic size={12} className="text-red-400" />录音回放
+                    {modalMeeting.audio_url && !audioBlobUrl && (
+                      <span className="text-[10px] text-gray-500 animate-pulse">加载中…</span>
+                    )}
+                  </p>
+                  {audioBlobUrl ? (
+                    <audio
+                      controls
+                      className="w-full h-9"
+                      src={audioBlobUrl}
+                      onLoadedMetadata={(e) => {
+                        const el = e.currentTarget
+                        if (!isFinite(el.duration)) {
+                          el.currentTime = 1e101
+                          const fix = () => { el.currentTime = 0; el.removeEventListener('timeupdate', fix) }
+                          el.addEventListener('timeupdate', fix)
+                        }
+                      }}
+                    />
+                  ) : (
+                    <div className="h-9 flex items-center justify-center text-xs text-gray-500">
+                      {modalMeeting.audio_url ? '录音加载中…' : '暂无录音'}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1164,7 +1219,7 @@ export default function MeetingsPage() {
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={safeClose} className="px-4 py-2 rounded-xl text-sm text-gray-400 hover:text-white hover:bg-bg-hover transition-colors">取消</button>
-                <button onClick={handleSave} disabled={saving || !form.title.trim()}
+                <button onClick={handleSave} disabled={saving}
                   className="flex items-center gap-2 px-5 py-2 rounded-xl bg-[#3B82F6] text-[#fff] text-sm font-medium hover:bg-blue-600 disabled:opacity-50 transition-all shadow-lg shadow-blue-500/20">
                   {saving && <Loader2 size={14} className="animate-spin" />}{saving ? '保存中...' : editingId ? '更新会议' : '保存'}
                 </button>

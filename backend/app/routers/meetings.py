@@ -153,6 +153,9 @@ def delete_meeting(meeting_id: int, background_tasks: BackgroundTasks, current_u
     perm = _get_meeting_perm(meeting_id, current_user.id, db)
     if perm not in ("owner", "admin"):
         raise HTTPException(status_code=403, detail="仅会议创建者或管理员可删除")
+    from sqlmodel import text as sql_text
+    db.execute(sql_text("DELETE FROM meeting_permission WHERE meeting_id = :mid"), {"mid": meeting_id})
+    db.execute(sql_text("DELETE FROM meeting_comment WHERE meeting_id = :mid"), {"mid": meeting_id})
     db.delete(meeting)
     db.commit()
     background_tasks.add_task(delete_document, "meeting_notes", str(meeting_id))

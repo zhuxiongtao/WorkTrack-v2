@@ -69,14 +69,30 @@ def create_supplier(
     db: Session = Depends(get_session),
     current_user=Depends(require_permission("project:edit")),
 ):
-    """新增供应商"""
-    # 检查 name 唯一
+    """新增供应商，自动发起新增审批流（无模板则直接生效）"""
+    from app.services import approval_engine
     existing = db.exec(select(Supplier).where(Supplier.name == body.name)).first()
     if existing:
         raise HTTPException(400, f"供应商 '{body.name}' 已存在")
-    obj = Supplier(**body.model_dump())
+    data = body.model_dump()
+    data['status'] = '待审批'
+    obj = Supplier(**data)
     db.add(obj)
     db.commit()
+    db.refresh(obj)
+    try:
+        inst = approval_engine.start_approval(
+            "supplier", obj.id, obj,
+            f"供应商《{obj.name}》新增审批", current_user, db,
+        )
+        if inst is None:
+            obj.status = "合作中"
+            db.add(obj)
+            db.commit()
+    except Exception:
+        obj.status = "合作中"
+        db.add(obj)
+        db.commit()
     db.refresh(obj)
     return obj
 
@@ -246,3 +262,35 @@ def sync_supplier_stats(
     db.commit()
     db.refresh(supplier)
     return {"ok": True, "total_cost": supplier.total_cost, "project_count": supplier.project_count}
+
+
+@router.post("/{supplier_id}/submit-approval")
+def submit_supplier_approval(
+    supplier_id: int,
+    db: Session = Depends(get_session),
+    current_user=Depends(require_permission("project:edit")),
+):
+    """为供应商手动发起新增审批"""
+    from app.services import approval_engine
+    supplier = db.get(Supplier, supplier_id)
+    if not supplier:
+        raise HTTPException(404, "供应商不存在")
+    if approval_engine.get_active_instance("supplier", supplier_id, db):
+        raise HTTPException(400, "该供应商已有进行中的审批")
+    try:
+        inst = approval_engine.start_approval(
+            "supplier", supplier_id, supplier,
+            f"供应商《{supplier.name}》新增审批", current_user, db,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if inst is None:
+        supplier.status = "合作中"
+        db.add(supplier)
+        db.commit()
+        return {"approval_id": None, "status": "合作中", "message": "无需审批，已直接生效"}
+    if inst.status == "pending":
+        supplier.status = "待审批"
+        db.add(supplier)
+        db.commit()
+    return {"approval_id": inst.id, "status": supplier.status, "message": "已提交审批"}

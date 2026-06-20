@@ -13,10 +13,11 @@ import WikiPage from '../../pages/WikiPage'
 import PublicWikiPage from '../../pages/PublicWikiPage'
 import SharedWithMePage from '../../pages/SharedWithMePage'
 import ProjectCostPage from '../../pages/ProjectCostPage'
-import SuppliersPage from '../../pages/SuppliersPage'
-import ChannelsPage from '../../pages/ChannelsPage'
+import UpstreamPage from '../../pages/UpstreamPage'
 import ReconcilePage from '../../pages/ReconcilePage'
 import ApprovalsPage from '../../pages/ApprovalsPage'
+import ModelChangePage from '../../pages/ModelChangePage'
+import TeamManagementPage from '../../pages/TeamManagementPage'
 
 interface AppRoutesProps {
   homePage: string
@@ -30,14 +31,17 @@ function AppRoutes({ homePage }: AppRoutesProps) {
       <Route path="/" element={<Navigate to={homePage} replace />} />
       <Route path="/dashboard"     element={hasPermission('dashboard:read') ? <DashboardPage />    : <Navigate to={homePage} replace />} />
       <Route path="/reports"       element={hasPermission('report:read')    ? <ReportHubPage />    : <Navigate to={homePage} replace />} />
+      <Route path="/team"          element={hasPermission('report:read')    ? <TeamManagementPage /> : <Navigate to={homePage} replace />} />
       <Route path="/meetings"      element={hasPermission('meeting:read')   ? <MeetingsPage />     : <Navigate to={homePage} replace />} />
       <Route path="/approvals"     element={<ApprovalsPage />} />
       <Route path="/tasks"         element={hasPermission('task:read')      ? <ScheduledTasksPage /> : <Navigate to={homePage} replace />} />
       <Route path="/projects"      element={hasPermission('project:read')   ? <ProjectsPage />     : <Navigate to={homePage} replace />} />
       <Route path="/project-costs" element={hasPermission('project:read')   ? <ProjectCostPage />  : <Navigate to={homePage} replace />} />
-      <Route path="/suppliers"     element={hasPermission('project:read')   ? <SuppliersPage />    : <Navigate to={homePage} replace />} />
-      <Route path="/channels"      element={hasPermission('project:read')   ? <ChannelsPage />     : <Navigate to={homePage} replace />} />
+      <Route path="/upstream"      element={hasPermission('project:read')   ? <UpstreamPage />     : <Navigate to={homePage} replace />} />
+      <Route path="/suppliers"     element={<Navigate to="/upstream" replace />} />
+      <Route path="/channels"      element={<Navigate to="/upstream" replace />} />
       <Route path="/reconcile"     element={hasPermission('project:read')   ? <ReconcilePage />    : <Navigate to={homePage} replace />} />
+      <Route path="/model-changes" element={hasPermission('project:read')   ? <ModelChangePage />  : <Navigate to={homePage} replace />} />
       <Route path="/customers"     element={hasPermission('customer:read')  ? <CustomersPage />    : <Navigate to={homePage} replace />} />
       <Route path="/contracts"     element={hasPermission('contract:read')  ? <ContractsPage />    : <Navigate to={homePage} replace />} />
       <Route path="/wiki"          element={hasPermission('wiki:read')      ? <WikiPage />         : <Navigate to={homePage} replace />} />

@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { Plus, X, Trash2, Loader2, Briefcase, Edit3, Save, Calendar, User, Building2, Activity, Search, Link2, ExternalLink, Pin, Cloud, Sparkles, RefreshCw, Tag, Filter, ChevronDown, FileText, Target, CheckCircle2, Zap, BarChart3, Hash, LayoutGrid, List, TrendingUp, Clock, Wrench } from 'lucide-react'
+import { Plus, X, Trash2, Loader2, Briefcase, Edit3, Save, Calendar, User, Building2, Activity, Search, Link2, ExternalLink, Pin, Cloud, Sparkles, RefreshCw, Tag, Filter, ChevronDown, FileText, Target, CheckCircle2, Zap, BarChart3, Hash, LayoutGrid, List, TrendingUp, Clock, Wrench, GitBranch, AlertTriangle } from 'lucide-react'
+import { ApprovalTimeline } from '../components/approval/ApprovalTimeline'
 import MarkdownRenderer from '../components/MarkdownRenderer'
-import TeamViewSwitcher from '../components/TeamViewSwitcher'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
 import { ProjectFormModal } from '../components/projects/ProjectFormModal'
@@ -51,12 +51,8 @@ export default function ProjectsPage() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   
-  // 成员筛选（供主管、老板一键跨用户审查，支持零延迟切换数据）+ 团队视图
-  const [memberList, setMemberList] = useState<any[]>([])
-  const [viewMode, setViewMode] = useState<'personal' | 'team'>('personal')
   const [viewLayout, setViewLayout] = useState<'card' | 'list'>(() => (localStorage.getItem('projectsViewLayout') as 'card' | 'list') || 'card')
   useEffect(() => { localStorage.setItem('projectsViewLayout', viewLayout) }, [viewLayout])
-  const [selectedUserIds, setSelectedUserIds] = useState<number[]>([])
   const [options, setOptions] = useState<Record<string, string[]>>({})
   const [searchText, setSearchText] = useState('')
   const [selectedProduct, setSelectedProduct] = useState<string>('')
@@ -76,19 +72,14 @@ export default function ProjectsPage() {
   const [quickSaving, setQuickSaving] = useState(false)
   const [analyzingId, setAnalyzingId] = useState<number | null>(null)
   const [analysisOpen, setAnalysisOpen] = useState(false)
+  const [submittingCharter, setSubmittingCharter] = useState(false)
 
   // 客户列表（用于关联选择）
   const [customers, setCustomers] = useState<{ id: number; name: string }[]>([])
 
   const loadProjects = useCallback(() => {
     setLoading(true)
-    let url = '/api/v1/projects'
-    if (viewMode === 'team' && selectedUserIds.length > 0) {
-      url += `?user_ids=${selectedUserIds.join(',')}`
-    } else if (viewMode === 'team') {
-      url += '?user_ids=' + memberList.map((m: any) => m.id).join(',')
-    }
-    fetch(url)
+    fetch('/api/v1/projects')
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) {
@@ -99,7 +90,7 @@ export default function ProjectsPage() {
         setLoading(false)
       })
       .catch((e) => { console.error('[loadProjects] error:', e); setLoading(false) })
-  }, [selectedUserIds, viewMode, memberList])
+  }, [])
 
   const loadOptions = () => {
     fetch('/api/v1/settings/field-options')
@@ -115,22 +106,20 @@ export default function ProjectsPage() {
 
   const loadMeetings = useCallback(async () => {
     try {
-      const url = '/api/v1/meetings' + (selectedUserIds.length > 0 ? `?user_ids=${selectedUserIds.join(',')}` : '')
-      const res = await fetch(url)
+      const res = await fetch('/api/v1/meetings')
       const data = await res.json()
       setAllMeetings((data || []).map((m: { id: number; title: string; meeting_date: string }) => ({
         id: m.id, title: m.title, meeting_date: m.meeting_date
       })))
     } catch { /* ignore */ }
-  }, [selectedUserIds])
+  }, [])
 
   const loadCustomers = useCallback(() => {
-    const url = '/api/v1/customers' + (selectedUserIds.length > 0 ? `?user_ids=${selectedUserIds.join(',')}` : '')
-    fetch(url)
+    fetch('/api/v1/customers')
       .then((res) => res.json())
       .then((data) => setCustomers(Array.isArray(data) ? data.map((c: any) => ({ id: c.id, name: c.name })) : []))
       .catch(() => {})
-  }, [selectedUserIds])
+  }, [])
 
   const loadLinkedMeetings = async (pid: number) => {
     try {
@@ -153,15 +142,7 @@ export default function ProjectsPage() {
     }
   }
 
-  // 1. 首次加载下拉选择员工集合（供主管和 Boss一键切换审查）
-  useEffect(() => {
-    fetch('/api/v1/users/simple')
-      .then(r => r.json())
-      .then(d => { if (Array.isArray(d)) setMemberList(d) })
-      .catch(() => {})
-  }, [])
-
-  // 2. 挂载触发监听
+  // 挂载触发监听
   useEffect(() => {
     loadProjects()
     loadOptions()
@@ -257,6 +238,20 @@ export default function ProjectsPage() {
     showToast('项目已删除', 'success')
   }
 
+  const handleSubmitCharter = async (projectId: number) => {
+    setSubmittingCharter(true)
+    try {
+      const res = await fetch(`/api/v1/projects/${projectId}/submit-approval`, { method: 'POST' })
+      if (!res.ok) { const e = await res.json(); showToast(e.detail || '提交失败', 'error'); return }
+      const data = await res.json()
+      showToast(data.message || '立项申请已提交', 'success')
+      loadProjects()
+      if (modalProject?.id === projectId) {
+        setModalProject(p => p ? { ...p, status: data.status } : p)
+      }
+    } catch { showToast('提交失败', 'error') } finally { setSubmittingCharter(false) }
+  }
+
   // 动态状态颜色：基于字符串哈希生成，任意自定义状态自动适配
   const STATUS_PALETTES = [
     'text-blue-400 bg-blue-500/10 border-blue-500/20',
@@ -347,13 +342,6 @@ export default function ProjectsPage() {
                 <List size={12} />列表
               </button>
             </div>
-            <TeamViewSwitcher
-              memberList={memberList}
-              viewMode={viewMode}
-              onViewModeChange={setViewMode}
-              selectedUserIds={selectedUserIds}
-              onSelectedUserIdsChange={setSelectedUserIds}
-            />
             {hasPermission('project:create') && (
               <button onClick={openCreate} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#3B82F6] text-[#fff] text-xs font-bold hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 transition-all cursor-pointer">
                 <Plus size={14} strokeWidth={2.5} /><span>新建项目</span>
@@ -668,6 +656,16 @@ export default function ProjectsPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2 ml-3 flex-shrink-0">
+                {hasPermission('project:edit') && (modalProject.status === '待立项') && (
+                  <button
+                    onClick={() => handleSubmitCharter(modalProject.id)}
+                    disabled={submittingCharter}
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-semibold text-amber-400 border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 disabled:opacity-50 transition-colors"
+                  >
+                    {submittingCharter ? <Loader2 size={12} className="animate-spin" /> : <GitBranch size={12} />}
+                    提交立项申请
+                  </button>
+                )}
                 {hasPermission('project:edit') && (
                   <button onClick={() => { closeDetail(); openEdit(modalProject) }}
                     className="text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-gray-300 hover:text-white transition-colors border border-border"><Edit3 size={12} className="inline mr-1" />编辑</button>
@@ -681,6 +679,44 @@ export default function ProjectsPage() {
             </div>
 
             <div className="p-4 md:p-6 space-y-4">
+              {/* 待立项提示：无法协调资源 */}
+              {(modalProject.status === '待立项' || modalProject.status === '审批中') && (
+                <div className={`rounded-xl p-3 flex items-start gap-3 border ${
+                  modalProject.status === '审批中'
+                    ? 'bg-blue-500/5 border-blue-500/20'
+                    : 'bg-amber-500/5 border-amber-500/20'
+                }`}>
+                  <AlertTriangle size={14} className={modalProject.status === '审批中' ? 'text-blue-400 mt-0.5 shrink-0' : 'text-amber-400 mt-0.5 shrink-0'} />
+                  <div>
+                    <p className={`text-xs font-semibold ${modalProject.status === '审批中' ? 'text-blue-300' : 'text-amber-300'}`}>
+                      {modalProject.status === '审批中' ? '立项审批中，暂不可协调资源' : '待立项：尚未正式立项，无法协调资源'}
+                    </p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">
+                      {modalProject.status === '审批中'
+                        ? '审批通过后项目自动变为「进行中」状态'
+                        : '点击「提交立项申请」发起审批流，经部门主管、商务、老板审批后正式立项'}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* 审批进度 */}
+              {(modalProject.status === '审批中' || modalProject.status === '已驳回') && (
+                <ApprovalTimeline
+                  targetType="project"
+                  targetId={modalProject.id}
+                  onChanged={() => {
+                    loadProjects()
+                    if (modalProject) {
+                      fetch(`/api/v1/projects/${modalProject.id}`)
+                        .then(r => r.json())
+                        .then(p => setModalProject(p))
+                        .catch(() => {})
+                    }
+                  }}
+                />
+              )}
+
               {/* AI 项目分析（默认收起） */}
               <div className="rounded-xl bg-bg-input border border-border overflow-hidden">
                 <button

@@ -48,8 +48,9 @@ const ADMIN_SECTIONS: AdminMenuSection[] = [
     id: 'platform',
     title: '平台配置',
     items: [
-      { to: '/admin/models',   label: '模型管理', icon: Cpu,      gradientFrom: '#EC4899', gradientTo: '#F472B6' },
-      { to: '/admin/settings', label: '系统设置', icon: Settings, gradientFrom: '#6B7280', gradientTo: '#9CA3AF' },
+      { to: '/admin/models',             label: '模型管理',   icon: Cpu,      gradientFrom: '#EC4899', gradientTo: '#F472B6' },
+      { to: '/admin/contract-templates', label: '合同模板',   icon: FileText, gradientFrom: '#F97316', gradientTo: '#FB923C' },
+      { to: '/admin/settings',           label: '系统设置',   icon: Settings, gradientFrom: '#6B7280', gradientTo: '#9CA3AF' },
     ],
   },
 ]
@@ -86,6 +87,7 @@ export default function AdminLayout({ brandLogo, brandTitle }: AdminLayoutProps)
 
       {/* ── 管理后台侧边栏 ── */}
       <aside className={`
+        admin-dark-shell
         w-56 xl:w-60 flex-shrink-0 flex flex-col h-screen border-r border-border
         bg-[#110d1c] transition-transform duration-300 z-50 safe-area-top safe-area-bottom
         max-md:fixed max-md:inset-y-0 max-md:left-0
@@ -210,7 +212,7 @@ export default function AdminLayout({ brandLogo, brandTitle }: AdminLayoutProps)
       {/* ── 内容区 ── */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* 移动端 header */}
-        <div className="md:hidden sticky top-0 z-30 flex items-center justify-between px-3 py-2 border-b border-border/50 bg-[#110d1c]/90 backdrop-blur-xl safe-area-top">
+        <div className="admin-dark-shell md:hidden sticky top-0 z-30 flex items-center justify-between px-3 py-2 border-b border-border/50 bg-[#110d1c]/90 backdrop-blur-xl safe-area-top">
           <button
             onClick={() => setMobileOpen(true)}
             className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400"

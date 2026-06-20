@@ -13,10 +13,11 @@ import AppHeader from './components/layout/AppHeader'
 import AppRoutes from './components/layout/AppRoutes'
 import AdminLayout from './components/layout/AdminLayout'
 import AIFab from './components/AIFab'
+import { GlobalTickerBar } from './components/GlobalTickerBar'
 
 function AppContent() {
   const location = useLocation()
-  const { user, loading: authLoading, hasPermission } = useAuth()
+  const { user, loading: authLoading, hasPermission, fetchWithAuth } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const isInsideSpace = /^\/wiki\/\d+/.test(location.pathname)
 
@@ -172,6 +173,7 @@ function AppContent() {
       />
 
       <main className="flex-1 overflow-y-auto">
+        <GlobalTickerBar fetchWithAuth={fetchWithAuth} />
         <AppHeader
           brandLogo={brandLogo}
           brandTitle={brandTitle}

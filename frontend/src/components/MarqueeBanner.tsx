@@ -1,6 +1,5 @@
-import { useEffect, useState, useRef, useMemo } from 'react'
-import { createPortal } from 'react-dom'
-import { Megaphone, Newspaper, X, Loader2, Calendar, RefreshCw, CheckCircle2, Sparkles, ChevronUp } from 'lucide-react'
+import { useEffect, useState, useRef } from 'react'
+import { Newspaper, Loader2, RefreshCw } from 'lucide-react'
 
 // ============= 类型定义 =============
 export interface NewsItem {
@@ -12,12 +11,6 @@ export interface NewsItem {
   category: string  // official / social / community / media / other
   pub_date: string | null
   fetched_at: string | null
-}
-
-export interface Announcement {
-  content: string
-  published_at: string | null
-  enabled: boolean
 }
 
 interface MarqueeBannerProps {
@@ -53,51 +46,6 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
-// ============= 公告弹窗 =============
-function AnnouncementModal({
-  announcement, onClose,
-}: { announcement: Announcement; onClose: () => void }) {
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/45 px-4 py-6 animate-fadeIn"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-2xl max-h-[85vh] rounded-2xl bg-bg-card border border-border/60 shadow-2xl flex flex-col overflow-hidden animate-scaleIn"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-border/20 shrink-0 bg-gradient-to-r from-amber-500/10 to-transparent">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center text-amber-500">
-              <Megaphone size={16} />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-gray-100">系统公告</h3>
-              {announcement.published_at && (
-                <p className="text-[10px] text-gray-500 mt-0.5 flex items-center gap-1">
-                  <Calendar size={9} />
-                  发布于 {new Date(announcement.published_at).toLocaleString('zh-CN')}
-                </p>
-              )}
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-bg-hover text-gray-500 hover:text-white transition-colors"
-          >
-            <X size={16} />
-          </button>
-        </div>
-        <div
-          className="flex-1 overflow-y-auto p-5 prose prose-invert prose-sm max-w-none text-gray-200"
-          dangerouslySetInnerHTML={{ __html: announcement.content || '<p class="text-gray-500 text-center py-10">暂无内容</p>' }}
-        />
-      </div>
-    </div>,
-    document.body,
-  )
-}
-
 // ============= 单条资讯行（固定高度，整列对齐）=============
 function NewsRow({ n, onClick }: { n: NewsItem; onClick: () => void }) {
   const cs = CATEGORY_STYLES[n.category] || CATEGORY_STYLES.other
@@ -128,11 +76,9 @@ function NewsRow({ n, onClick }: { n: NewsItem; onClick: () => void }) {
 
 // ============= 主组件 =============
 export function MarqueeBanner({ fetchWithAuth }: MarqueeBannerProps) {
-  const [announcement, setAnnouncement] = useState<Announcement | null>(null)
   const [newsItems, setNewsItems] = useState<NewsItem[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [showAnnouncementModal, setShowAnnouncementModal] = useState(false)
 
   // 滚动列表的 ref + RAF 状态
   const listRef = useRef<HTMLDivElement | null>(null)
@@ -144,14 +90,7 @@ export function MarqueeBanner({ fetchWithAuth }: MarqueeBannerProps) {
   const loadAll = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true)
     try {
-      const [aRes, nRes] = await Promise.all([
-        fetchWithAuth('/api/v1/news/announcement'),
-        fetchWithAuth('/api/v1/news/feed?limit=50'),
-      ])
-      if (aRes.ok) {
-        const a = await aRes.json()
-        setAnnouncement(a)
-      }
+      const nRes = await fetchWithAuth('/api/v1/news/feed?limit=50')
       if (nRes.ok) {
         const n = await nRes.json()
         setNewsItems(n.items || [])
@@ -218,7 +157,7 @@ export function MarqueeBanner({ fetchWithAuth }: MarqueeBannerProps) {
   const onListEnter = () => { hoveringRef.current = true }
   const onListLeave = () => { hoveringRef.current = false }
 
-  const hasContent = announcement?.enabled || newsItems.length > 0
+  const hasContent = newsItems.length > 0
   if (loading && !hasContent) {
     return (
       <div className="hidden lg:flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.03] border border-white/5">
@@ -249,29 +188,6 @@ export function MarqueeBanner({ fetchWithAuth }: MarqueeBannerProps) {
           </button>
         </div>
 
-        {/* ===== 公告条（高亮，无外框）=====*/}
-        {announcement?.enabled && announcement.content.trim() && (
-          <button
-            onClick={() => setShowAnnouncementModal(true)}
-            className="group flex items-center gap-2 px-2.5 py-1 mb-1 rounded-md bg-gradient-to-r from-amber-100 via-amber-50 to-amber-100 border border-amber-300 hover:border-amber-500 dark:from-amber-500/15 dark:via-amber-500/8 dark:to-amber-500/15 dark:border-amber-500/25 dark:hover:border-amber-500/45 transition-all overflow-hidden"
-            title="点击查看完整公告"
-          >
-            <div className="flex items-center gap-1 shrink-0">
-              <Megaphone size={11} className="text-amber-600 dark:text-amber-400 animate-pulse" />
-              <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300">公告</span>
-            </div>
-            <div
-              className="flex-1 min-w-0 text-[11px] text-amber-900 dark:text-amber-100 truncate text-left"
-              dangerouslySetInnerHTML={{
-                __html: stripHtml(announcement.content).slice(0, 200),
-              }}
-            />
-            <span className="text-[9px] text-amber-600/80 dark:text-amber-400/60 shrink-0 hidden xl:inline">
-              {formatTimeAgo(announcement.published_at)}
-            </span>
-          </button>
-        )}
-
         {/* ===== AI 资讯列表（无外框，融入 hero 背景，固定高度视口）===== */}
         {newsItems.length > 0 && (
           <div
@@ -294,12 +210,6 @@ export function MarqueeBanner({ fetchWithAuth }: MarqueeBannerProps) {
         )}
       </div>
 
-      {showAnnouncementModal && announcement && (
-        <AnnouncementModal
-          announcement={announcement}
-          onClose={() => setShowAnnouncementModal(false)}
-        />
-      )}
     </>
   )
 }

@@ -13,20 +13,37 @@ import type { LucideIcon } from 'lucide-react'
 // ─── Tool metadata ────────────────────────────────────────────────────────────
 
 const TOOL_META: Record<string, { label: string; emoji: string }> = {
-  search_all:               { label: '全局搜索',       emoji: '🔍' },
-  search_reports:           { label: '搜索日报',       emoji: '📋' },
-  get_reports_by_date:      { label: '查询日报',       emoji: '📅' },
-  get_reports_by_date_range:{ label: '查询日期范围',   emoji: '📅' },
-  summarize_today_reports:  { label: '总结今日日报',   emoji: '✨' },
-  get_customer_summary:     { label: '查询客户详情',   emoji: '👥' },
-  list_projects:            { label: '获取项目列表',   emoji: '📊' },
-  get_project_analysis:     { label: 'AI 分析项目',    emoji: '🤖' },
-  search_meetings:          { label: '搜索会议纪要',   emoji: '📝' },
-  create_scheduled_task:    { label: '创建定时任务',   emoji: '⏰' },
-  search_company_info:      { label: '搜索公司信息',   emoji: '🌐' },
-  create_customer:          { label: '录入新客户',     emoji: '➕' },
-  search_contracts:         { label: '搜索合同',       emoji: '📄' },
-  get_contract_detail:      { label: '查看合同详情',   emoji: '📑' },
+  // 日报
+  search_all:                  { label: '全局搜索',       emoji: '🔍' },
+  search_reports:              { label: '搜索日报',       emoji: '📋' },
+  get_reports_by_date:         { label: '查询日报',       emoji: '📅' },
+  get_reports_by_date_range:   { label: '查询日期范围',   emoji: '📅' },
+  summarize_today_reports:     { label: '总结今日日报',   emoji: '✨' },
+  // 客户
+  get_customer_summary:        { label: '查询客户详情',   emoji: '👥' },
+  search_company_info:         { label: '搜索公司信息',   emoji: '🌐' },
+  create_customer:             { label: '录入新客户',     emoji: '➕' },
+  // 项目
+  list_projects:               { label: '获取项目列表',   emoji: '📊' },
+  get_project_analysis:        { label: 'AI 分析项目',    emoji: '🤖' },
+  // 会议
+  search_meetings:             { label: '搜索会议纪要',   emoji: '📝' },
+  // 合同
+  search_contracts:            { label: '搜索合同',       emoji: '📄' },
+  get_contract_detail:         { label: '查看合同详情',   emoji: '📑' },
+  // 对账
+  query_reconcile:             { label: '查询对账数据',   emoji: '💰' },
+  // 供应商 & 通道
+  list_suppliers:              { label: '查看供应商',     emoji: '🏭' },
+  list_channels:               { label: '查看通道列表',   emoji: '📡' },
+  // 审批
+  get_my_pending_approvals:    { label: '查询审批事项',   emoji: '🔔' },
+  // 看板
+  get_dashboard_overview:      { label: '数据看板概览',   emoji: '📈' },
+  // Wiki
+  search_wiki:                 { label: '搜索知识库',     emoji: '📖' },
+  // 定时任务
+  create_scheduled_task:       { label: '创建定时任务',   emoji: '⏰' },
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -486,37 +503,31 @@ export default function AIPage() {
               )}
             </div>
 
-            {/* 存储用量 & 保留策略（始终显示，无需等 stats 接口） */}
+            {/* 存储用量 & 保留策略 */}
             {(() => {
               const maxMsgs = chatStats?.max_messages_per_user ?? 200
               const retentionDays = chatStats?.retention_days ?? 30
-              const msgCount = chatStats?.message_count        // 仅 stats 加载后可用
-              const convCount = conversations.length
-              const hasStats = msgCount != null
-              const pct = hasStats && maxMsgs > 0 ? Math.min(100, (msgCount! / maxMsgs) * 100) : 0
-              const nearLimit = hasStats && maxMsgs > 0 && msgCount! >= maxMsgs * 0.8
+              // 优先用 stats 精确值，否则从已加载的对话列表加总
+              const msgCount = chatStats?.message_count
+                ?? conversations.reduce((s, c) => s + (c.message_count ?? 0), 0)
+              const pct = maxMsgs > 0 ? Math.min(100, (msgCount / maxMsgs) * 100) : 0
+              const nearLimit = maxMsgs > 0 && msgCount >= maxMsgs * 0.8
               return (
                 <div className="mx-3 mb-3 px-3 py-2.5 rounded-lg bg-bg-hover/60 border border-border/60">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">存储用量</span>
-                    {hasStats && maxMsgs > 0 && (
-                      <span className={`text-[10px] font-medium tabular-nums ${nearLimit ? 'text-amber-500' : 'text-gray-500'}`}>
-                        {msgCount} / {maxMsgs} 条
-                      </span>
-                    )}
+                    <span className={`text-[10px] font-medium tabular-nums ${nearLimit ? 'text-amber-500' : 'text-gray-500'}`}>
+                      {msgCount} / {maxMsgs} 条
+                    </span>
                   </div>
-                  {/* 有 stats 才显示进度条（消息条数 / 上限） */}
-                  {hasStats && maxMsgs > 0 && (
-                    <div className="w-full h-1 bg-border rounded-full overflow-hidden mb-2">
-                      <div
-                        className={`h-full rounded-full transition-all ${nearLimit ? 'bg-amber-500' : 'bg-accent-blue/60'}`}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  )}
+                  <div className="w-full h-1 bg-border rounded-full overflow-hidden mb-2">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${nearLimit ? 'bg-amber-500' : 'bg-accent-blue/60'}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
                   <p className="text-[10px] text-gray-500 leading-relaxed">
-                    {hasStats ? `${msgCount} 条对话` : `${convCount} 个会话`}
-                    {maxMsgs > 0 && !hasStats && ` · 上限 ${maxMsgs} 条`}
+                    {conversations.length} 个会话
                     {retentionDays > 0 && ` · 超 ${retentionDays} 天自动清理`}
                   </p>
                 </div>

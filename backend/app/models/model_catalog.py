@@ -27,5 +27,12 @@ class ModelCatalog(SQLModel, table=True):
     last_seen_at: Optional[datetime] = None
     reviewed_at: Optional[datetime] = None
     reviewed_by: Optional[int] = None
+
+    # 官网公开定价（USD / 1M tokens），手动维护
+    input_price: Optional[float] = None
+    output_price: Optional[float] = None
+    cache_read_price: Optional[float] = None
+    cache_write_price: Optional[float] = None
+
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)

@@ -391,29 +391,27 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
                         <div className="rounded-lg border border-dashed border-border bg-bg-input/30 px-3 py-4 text-center">
                           <p className="text-xs text-gray-500">尚未配置任何通道。请先到
                             <span className="mx-1 text-accent-blue font-semibold">业务管理 → 通道管理</span>
-                            添加合作中的通道，或在下方自定义通道名称。
+                            添加合作中的通道。
                           </p>
                         </div>
-                      ) : null}
-                      <ChannelChips
-                        options={channels.map(c => c.name)}
-                        selected={form.selectedUpstreamChannels}
-                        onChange={(v) => updateField('selectedUpstreamChannels', v)}
-                        allowCustom
-                        placeholder="搜索或自定义通道"
-                        formatLabel={(name) => {
-                          const ch = channels.find(c => c.name === name)
-                          if (!ch) return name
-                          return `${ch.name} · ${ch.supplier_name}${ch.model_type ? ` · ${ch.model_type}` : ''}`
-                        }}
-                      />
+                      ) : (
+                        <ChannelChips
+                          options={channels.map(c => c.name)}
+                          selected={form.selectedUpstreamChannels}
+                          onChange={(v) => updateField('selectedUpstreamChannels', v)}
+                          formatLabel={(name) => {
+                            const ch = channels.find(c => c.name === name)
+                            return ch?.supplier_name ? `${ch.name} · ${ch.supplier_name}` : name
+                          }}
+                        />
+                      )}
                     </FormField>
 
                     <FormField
                       label="使用模型"
                       hint={
                         modelCatalogRefreshedAt
-                          ? `来自「业务管理 → 模型管理」（上次刷新于 ${new Date(modelCatalogRefreshedAt).toLocaleString('zh-CN')}）`
+                          ? `来自模型目录（更新于 ${new Date(modelCatalogRefreshedAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}）`
                           : '来自「业务管理 → 模型管理」，选填'
                       }
                       icon={Activity}
@@ -423,23 +421,23 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
                           <p className="text-xs text-gray-500">
                             尚未配置任何模型。请先到
                             <span className="mx-1 text-accent-blue font-semibold">业务管理 → 模型管理</span>
-                            触发自动采集并审校，或在下方手动输入模型名后回车。
+                            触发自动采集。
                           </p>
                         </div>
-                      ) : null}
-                      <ChannelChips
-                        options={modelCatalog.map(m => m.name)}
-                        selected={form.selectedModels}
-                        onChange={(v) => updateField('selectedModels', v)}
-                        allowCustom
-                        placeholder="从模型目录选择，或手动输入模型名后回车"
-                        formatLabel={(name) => {
-                          const m = modelCatalog.find(x => x.name === name)
-                          if (!m) return name
-                          const tail = [m.provider, m.version_id, m.modality].filter(Boolean).join(' · ')
-                          return tail ? `${name} · ${tail}` : name
-                        }}
-                      />
+                      ) : (
+                        <SearchableSelect
+                          multiple
+                          options={(() => {
+                            const seen = new Set<string>()
+                            return modelCatalog
+                              .filter(m => { if (seen.has(m.name)) return false; seen.add(m.name); return true })
+                              .map(m => ({ id: m.name, label: m.name, sub: m.provider || undefined }))
+                          })()}
+                          value={form.selectedModels}
+                          onChange={(v) => updateField('selectedModels', v as string[])}
+                          placeholder="搜索并选择模型…"
+                        />
+                      )}
                       {suggestedModelsByChannels.length > 0 && (
                         <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                           <span className="text-[10px] text-gray-400">基于所选通道推荐：</span>

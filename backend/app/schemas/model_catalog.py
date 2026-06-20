@@ -18,6 +18,10 @@ class ModelCatalogOut(BaseModel):
     last_seen_at: Optional[datetime] = None
     reviewed_at: Optional[datetime] = None
     reviewed_by: Optional[int] = None
+    input_price: Optional[float] = None
+    output_price: Optional[float] = None
+    cache_read_price: Optional[float] = None
+    cache_write_price: Optional[float] = None
     created_at: datetime
     updated_at: datetime
 
@@ -33,6 +37,10 @@ class ModelCatalogUpdate(BaseModel):
     release_date: Optional[date] = None
     description: Optional[str] = None
     is_active: Optional[bool] = None
+    input_price: Optional[float] = None
+    output_price: Optional[float] = None
+    cache_read_price: Optional[float] = None
+    cache_write_price: Optional[float] = None
 
 
 class ModelCatalogListItem(BaseModel):
@@ -43,6 +51,10 @@ class ModelCatalogListItem(BaseModel):
     provider: Optional[str] = None
     region: str
     modality: Optional[str] = None
+    input_price: Optional[float] = None
+    output_price: Optional[float] = None
+    cache_read_price: Optional[float] = None
+    cache_write_price: Optional[float] = None
 
     model_config = ConfigDict(from_attributes=True)
 

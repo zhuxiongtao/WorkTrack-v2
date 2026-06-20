@@ -30,11 +30,11 @@ interface UserBrief { id: number; name: string; username: string; department_nam
 
 /* ──── 常量 ──── */
 const BUSINESS_TYPES = [
-  { value: 'contract', label: '合同审批' },
+  { value: 'contract',          label: '合同审批' },
   { value: 'reconcile_summary', label: '对账月结' },
-  { value: 'project', label: '项目审批' },
-  { value: 'purchase', label: '采购审批' },
-  { value: 'expense', label: '费用报销' },
+  { value: 'project',           label: '项目审批' },
+  { value: 'supplier',          label: '供应商入驻审批' },
+  { value: 'channel',           label: '通道开通审批' },
 ]
 const BUSINESS_TYPE_LABEL: Record<string, string> = Object.fromEntries(
   BUSINESS_TYPES.map(t => [t.value, t.label])
@@ -459,14 +459,13 @@ function FlowFormModal({
         </label>
       </div>
 
-      <ModalFooter>
-        <button onClick={onClose} className="px-4 py-2 text-xs text-gray-400 hover:text-white">取消</button>
-        <button onClick={handleSave} disabled={saving}
-          className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-gradient-to-r from-purple-500 to-indigo-500 rounded-lg hover:opacity-90 disabled:opacity-50">
-          {saving && <Loader2 size={12} className="animate-spin" />}
-          {flow ? '保存修改' : '创建审批流'}
-        </button>
-      </ModalFooter>
+      <ModalFooter
+        onClose={onClose}
+        onSave={handleSave}
+        saving={saving}
+        saveText={flow ? '保存修改' : '创建审批流'}
+        saveDisabled={!name.trim() || (!flow && !code.trim())}
+      />
     </Modal>
   )
 }

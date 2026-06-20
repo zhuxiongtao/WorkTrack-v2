@@ -25,7 +25,7 @@ class Contract(SQLModel, table=True):
     key_clauses: Optional[str] = None
     summary: Optional[str] = None
     raw_text: Optional[str] = None
-    status: str = "生效中"
+    status: str = "草稿"
     remarks: Optional[str] = None
 
     # ===== 阶段 1+2 新增：业务字段 =====
@@ -59,6 +59,18 @@ class Contract(SQLModel, table=True):
     parsed_at: Optional[datetime] = None
     # 字段级抽取元数据 JSON：{field: {"confidence": 0-1, "source_text": "原文引用"}}
     extraction_meta: str = ""
+
+    # ===== 合同来源与模板 =====
+    # 来源：self_made（从模板自建）/ external（对方发来的合同）
+    source: str = "external"
+    # 使用的模板 ID（仅 self_made 时有值）
+    template_id: Optional[int] = Field(default=None)
+    # 可编辑合同 HTML 正文（self_made 时保存；external 时为空）
+    content_html: Optional[str] = None
+
+    # ===== 签章归档 =====
+    signed_file_path: str = ""
+    signed_file_name: str = ""
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

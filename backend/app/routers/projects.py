@@ -131,6 +131,8 @@ def create_project(data: ProjectCreate, background_tasks: BackgroundTasks, curre
     meeting_ids = data.meeting_ids or []
     create_data = data.model_dump(exclude={"meeting_ids"})
     create_data["user_id"] = current_user.id
+    if not create_data.get("status"):
+        create_data["status"] = "待立项"
     project = Project(**create_data)
     db.add(project)
     db.commit()
@@ -238,6 +240,17 @@ def delete_project(project_id: int, background_tasks: BackgroundTasks, current_u
     from app.auth import check_data_access
     if not check_data_access(project.user_id, current_user, db):
         raise HTTPException(status_code=403, detail="无权删除该项目")
+
+    # 清除关联表中的 project_id 引用，避免 FK 约束报错
+    from sqlmodel import text as sql_text
+    db.execute(sql_text("UPDATE meetingnote SET project_id = NULL WHERE project_id = :pid"), {"pid": project_id})
+    db.execute(sql_text("UPDATE contract SET project_id = NULL WHERE project_id = :pid"), {"pid": project_id})
+    db.execute(sql_text("UPDATE reconcile_sales SET project_id = NULL WHERE project_id = :pid"), {"pid": project_id})
+    db.execute(sql_text("UPDATE reconcile_diff SET project_id = NULL WHERE project_id = :pid"), {"pid": project_id})
+    db.execute(sql_text("UPDATE model_change_customer_task SET project_id = NULL WHERE project_id = :pid"), {"pid": project_id})
+    # project_cost 属于项目本身，一并删除
+    db.execute(sql_text("DELETE FROM project_cost WHERE project_id = :pid"), {"pid": project_id})
+
     db.delete(project)
     db.commit()
     background_tasks.add_task(delete_document, "projects", str(project_id))
@@ -273,3 +286,46 @@ def get_project_meetings(project_id: int, current_user: User = Depends(require_p
         select(MeetingNote).where(MeetingNote.project_id == project_id).order_by(MeetingNote.meeting_date.desc())
     ).all()
     return meetings
+
+
+@router.post("/{project_id}/submit-approval")
+def submit_project_charter(
+    project_id: int,
+    current_user: User = Depends(require_permission("project:edit")),
+    db: Session = Depends(get_session),
+):
+    """提交项目立项申请，发起多级审批流。"""
+    from datetime import datetime, timezone
+    from app.services import approval_engine
+
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+    from app.auth import check_data_access
+    if not check_data_access(project.user_id, current_user, db):
+        raise HTTPException(status_code=403, detail="无权操作该项目")
+    if approval_engine.get_active_instance("project", project_id, db):
+        raise HTTPException(status_code=400, detail="该项目已有进行中的立项审批")
+
+    try:
+        inst = approval_engine.start_approval(
+            "project", project_id, project,
+            f"项目《{project.name}》立项申请", current_user, db,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if inst is None:
+        project.status = "进行中"
+        project.updated_at = datetime.now(timezone.utc)
+        db.add(project)
+        db.commit()
+        return {"approval_id": None, "status": project.status, "message": "无需审批，项目已直接立项"}
+
+    if inst.status == "pending":
+        project.status = "审批中"
+        project.updated_at = datetime.now(timezone.utc)
+        db.add(project)
+        db.commit()
+
+    return {"approval_id": inst.id, "status": project.status, "message": "立项申请已提交审批"}

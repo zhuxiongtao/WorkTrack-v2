@@ -30,6 +30,7 @@ from app.models.reconcile import (
 )
 from app.models.model_catalog import ModelCatalog
 from app.models.approval import ApprovalFlow, ApprovalInstance, ApprovalRecord
+from app.models.model_change import ModelChangeEvent, ModelChangeStage, ModelChangeCustomerTask
 
 __all__ = [
     "User",
@@ -80,4 +81,7 @@ __all__ = [
     "ApprovalFlow",
     "ApprovalInstance",
     "ApprovalRecord",
+    "ModelChangeEvent",
+    "ModelChangeStage",
+    "ModelChangeCustomerTask",
 ]

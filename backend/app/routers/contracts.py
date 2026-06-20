@@ -84,6 +84,10 @@ async def create_contract(
     currency: str = Form("CNY"),
     payment_terms: Optional[str] = Form(None),
     remarks: Optional[str] = Form(None),
+    # 来源：self_made（从模板创建）| external（上传对方合同）
+    source: str = Form("external"),
+    template_id: Optional[int] = Form(None),
+    content_html: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
     current_user: User = Depends(require_permission("contract:create")),
     db: Session = Depends(get_session),
@@ -98,18 +102,18 @@ async def create_contract(
     file_type = ""
     file_size = 0
 
-    if file:
+    if file and file.filename:
         _validate_file_extension(file.filename)
         ext = _get_file_type(file.filename)
         unique_name = f"{uuid.uuid4().hex}{ext}"
         save_path = os.path.join(UPLOAD_DIR, unique_name)
-        content = await file.read()
-        with open(save_path, "wb") as f:
-            f.write(content)
+        raw_content = await file.read()
+        with open(save_path, "wb") as fh:
+            fh.write(raw_content)
         file_path = save_path
         file_name = file.filename or ""
         file_type = ext
-        file_size = len(content)
+        file_size = len(raw_content)
 
     contract = Contract(
         user_id=current_user.id,
@@ -130,7 +134,9 @@ async def create_contract(
         file_name=file_name,
         file_type=file_type,
         file_size=file_size,
-        # 阶段 1+2：有文件就立刻挂上「解析中」状态，前端可轮询
+        source=source,
+        template_id=template_id,
+        content_html=content_html,
         parse_status="parsing" if file_path else "pending",
         parse_error="",
     )
@@ -330,6 +336,35 @@ def submit_contract_approval(
     return {"approval_id": inst.id, "status": contract.status, "message": "已提交审批"}
 
 
+@router.post("/{contract_id}/revoke-approval")
+def revoke_contract_approval(
+    contract_id: int,
+    current_user: User = Depends(require_permission("contract:edit")),
+    db: Session = Depends(get_session),
+):
+    """撤回进行中的合同审批，合同状态恢复为草稿可重新编辑。"""
+    from app.services import approval_engine
+
+    contract = db.get(Contract, contract_id)
+    if not contract:
+        raise HTTPException(status_code=404, detail="合同不存在")
+    if not check_data_access(contract.user_id, current_user, db):
+        raise HTTPException(status_code=403, detail="无权操作该合同")
+
+    inst = approval_engine.get_active_instance("contract", contract_id, db)
+    if not inst:
+        raise HTTPException(status_code=400, detail="该合同没有进行中的审批")
+
+    try:
+        approval_engine.cancel(inst, current_user, db)
+    except (ValueError, PermissionError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    db.refresh(contract)
+    write_log("info", "contract", f"合同 #{contract_id} 审批已撤回", db=db)
+    return {"status": contract.status, "message": "审批已撤回，合同可重新编辑"}
+
+
 @router.get("/{contract_id}/file")
 def download_contract_file(contract_id: int, preview: bool = Query(False), convert: Optional[str] = Query(None, description="convert=pdf 把 DOC/DOCX 转 PDF"), current_user: User = Depends(require_permission("contract:read")), db: Session = Depends(get_session)):
     from fastapi.responses import FileResponse
@@ -504,3 +539,75 @@ def _validate_file_extension(filename: str):
     ext = _get_file_type(filename)
     if ext not in ALLOWED:
         raise HTTPException(status_code=400, detail=f"不支持的文件类型: {ext}，仅支持 PDF/DOC/DOCX")
+
+
+SIGNED_DIR = os.path.join(os.path.dirname(UPLOAD_DIR), "signed_contracts")
+os.makedirs(SIGNED_DIR, exist_ok=True)
+
+
+@router.post("/{contract_id}/upload-signed", response_model=ContractOut)
+async def upload_signed_contract(
+    contract_id: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_permission("contract:edit")),
+    db: Session = Depends(get_session),
+):
+    """上传签章后的扫描版合同作为留底"""
+    contract = db.get(Contract, contract_id)
+    if not contract:
+        raise HTTPException(status_code=404, detail="合同不存在")
+    if not check_data_access(contract.user_id, current_user, db):
+        raise HTTPException(status_code=403, detail="无权操作该合同")
+
+    ALLOWED_SIGNED = {".pdf", ".jpg", ".jpeg", ".png"}
+    ext = _get_file_type(file.filename or "")
+    if ext not in ALLOWED_SIGNED:
+        raise HTTPException(status_code=400, detail="签章版仅支持 PDF/JPG/PNG 格式")
+
+    # 删除旧签章文件
+    if contract.signed_file_path and os.path.exists(contract.signed_file_path):
+        try:
+            os.remove(contract.signed_file_path)
+        except Exception:
+            pass
+
+    unique_name = f"signed_{uuid.uuid4().hex}{ext}"
+    save_path = os.path.join(SIGNED_DIR, unique_name)
+    raw_content = await file.read()
+    with open(save_path, "wb") as fh:
+        fh.write(raw_content)
+
+    from app.utils.time import utc_now
+    contract.signed_file_path = save_path
+    contract.signed_file_name = file.filename or unique_name
+    contract.updated_at = utc_now()
+    db.add(contract)
+    db.commit()
+    db.refresh(contract)
+    return contract
+
+
+@router.get("/{contract_id}/signed-file")
+def download_signed_file(
+    contract_id: int,
+    current_user: User = Depends(require_permission("contract:read")),
+    db: Session = Depends(get_session),
+):
+    """下载签章归档文件"""
+    from fastapi.responses import FileResponse
+    from urllib.parse import quote
+    contract = db.get(Contract, contract_id)
+    if not contract or not check_data_access(contract.user_id, current_user, db):
+        raise HTTPException(status_code=404, detail="合同不存在")
+    if not contract.signed_file_path or not os.path.exists(contract.signed_file_path):
+        raise HTTPException(status_code=404, detail="签章文件不存在")
+
+    ext = _get_file_type(contract.signed_file_name or "")
+    media_map = {".pdf": "application/pdf", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"}
+    media_type = media_map.get(ext, "application/octet-stream")
+    encoded = quote(contract.signed_file_name or "signed", safe="")
+    return FileResponse(
+        contract.signed_file_path,
+        media_type=media_type,
+        headers={"Content-Disposition": f"inline; filename=\"signed\"; filename*=UTF-8''{encoded}"},
+    )

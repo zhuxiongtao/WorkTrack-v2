@@ -38,6 +38,9 @@ html {
   --bg-hover-secondary: #141523;
   --border: #1E2040;
   --accent-blue: #818CF8;
+  --text-primary: #E5E7EB;
+  --text-secondary: #9CA3AF;
+  --text-muted: #6B7280;
 }
 
 /* ===== 浅色模式 —— Void Indigo 薰衣草白基底 ===== */
@@ -50,6 +53,9 @@ html {
   --bg-hover-secondary: #E8EAFB;
   --border: #E2E4F3;
   --accent-blue: #6366F1;
+  --text-primary: #111827;
+  --text-secondary: #4B5563;
+  --text-muted: #9CA3AF;
 }
 
 /* ===== 浅色模式 - 强制反色 Tailwind dark: 变体（兜底保障） ===== */
@@ -94,6 +100,27 @@ html {
 [data-theme="light"] .bg-indigo-500 *,
 [data-theme="light"] .from-\[\#3B82F6\].to-\[\#8B5CF6\],
 [data-theme="light"] .from-\[\#3B82F6\].to-\[\#8B5CF6\] *,
+/* 渐变按钮/图标容器补充 — from-X.to-Y 组合背景仍属彩色，子文字/图标应保持白色 */
+[data-theme="light"] .from-purple-500.to-indigo-500,
+[data-theme="light"] .from-purple-500.to-indigo-500 *,
+[data-theme="light"] .from-emerald-500.to-teal-500,
+[data-theme="light"] .from-emerald-500.to-teal-500 *,
+[data-theme="light"] .from-emerald-500.to-green-500,
+[data-theme="light"] .from-emerald-500.to-green-500 *,
+[data-theme="light"] .from-rose-500.to-red-500,
+[data-theme="light"] .from-rose-500.to-red-500 *,
+[data-theme="light"] .from-orange-500.to-yellow-500,
+[data-theme="light"] .from-orange-500.to-yellow-500 *,
+[data-theme="light"] .from-cyan-500.to-blue-500,
+[data-theme="light"] .from-cyan-500.to-blue-500 *,
+[data-theme="light"] .from-blue-500.to-cyan-400,
+[data-theme="light"] .from-blue-500.to-cyan-400 *,
+[data-theme="light"] .from-orange-500.to-amber-400,
+[data-theme="light"] .from-orange-500.to-amber-400 *,
+[data-theme="light"] .from-amber-500.to-orange-400,
+[data-theme="light"] .from-amber-500.to-orange-400 *,
+[data-theme="light"] .bg-blue-600,
+[data-theme="light"] .bg-blue-600 *,
 [data-theme="light"] .text-white-force {
   color: #ffffff !important;
 }
@@ -141,6 +168,56 @@ html {
 [data-theme="light"] .hover\:text-white:hover { color: #0C0D1E !important; }
 [data-theme="light"] .hover\:text-gray-200:hover { color: #1A1B2E !important; }
 [data-theme="light"] .hover\:text-gray-300:hover { color: #374151 !important; }
+
+/* ===== 管理后台 Shell — 始终强制深色外观 =====
+   原理：.admin-dark-shell 内的选择器比 [data-theme="light"] 裸选择器多一个 class，
+   优先级更高，覆盖浅色模式对 text-white / text-gray-* 的强制反转。
+   同时重声明 CSS 变量，让 bg-bg-* / border 等工具类也使用深色值。
+   ================================================================== */
+.admin-dark-shell {
+  --bg-primary:          #09090F;
+  --bg-card:             #111118;
+  --bg-input:            #0D0D16;
+  --bg-sidebar:          #0B0B12;
+  --bg-hover:            #1A1B2C;
+  --bg-hover-secondary:  #141523;
+  --border:              #1E2040;
+  --accent-blue:         #818CF8;
+}
+
+/* 文字颜色：裸 text-* 类 */
+[data-theme="light"] .admin-dark-shell .text-white       { color: #FFFFFF !important; }
+[data-theme="light"] .admin-dark-shell .text-gray-100    { color: #F3F4F6 !important; }
+[data-theme="light"] .admin-dark-shell .text-gray-200    { color: #E5E7EB !important; }
+[data-theme="light"] .admin-dark-shell .text-gray-300    { color: #D1D5DB !important; }
+[data-theme="light"] .admin-dark-shell .text-gray-400    { color: #9CA3AF !important; }
+[data-theme="light"] .admin-dark-shell .text-gray-500    { color: #6B7280 !important; }
+[data-theme="light"] .admin-dark-shell .text-gray-600    { color: #4B5563 !important; }
+[data-theme="light"] .admin-dark-shell .text-gray-900    { color: #F9FAFB !important; }
+
+/* 文字颜色：dark: 前缀类 */
+[data-theme="light"] .admin-dark-shell .dark\:text-white      { color: #FFFFFF !important; }
+[data-theme="light"] .admin-dark-shell .dark\:text-gray-100   { color: #F3F4F6 !important; }
+[data-theme="light"] .admin-dark-shell .dark\:text-gray-200   { color: #E5E7EB !important; }
+[data-theme="light"] .admin-dark-shell .dark\:text-gray-300   { color: #D1D5DB !important; }
+[data-theme="light"] .admin-dark-shell .dark\:text-gray-400   { color: #9CA3AF !important; }
+[data-theme="light"] .admin-dark-shell .dark\:text-gray-500   { color: #6B7280 !important; }
+[data-theme="light"] .admin-dark-shell .dark\:text-gray-600   { color: #4B5563 !important; }
+
+/* hover 文字 */
+[data-theme="light"] .admin-dark-shell .hover\:text-white:hover        { color: #FFFFFF !important; }
+[data-theme="light"] .admin-dark-shell .hover\:text-gray-200:hover     { color: #E5E7EB !important; }
+[data-theme="light"] .admin-dark-shell .hover\:text-gray-300:hover     { color: #D1D5DB !important; }
+[data-theme="light"] .admin-dark-shell .dark\:hover\:text-white:hover  { color: #FFFFFF !important; }
+[data-theme="light"] .admin-dark-shell .dark\:hover\:text-gray-200:hover { color: #E5E7EB !important; }
+[data-theme="light"] .admin-dark-shell .dark\:hover\:text-gray-300:hover { color: #D1D5DB !important; }
+
+/* 半透明背景：浅色模式把 bg-black/20 → rgba(0,0,0,0.04)，管理后台恢复原值 */
+[data-theme="light"] .admin-dark-shell .bg-black\/20 { background-color: rgba(0,0,0,0.20) !important; }
+
+/* 浅色模式对 placeholder 的影响也需要恢复 */
+[data-theme="light"] .admin-dark-shell .placeholder-gray-500::placeholder { color: #6B7280 !important; }
+[data-theme="light"] .admin-dark-shell .placeholder-gray-600::placeholder { color: #4B5563 !important; }
 
 [data-theme="light"] .border-theme { border-color: var(--border) !important; }
 
@@ -417,3 +494,9 @@ body {
   color: rgb(238, 240, 250);
 }
 :root[data-theme="dark"] .form-input::placeholder { color: rgb(100, 103, 140); }
+
+/* ===== 全频道公告横幅：横向无缝滚动 ===== */
+@keyframes globalTicker {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}

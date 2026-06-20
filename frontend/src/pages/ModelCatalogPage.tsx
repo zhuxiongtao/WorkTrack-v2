@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { PageHeader, SectionHeader, StatusBadge, IconBox, EmptyState } from '../components/design-system'
-import { Cpu, RefreshCw, Globe, Zap, Check, X, Edit3, ExternalLink, Calendar, Sparkles, Loader2, AlertCircle } from 'lucide-react'
+import { Cpu, RefreshCw, Globe, Zap, Check, X, Edit3, ExternalLink, Calendar, Sparkles, Loader2, AlertCircle, DollarSign } from 'lucide-react'
 
 interface ModelCatalogItem {
   id: number
@@ -18,8 +18,18 @@ interface ModelCatalogItem {
   last_seen_at: string | null
   reviewed_at: string | null
   reviewed_by: number | null
+  // 官网公开定价（USD/1M tokens，手动维护）
+  input_price: number | null
+  output_price: number | null
+  cache_read_price: number | null
+  cache_write_price: number | null
   created_at: string
   updated_at: string
+}
+
+function fmtP(v: number | null | undefined) {
+  if (v == null) return null
+  return `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`
 }
 
 interface RefreshStatus {
@@ -425,6 +435,48 @@ export default function ModelCatalogPage() {
                             </p>
                           )
                         )}
+                        {/* 官网定价（USD/1M tokens） */}
+                        {isEditing ? (
+                          <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-2">
+                            {[
+                              { key: 'input_price' as const, label: '输入价 $/1M' },
+                              { key: 'output_price' as const, label: '输出价 $/1M' },
+                              { key: 'cache_read_price' as const, label: '缓存读 $/1M' },
+                              { key: 'cache_write_price' as const, label: '缓存写 $/1M' },
+                            ].map(({ key, label }) => (
+                              <div key={key}>
+                                <div className="text-[10px] text-gray-500 mb-0.5">{label}</div>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={editDraft[key] ?? ''}
+                                  onChange={e => setEditDraft({ ...editDraft, [key]: e.target.value === '' ? null : parseFloat(e.target.value) })}
+                                  placeholder="—"
+                                  className="w-full px-1.5 py-0.5 text-xs rounded bg-bg-input border border-border outline-none"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        ) : (item.input_price != null || item.output_price != null || item.cache_read_price != null || item.cache_write_price != null) ? (
+                          <div className="mt-1.5 flex items-center gap-3 flex-wrap text-[11px]">
+                            <span className="flex items-center gap-0.5 text-gray-500">
+                              <DollarSign size={10} />官网定价:
+                            </span>
+                            {item.input_price != null && (
+                              <span className="text-emerald-500 font-mono font-semibold">输入 {fmtP(item.input_price)}/1M</span>
+                            )}
+                            {item.output_price != null && (
+                              <span className="text-orange-500 font-mono font-semibold">输出 {fmtP(item.output_price)}/1M</span>
+                            )}
+                            {item.cache_read_price != null && (
+                              <span className="text-blue-400 font-mono">缓存读 {fmtP(item.cache_read_price)}/1M</span>
+                            )}
+                            {item.cache_write_price != null && (
+                              <span className="text-violet-400 font-mono">缓存写 {fmtP(item.cache_write_price)}/1M</span>
+                            )}
+                          </div>
+                        ) : null}
                         {item.source_url && !isEditing && (
                           <a
                             href={item.source_url}

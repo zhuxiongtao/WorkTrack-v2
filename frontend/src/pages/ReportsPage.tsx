@@ -1,16 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Plus, X, Trash2, Loader2, Sparkles, ChevronDown, ChevronRight, Upload, Mic, MicOff, Maximize2, Minimize2, Send, FileText, List, LayoutGrid } from 'lucide-react'
+import { Plus, X, Trash2, Loader2, ChevronDown, ChevronRight, Upload, Mic, MicOff, Maximize2, Minimize2, Send, FileText, List, LayoutGrid } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useUnsavedGuard } from '../hooks/useUnsavedGuard'
-import MarkdownRenderer, { stripMarkdown } from '../components/MarkdownRenderer'
+import MarkdownRenderer from '../components/MarkdownRenderer'
 import FileUpload from '../components/FileUpload'
 import RichTextEditor from '../components/RichTextEditor'
-import TeamViewSwitcher from '../components/TeamViewSwitcher'
 import { PageHeader, EmptyState } from '../components/design-system'
 
 interface ReportCard {
-  id: number; date: string; title: string; snippet: string; ai_summary: string; has_summary: boolean; status?: string
+  id: number; date: string; title: string; snippet: string; status?: string
 }
 
 interface WeekGroup {
@@ -26,7 +25,7 @@ interface YearGroup {
 }
 
 interface ReportDetail {
-  id: number; user_id: number; report_date: string; content_md: string; ai_summary: string | null
+  id: number; user_id: number; report_date: string; content_md: string
   files_json?: string | null
   status: string
 }
@@ -48,10 +47,6 @@ export default function ReportsPage() {
     try { localStorage.setItem('worktrack_reports_layout', mode) } catch { /* noop */ }
   }
   
-  // 成员筛选（主管、Boss审查下属汇报）+ 团队视图
-  const [memberList, setMemberList] = useState<any[]>([])
-  const [viewMode, setViewMode] = useState<'personal' | 'team'>('personal')
-  const [selectedUserIds, setSelectedUserIds] = useState<number[]>([])
   const [editingReport, setEditingReport] = useState<ReportDetail | null>(null)
   const [formContent, setFormContent] = useState('')
   const [formDate, setFormDate] = useState('')
@@ -61,7 +56,6 @@ export default function ReportsPage() {
   const isDirty = showForm && JSON.stringify({ c: formContent, d: formDate, f: formFiles }) !== formInitial
   const { requestClose, Dialog: UnsavedDialog } = useUnsavedGuard(isDirty)
   const [saving, setSaving] = useState(false)
-  const [aiLoading, setAiLoading] = useState<number | null>(null)
   const [isMaximized, setIsMaximized] = useState(false)
   // 文件上传
   const [uploading, setUploading] = useState(false)
@@ -176,13 +170,7 @@ export default function ReportsPage() {
 
   const loadReports = useCallback(() => {
     setLoading(true)
-    let url = '/api/v1/reports/grouped'
-    if (viewMode === 'team' && selectedUserIds.length > 0) {
-      url += `?user_ids=${selectedUserIds.join(',')}`
-    } else if (viewMode === 'team') {
-      url += '?user_ids=' + memberList.map((m: any) => m.id).join(',')
-    }
-    fetch(url)
+    fetch('/api/v1/reports/grouped')
       .then((res) => res.json())
       .then((data) => {
         setGrouped(data.grouped || [])
@@ -197,17 +185,9 @@ export default function ReportsPage() {
         }
       })
       .catch(() => setLoading(false))
-  }, [selectedUserIds, viewMode, memberList])
+  }, [])
 
   useEffect(() => { loadReports() }, [loadReports])
-
-  useEffect(() => {
-    // 预拉取员工简易列表
-    fetch('/api/v1/users/simple')
-      .then(r => r.json())
-      .then(d => { if (Array.isArray(d)) setMemberList(d) })
-      .catch(() => {})
-  }, [])
 
   const openDetail = async (id: number) => {
     setModalLoading(true)
@@ -287,15 +267,6 @@ export default function ReportsPage() {
     showToast('日报已删除', 'success')
   }
 
-  const handleAiSummarize = async (id: number) => {
-    setAiLoading(id)
-    try {
-      await fetch(`/api/v1/reports/${id}/ai-summarize`, { method: 'POST' })
-      loadReports()
-      if (modalDetail?.id === id) openDetail(id)
-    } finally { setAiLoading(null) }
-  }
-
   const toggleYear = (year: number) => {
     setExpandedYears((prev) => {
       const next = new Set(prev)
@@ -331,13 +302,6 @@ export default function ReportsPage() {
                 <LayoutGrid size={15} strokeWidth={2.2} />
               </button>
             </div>
-            <TeamViewSwitcher
-              memberList={memberList}
-              viewMode={viewMode}
-              onViewModeChange={setViewMode}
-              selectedUserIds={selectedUserIds}
-              onSelectedUserIdsChange={setSelectedUserIds}
-            />
             {hasPermission('report:create') && (
               <button onClick={openCreate} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-accent-blue text-[#fff] text-xs font-bold hover:bg-accent-blue/85 hover:shadow-lg hover:shadow-accent-blue/30 transition-all cursor-pointer shrink-0">
                 <Plus size={14} strokeWidth={2.5} /><span>写日报</span>
@@ -412,13 +376,10 @@ export default function ReportsPage() {
                                         <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/10 text-emerald-500 font-bold border border-emerald-500/15">已提交</span>
                                       )}
                                     </div>
-                                    {r.has_summary && <Sparkles size={10} className="text-[#8B5CF6]" />}
                                   </div>
-                                  {r.ai_summary ? (
-                                    <p className="text-[11px] text-gray-400 dark:text-gray-300 line-clamp-3 leading-relaxed flex-1">{stripMarkdown(r.ai_summary)}</p>
-                                  ) : (
-                                    <p className="text-[11px] text-gray-500 line-clamp-3 leading-relaxed flex-1 italic">点击查看详情</p>
-                                  )}
+                                  <p className="text-[11px] text-gray-400 dark:text-gray-300 line-clamp-3 leading-relaxed flex-1">
+                                    {r.snippet || r.title || '点击查看详情'}
+                                  </p>
                                 </div>
                               </button>
                             )
@@ -439,10 +400,9 @@ export default function ReportsPage() {
                                   <span className="text-[9px] text-gray-500 mt-0.5">{WEEKDAY_NAMES[d.getDay()]}</span>
                                 </div>
                                 <span className="w-px self-stretch bg-border/60 shrink-0" />
-                                <p className={`flex-1 min-w-0 text-xs leading-relaxed line-clamp-1 ${r.ai_summary ? 'text-gray-400 dark:text-gray-300' : 'text-gray-500 italic'}`}>
-                                  {r.ai_summary ? stripMarkdown(r.ai_summary) : '点击查看详情'}
+                                <p className="flex-1 min-w-0 text-xs leading-relaxed line-clamp-1 text-gray-400 dark:text-gray-300">
+                                  {r.snippet || r.title || '点击查看详情'}
                                 </p>
-                                {r.has_summary && <Sparkles size={11} className="text-[#8B5CF6] shrink-0" />}
                                 {r.status === 'draft' ? (
                                   <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 font-bold border border-amber-500/15 shrink-0">草稿</span>
                                 ) : (
@@ -498,10 +458,6 @@ export default function ReportsPage() {
                     <Send size={11} /> 提交上级
                   </button>
                 )}
-                <button onClick={() => handleAiSummarize(modalDetail.id)} disabled={aiLoading === modalDetail.id}
-                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-bg-hover text-gray-300 hover:text-[#8B5CF6] hover:bg-border transition-colors disabled:opacity-50 border border-border">
-                  {aiLoading === modalDetail.id ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}AI 整理
-                </button>
                 {/* 已提交的日报仅管理员可编辑/删除；草稿状态本人或有权限的用户可操作 */}
                 {modalDetail.status === 'submitted' ? (
                   currentUser?.is_admin && (
@@ -555,12 +511,6 @@ export default function ReportsPage() {
                       )
                     } catch { return null }
                   })()}
-                  {modalDetail.ai_summary && (
-                    <div className="mt-6 p-5 rounded-xl bg-gradient-to-br from-bg-hover to-bg-card border border-border">
-                      <p className="text-xs text-gray-500 mb-2 flex items-center gap-2"><Sparkles size={13} className="text-[#8B5CF6]" />AI 摘要</p>
-                      <div className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed"><MarkdownRenderer content={modalDetail.ai_summary} /></div>
-                    </div>
-                  )}
                 </>
               )}
             </div>

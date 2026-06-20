@@ -428,6 +428,42 @@ APPROVAL_FLOW_DEFS = [
             {"name": "总经理锁定", "approver_type": "role", "approver_value": "boss", "order": 2},
         ],
     },
+    {
+        "code": "supplier_approval",
+        "name": "供应商新增审批",
+        "business_type": "supplier",
+        "is_system": True,
+        "trigger_condition": None,
+        "description": "新增供应商需经法务审核后由总经理批准，审批通过后供应商正式生效",
+        "nodes": [
+            {"name": "法务审核", "approver_type": "role", "approver_value": "legal", "order": 1},
+            {"name": "总经理批准", "approver_type": "role", "approver_value": "boss", "order": 2},
+        ],
+    },
+    {
+        "code": "channel_price_change",
+        "name": "通道价格变更审批",
+        "business_type": "channel",
+        "is_system": True,
+        "trigger_condition": None,
+        "description": "通道成本价格变更需经负责人审批确认后方可生效",
+        "nodes": [
+            {"name": "负责人审批", "approver_type": "role", "approver_value": "boss", "order": 1},
+        ],
+    },
+    {
+        "code": "project_charter",
+        "name": "项目立项审批",
+        "business_type": "project",
+        "is_system": True,
+        "trigger_condition": None,
+        "description": "销售提交立项申请后，依次经销售部门主管、商务审核、老板批准，通过后项目正式立项",
+        "nodes": [
+            {"name": "部门主管审批", "approver_type": "dept_manager", "approver_value": "", "order": 1},
+            {"name": "商务审核", "approver_type": "role", "approver_value": "business", "order": 2},
+            {"name": "老板批准", "approver_type": "role", "approver_value": "boss", "order": 3},
+        ],
+    },
 ]
 
 

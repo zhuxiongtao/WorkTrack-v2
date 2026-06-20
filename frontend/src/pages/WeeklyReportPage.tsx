@@ -3,9 +3,8 @@ import { Loader2, Calendar, ChevronDown, ChevronRight, FileText, Sparkles, X, Ed
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useUnsavedGuard } from '../hooks/useUnsavedGuard'
-import MarkdownRenderer, { stripMarkdown } from '../components/MarkdownRenderer'
+import MarkdownRenderer from '../components/MarkdownRenderer'
 import RichTextEditor from '../components/RichTextEditor'
-import TeamViewSwitcher from '../components/TeamViewSwitcher'
 import { PageHeader, EmptyState } from '../components/design-system'
 
 interface ReportItem {
@@ -39,19 +38,6 @@ export default function WeeklyReportPage() {
   const [weeks, setWeeks] = useState<WeekData[]>([])
   const [totalWeeks, setTotalWeeks] = useState(0)
   const [loading, setLoading] = useState(true)
-
-  // 团队视图
-  const [memberList, setMemberList] = useState<any[]>([])
-  const [viewMode, setViewMode] = useState<'personal' | 'team'>('personal')
-  const [selectedUserIds, setSelectedUserIds] = useState<number[]>([])
-
-  // 加载成员列表
-  useEffect(() => {
-    fetch('/api/v1/users/simple')
-      .then(r => r.json())
-      .then(d => { if (Array.isArray(d)) setMemberList(d) })
-      .catch(() => {})
-  }, [])
 
   const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set())
   const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set())
@@ -105,13 +91,7 @@ export default function WeeklyReportPage() {
 
   const loadWeeks = useCallback(() => {
     setLoading(true)
-    let url = '/api/v1/reports/weekly'
-    if (viewMode === 'team' && selectedUserIds.length > 0) {
-      url += `?user_ids=${selectedUserIds.join(',')}`
-    } else if (viewMode === 'team') {
-      url += '?user_ids=' + memberList.map((m: any) => m.id).join(',')
-    }
-    fetch(url)
+    fetch('/api/v1/reports/weekly')
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
         return r.json()
@@ -122,7 +102,7 @@ export default function WeeklyReportPage() {
       })
       .catch((e) => { console.error('加载周报失败:', e) })
       .finally(() => setLoading(false))
-  }, [viewMode, selectedUserIds, memberList])
+  }, [])
 
   useEffect(() => { loadWeeks() }, [loadWeeks])
 
@@ -211,15 +191,6 @@ export default function WeeklyReportPage() {
         description="按周自动聚合日报，AI 一键总结每周成果"
         tone="purple"
         stats={[{ label: '周记录', value: totalWeeks }]}
-        right={
-          <TeamViewSwitcher
-            memberList={memberList}
-            viewMode={viewMode}
-            onViewModeChange={setViewMode}
-            selectedUserIds={selectedUserIds}
-            onSelectedUserIdsChange={setSelectedUserIds}
-          />
-        }
       />
 
       {loading ? (
@@ -485,13 +456,10 @@ export default function WeeklyReportPage() {
                                   <span className="text-xs text-gray-400 flex-shrink-0">
                                     {d.getMonth() + 1}/{d.getDate()} {WEEKDAY_NAMES[d.getDay()]}
                                   </span>
-                                  {r.has_summary && <Sparkles size={11} className="text-[#8B5CF6] flex-shrink-0" />}
                                 </div>
-                                {r.ai_summary ? (
-                                  <p className="text-xs text-gray-300 line-clamp-2 leading-relaxed">{stripMarkdown(r.ai_summary)}</p>
-                                ) : (
-                                  <p className="text-xs text-gray-600 italic">暂无 AI 摘要，点击查看详情</p>
-                                )}
+                                <p className="text-xs text-gray-400 line-clamp-2 leading-relaxed">
+                                  {r.snippet || r.title || '点击查看详情'}
+                                </p>
                               </div>
                             </button>
                           )

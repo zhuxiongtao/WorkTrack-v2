@@ -520,3 +520,146 @@ def get_ai_insights(
     except Exception as e:
         logger.error("获取 AI 洞察失败: %s", e)
         return {"insights": [], "period": period, "sources": sources, "updated_at": None}
+
+
+@router.get("/overview")
+def get_overview(
+    current_user: User = Depends(require_permission("dashboard:read")),
+    db: Session = Depends(get_session),
+):
+    """业务总览：一次请求返回所有模块关键指标 + 审批待办 + 个人统计"""
+    from app.models.contract import Contract
+    from app.models.supplier import Supplier
+    from app.models.channel import Channel
+    from app.models.model_change import ModelChangeEvent, ModelChangeStage
+    from app.models.approval import ApprovalInstance
+    from app.services import approval_engine
+
+    today = date.today()
+    month_start = today.replace(day=1)
+
+    # ── 审批待办 ──────────────────────────────────────────────────
+    pending_for_me = approval_engine.get_pending_for_user(current_user, db)
+    my_pending = db.exec(
+        select(ApprovalInstance).where(
+            ApprovalInstance.submitted_by == current_user.id,
+            ApprovalInstance.status == "pending",
+        )
+    ).all()
+
+    # ── 合同 ──────────────────────────────────────────────────────
+    contracts = db.exec(select(Contract)).all()
+    contract_status: dict[str, int] = {}
+    for c in contracts:
+        contract_status[c.status] = contract_status.get(c.status, 0) + 1
+    expiring_soon = sum(
+        1 for c in contracts
+        if c.end_date and 0 <= (c.end_date - today).days <= 30 and c.status == "生效中"
+    )
+    total_active_amount = sum(c.contract_amount or 0 for c in contracts if c.status == "生效中")
+
+    # ── 项目 ──────────────────────────────────────────────────────
+    projects = db.exec(select(Project)).all()
+    project_status: dict[str, int] = {}
+    for p in projects:
+        project_status[p.status or "未知"] = project_status.get(p.status or "未知", 0) + 1
+
+    # ── 客户 ──────────────────────────────────────────────────────
+    total_customers = db.exec(select(func.count(Customer.id))).one() or 0
+    new_customers_month = db.exec(
+        select(func.count(Customer.id)).where(Customer.created_at >= month_start)
+    ).one() or 0
+
+    # ── 供应商 ────────────────────────────────────────────────────
+    supplier_status: dict[str, int] = {}
+    for s in db.exec(select(Supplier)).all():
+        supplier_status[s.status] = supplier_status.get(s.status, 0) + 1
+
+    # ── 通道 ──────────────────────────────────────────────────────
+    channel_status: dict[str, int] = {}
+    for c in db.exec(select(Channel)).all():
+        channel_status[c.status] = channel_status.get(c.status, 0) + 1
+
+    # ── 模型变更（进行中） ─────────────────────────────────────────
+    active_events = db.exec(
+        select(ModelChangeEvent)
+        .where(ModelChangeEvent.status == "active")
+        .order_by(ModelChangeEvent.id.desc())
+        .limit(5)
+    ).all()
+    events_out = []
+    for e in active_events:
+        stages = db.exec(
+            select(ModelChangeStage)
+            .where(ModelChangeStage.event_id == e.id)
+            .order_by(ModelChangeStage.order)
+        ).all()
+        cur = next((s for s in stages if s.status in ("in_progress", "awaiting_approval")), None)
+        events_out.append({
+            "id": e.id,
+            "title": e.title,
+            "risk_level": e.risk_level,
+            "effective_date": e.effective_date.isoformat() if e.effective_date else None,
+            "current_stage_name": cur.name if cur else None,
+            "current_stage_order": cur.order if cur else None,
+            "current_stage_status": cur.status if cur else None,
+        })
+
+    # ── 个人：日报连续 + 本月会议 ─────────────────────────────────
+    recent_reports = db.exec(
+        select(DailyReport.report_date).where(
+            DailyReport.user_id == current_user.id,
+            DailyReport.report_date >= today - timedelta(days=60),
+        )
+    ).all()
+    report_set = {(_to_date(d)) for d in recent_reports}
+    streak = 0
+    for delta in range(60):
+        d = today - timedelta(days=delta)
+        if d.weekday() >= 5:
+            continue
+        if d in report_set:
+            streak += 1
+        else:
+            break
+
+    meetings_month = db.exec(
+        select(func.count(MeetingNote.id)).where(
+            MeetingNote.user_id == current_user.id,
+            MeetingNote.meeting_date >= month_start,
+        )
+    ).one() or 0
+
+    return {
+        "approvals": {
+            "pending_for_me": len(pending_for_me),
+            "my_pending_submissions": len(my_pending),
+        },
+        "contracts": {
+            "total": len(contracts),
+            "status": contract_status,
+            "expiring_soon": expiring_soon,
+            "total_active_amount": round(total_active_amount, 2),
+        },
+        "projects": {
+            "total": len(projects),
+            "status": project_status,
+        },
+        "customers": {
+            "total": total_customers,
+            "new_this_month": new_customers_month,
+        },
+        "suppliers": {
+            "total": sum(supplier_status.values()),
+            "active": supplier_status.get("合作中", 0),
+        },
+        "channels": {
+            "total": sum(channel_status.values()),
+            "active": channel_status.get("合作中", 0),
+        },
+        "model_changes": events_out,
+        "personal": {
+            "report_streak": streak,
+            "meetings_this_month": meetings_month,
+        },
+    }

@@ -3,9 +3,10 @@ import {
   Building2, Plus, X, Edit3, Trash2, Loader2, Search,
   DollarSign, Briefcase, Globe, Phone, Mail,
   ChevronRight, BarChart3, Key, Cpu, FileText, AlertTriangle,
-  ExternalLink, Network,
+  ExternalLink, Network, GitBranch,
 } from 'lucide-react'
 import { PageHeader, IconBox, EmptyState, Modal, ModalFooter, SectionLabel, Field } from '../components/design-system'
+import { ApprovalTimeline } from '../components/approval/ApprovalTimeline'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
@@ -86,6 +87,9 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   '合作中': { bg: '#10B98115', text: '#34D399' },
   '暂停': { bg: '#F59E0B15', text: '#FBBF24' },
   '已终止': { bg: '#EF444415', text: '#F87171' },
+  '待审批': { bg: '#F59E0B15', text: '#FBBF24' },
+  '已拒绝': { bg: '#EF444415', text: '#F87171' },
+  '待确认': { bg: '#8B5CF615', text: '#A78BFA' },
 }
 
 const CURRENCY_META: Record<string, { symbol: string; name: string }> = {
@@ -144,6 +148,8 @@ export default function SuppliersPage() {
   const [supplierChannels, setSupplierChannels] = useState<Channel[]>([])
   const [detailTab, setDetailTab] = useState<'info' | 'projects' | 'channels'>('info')
   const [detailLoading, setDetailLoading] = useState(false)
+
+  const [submittingApproval, setSubmittingApproval] = useState(false)
 
   // 新增/编辑弹窗
   const [showForm, setShowForm] = useState(false)
@@ -292,6 +298,17 @@ export default function SuppliersPage() {
       const err = await res.json().catch(() => ({}))
       showToast(err.detail || '删除失败', 'error')
     }
+  }
+
+  const handleSubmitApproval = async (supplier: Supplier) => {
+    setSubmittingApproval(true)
+    try {
+      const res = await fetch(`/api/v1/suppliers/${supplier.id}/submit-approval`, { method: 'POST' })
+      if (!res.ok) { const e = await res.json(); showToast(e.detail || '提交失败', 'error'); return }
+      showToast('已提交审批', 'success')
+      loadSummaries()
+      if (selectedId) loadSupplierDetail(selectedId)
+    } catch { showToast('提交失败', 'error') } finally { setSubmittingApproval(false) }
   }
 
   // 筛选
@@ -517,6 +534,16 @@ export default function SuppliersPage() {
                   </div>
                   {hasPermission('project:edit') && (
                     <div className="flex items-center gap-1">
+                      {selectedDetail.status === '待审批' && (
+                        <button
+                          onClick={() => handleSubmitApproval(selectedDetail)}
+                          disabled={submittingApproval}
+                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-amber-400 border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 disabled:opacity-50 transition-colors"
+                        >
+                          {submittingApproval ? <Loader2 size={11} className="animate-spin" /> : <GitBranch size={11} />}
+                          提交审批
+                        </button>
+                      )}
                       <button onClick={() => openEdit(selectedDetail)} className="p-1.5 rounded-lg text-gray-500 hover:text-blue-400 hover:bg-bg-hover transition-colors" title="编辑"><Edit3 size={14} /></button>
                       <button onClick={() => handleDelete(selectedDetail)} className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-bg-hover transition-colors" title="删除"><Trash2 size={14} /></button>
                     </div>
@@ -554,6 +581,18 @@ export default function SuppliersPage() {
                     </div>
                   )
                 })()}
+
+                {/* 审批进度 */}
+                {(selectedDetail.status === '待审批' || selectedDetail.status === '已拒绝') && (
+                  <ApprovalTimeline
+                    targetType="supplier"
+                    targetId={selectedDetail.id}
+                    onChanged={() => {
+                      loadSummaries()
+                      if (selectedId) loadSupplierDetail(selectedId)
+                    }}
+                  />
+                )}
 
                 {/* 详情 Tab 切换 */}
                 <div className="flex items-center gap-1 border-b border-border/40">

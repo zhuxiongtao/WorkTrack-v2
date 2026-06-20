@@ -107,7 +107,11 @@ def _fetch_rss_sync() -> list[dict]:
     host = parsed.hostname
     path = parsed.path + ('?' + parsed.query if parsed.query else '')
 
-    ctx = ssl.create_default_context()
+    try:
+        import certifi
+        ctx = ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        ctx = ssl.create_default_context()
     raw_response = b""
     try:
         with _socket.create_connection((host, 443), timeout=int(HTTP_TIMEOUT)) as sock:

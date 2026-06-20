@@ -172,10 +172,8 @@ def update_flow(
         flow.description = body.description
     if body.is_active is not None:
         flow.is_active = body.is_active
-    if body.trigger_condition is not None:
-        flow.trigger_condition = json.dumps(body.trigger_condition, ensure_ascii=False)
-    elif body.trigger_condition == {}:
-        flow.trigger_condition = None
+    if "trigger_condition" in (body.model_fields_set or set()):
+        flow.trigger_condition = json.dumps(body.trigger_condition, ensure_ascii=False) if body.trigger_condition else None
     if body.nodes is not None:
         flow.nodes = json.dumps([n.model_dump() for n in body.nodes], ensure_ascii=False)
     flow.updated_at = datetime.now(timezone.utc)

@@ -110,6 +110,35 @@ def update_channel(
     return channel
 
 
+@router.post("/{channel_id}/submit-approval")
+def submit_channel_approval(
+    channel_id: int,
+    db: Session = Depends(get_session),
+    current_user=Depends(require_permission("project:edit")),
+):
+    """提交通道价格变更审批"""
+    from app.services import approval_engine
+    channel = db.get(Channel, channel_id)
+    if not channel:
+        raise HTTPException(404, "通道不存在")
+    if approval_engine.get_active_instance("channel", channel_id, db):
+        raise HTTPException(400, "该通道已有进行中的审批")
+    try:
+        inst = approval_engine.start_approval(
+            "channel", channel_id, channel,
+            f"通道「{channel.name}」价格变更确认", current_user, db,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if inst is None:
+        return {"approval_id": None, "status": "合作中", "message": "无需审批"}
+    if inst.status == "pending":
+        channel.status = "待确认"
+        db.add(channel)
+        db.commit()
+    return {"approval_id": inst.id, "status": channel.status, "message": "已提交价格变更审批"}
+
+
 @router.delete("/{channel_id}")
 def delete_channel(
     channel_id: int,
