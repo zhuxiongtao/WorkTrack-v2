@@ -1,4 +1,4 @@
-"""Token 三方对账 API
+﻿"""Token 三方对账 API
 
 流程：
   1. POST /upload          上传供应商/MaaS/客户 Excel 账单
@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from app.auth import get_current_user
+from app.auth import get_current_user, require_permission
 from app.database import get_session
 from app.models.bill_reconcile import (
     BillUpload, BillUploadRow, BillReconcileItem, BillReconcileSession
@@ -47,7 +47,7 @@ async def upload_bill(
     source_name: Optional[str] = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("reconcile:edit")),
 ):
     """上传一份账单 Excel（供应商/MaaS平台/客户）"""
     if source_type not in SOURCE_TYPES:
@@ -88,7 +88,7 @@ async def upload_bill(
 def get_upload_rows(
     upload_id: int,
     db: Session = Depends(get_session),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_permission("reconcile:read")),
 ):
     """查看某份账单的解析明细（前 200 行）"""
     upload = db.get(BillUpload, upload_id)
@@ -117,7 +117,7 @@ def get_upload_rows(
 def delete_upload(
     upload_id: int,
     db: Session = Depends(get_session),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_permission("reconcile:edit")),
 ):
     """删除某份账单（若对应月份已锁定则拒绝）"""
     upload = db.get(BillUpload, upload_id)
@@ -142,7 +142,7 @@ def delete_upload(
 @router.get("/periods")
 def list_periods(
     db: Session = Depends(get_session),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_permission("reconcile:read")),
 ):
     """列出所有有账单数据的月份"""
     periods = db.exec(select(BillUpload.period).distinct()).all()
@@ -153,7 +153,7 @@ def list_periods(
 def list_uploads(
     period: str,
     db: Session = Depends(get_session),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_permission("reconcile:read")),
 ):
     """查看某月份的所有已上传账单"""
     uploads = db.exec(
@@ -167,7 +167,7 @@ def list_uploads(
 def get_session_status(
     period: str,
     db: Session = Depends(get_session),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_permission("reconcile:read")),
 ):
     """查看对账会话状态"""
     s = db.exec(select(BillReconcileSession).where(BillReconcileSession.period == period)).first()
@@ -180,7 +180,7 @@ def get_session_status(
 def compare(
     period: str,
     db: Session = Depends(get_session),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_permission("reconcile:edit")),
 ):
     """执行三方对账比对（覆盖上次结果）"""
     existing = db.exec(
@@ -201,7 +201,7 @@ def list_items(
     period: str,
     only_diff: bool = False,
     db: Session = Depends(get_session),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_permission("reconcile:read")),
 ):
     """获取对账明细（按模型ID）。only_diff=true 只返回有差异的行。"""
     s = db.exec(select(BillReconcileSession).where(BillReconcileSession.period == period)).first()
@@ -227,7 +227,7 @@ def review_item(
     item_id: int,
     body: ReviewPatch,
     db: Session = Depends(get_session),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_permission("reconcile:edit")),
 ):
     """人工标注单条对账明细（确认/争议）"""
     item = db.get(BillReconcileItem, item_id)
@@ -248,7 +248,7 @@ def review_item(
 def submit_review(
     period: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("reconcile:edit")),
 ):
     """提交审批：有差异 → 走审批流；无差异 → 直接 approved"""
     s = db.exec(select(BillReconcileSession).where(BillReconcileSession.period == period)).first()

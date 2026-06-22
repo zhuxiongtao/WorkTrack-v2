@@ -41,7 +41,7 @@ def list_reconcile_sales(
     period: Optional[str] = None,
     project_id: Optional[int] = None,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:read")),
+    current_user=Depends(require_permission("reconcile:read")),
 ):
     """销售对账列表（按 period + project_id 筛选）"""
     query = select(ReconcileSales).order_by(ReconcileSales.period.desc(), ReconcileSales.id)
@@ -56,7 +56,7 @@ def list_reconcile_sales(
 def create_reconcile_sales(
     body: ReconcileSalesCreate,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:edit")),
+    current_user=Depends(require_permission("reconcile:edit")),
 ):
     _ensure_period_editable(body.period, db)
     if db.get(Project, body.project_id) is None:
@@ -73,7 +73,7 @@ def update_reconcile_sales(
     rid: int,
     body: ReconcileSalesUpdate,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:edit")),
+    current_user=Depends(require_permission("reconcile:edit")),
 ):
     obj = db.get(ReconcileSales, rid)
     if not obj:
@@ -91,7 +91,7 @@ def update_reconcile_sales(
 def delete_reconcile_sales(
     rid: int,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:edit")),
+    current_user=Depends(require_permission("reconcile:edit")),
 ):
     obj = db.get(ReconcileSales, rid)
     if not obj:
@@ -110,7 +110,7 @@ def list_reconcile_supply(
     channel_id: Optional[int] = None,
     supplier_id: Optional[int] = None,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:read")),
+    current_user=Depends(require_permission("reconcile:read")),
 ):
     query = select(ReconcileSupply).order_by(ReconcileSupply.period.desc(), ReconcileSupply.id)
     if period:
@@ -126,7 +126,7 @@ def list_reconcile_supply(
 def create_reconcile_supply(
     body: ReconcileSupplyCreate,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:edit")),
+    current_user=Depends(require_permission("reconcile:edit")),
 ):
     _ensure_period_editable(body.period, db)
     if db.get(Channel, body.channel_id) is None:
@@ -148,7 +148,7 @@ def update_reconcile_supply(
     rid: int,
     body: ReconcileSupplyUpdate,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:edit")),
+    current_user=Depends(require_permission("reconcile:edit")),
 ):
     obj = db.get(ReconcileSupply, rid)
     if not obj:
@@ -166,7 +166,7 @@ def update_reconcile_supply(
 def delete_reconcile_supply(
     rid: int,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:edit")),
+    current_user=Depends(require_permission("reconcile:edit")),
 ):
     obj = db.get(ReconcileSupply, rid)
     if not obj:
@@ -182,7 +182,7 @@ def delete_reconcile_supply(
 @router.get("/summary", response_model=list[ReconcileSummaryOut])
 def list_reconcile_summary(
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:read")),
+    current_user=Depends(require_permission("reconcile:read")),
 ):
     """总账列表（按月份）"""
     return db.exec(select(ReconcileSummary).order_by(ReconcileSummary.period.desc())).all()
@@ -192,7 +192,7 @@ def list_reconcile_summary(
 def get_reconcile_summary(
     period: str,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:read")),
+    current_user=Depends(require_permission("reconcile:read")),
 ):
     obj = db.exec(select(ReconcileSummary).where(ReconcileSummary.period == period)).first()
     if not obj:
@@ -204,7 +204,7 @@ def get_reconcile_summary(
 def calculate_summary(
     period: str,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:edit")),
+    current_user=Depends(require_permission("reconcile:edit")),
 ):
     """根据销售/供应对账自动汇总生成总账（已复核/已锁定状态禁止重算）"""
     _ensure_period_editable(period, db)
@@ -256,7 +256,7 @@ def calculate_summary(
 def submit_reconcile_review(
     period: str,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:edit")),
+    current_user=Depends(require_permission("reconcile:edit")),
 ):
     """提交月结复核：触发审批流（财务复核 → 总经理锁定）。
     若无匹配审批模板，直接置「已锁定」。"""
@@ -314,7 +314,7 @@ def list_reconcile_diff(
     project_id: Optional[int] = None,
     channel_id: Optional[int] = None,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:read")),
+    current_user=Depends(require_permission("reconcile:read")),
 ):
     query = select(ReconcileDiff).order_by(ReconcileDiff.period.desc(), ReconcileDiff.id)
     if period:
@@ -330,7 +330,7 @@ def list_reconcile_diff(
 def create_reconcile_diff(
     body: ReconcileDiffCreate,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:edit")),
+    current_user=Depends(require_permission("reconcile:edit")),
 ):
     _ensure_period_editable(body.period, db)
     if body.project_id is not None and db.get(Project, body.project_id) is None:
@@ -351,7 +351,7 @@ def update_reconcile_diff(
     rid: int,
     body: ReconcileDiffUpdate,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:edit")),
+    current_user=Depends(require_permission("reconcile:edit")),
 ):
     obj = db.get(ReconcileDiff, rid)
     if not obj:
@@ -372,7 +372,7 @@ def update_reconcile_diff(
 def delete_reconcile_diff(
     rid: int,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:edit")),
+    current_user=Depends(require_permission("reconcile:edit")),
 ):
     obj = db.get(ReconcileDiff, rid)
     if not obj:
@@ -389,7 +389,7 @@ def delete_reconcile_diff(
 def get_overall(
     period: str,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:read")),
+    current_user=Depends(require_permission("reconcile:read")),
 ):
     """指定月份的对账总览（聚合销售 + 供应 + 差异）"""
     sales = db.exec(select(ReconcileSales).where(ReconcileSales.period == period)).all()
@@ -430,7 +430,7 @@ def get_overall(
 @router.get("/periods")
 def list_periods(
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:read")),
+    current_user=Depends(require_permission("reconcile:read")),
 ):
     """列出所有已有对账数据的月份（销售/供应/差异/总账 的并集）"""
     sales_p = db.exec(select(ReconcileSales.period).distinct()).all()

@@ -19,7 +19,7 @@ def list_channels(
     kind: Optional[str] = None,
     status: Optional[str] = None,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:read")),
+    current_user=Depends(require_permission("upstream:read")),
 ):
     """获取通道列表"""
     query = select(Channel).order_by(Channel.supplier_id, col(Channel.id))
@@ -37,7 +37,7 @@ def list_channels(
 @router.get("/summary/all", response_model=list[ChannelSummary])
 def get_channels_summary(
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:read")),
+    current_user=Depends(require_permission("upstream:read")),
 ):
     """通道汇总（含供应商名称）"""
     channels = db.exec(select(Channel).order_by(Channel.supplier_id)).all()
@@ -66,7 +66,7 @@ def get_channels_summary(
 def get_channel(
     channel_id: int,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:read")),
+    current_user=Depends(require_permission("upstream:read")),
 ):
     channel = db.get(Channel, channel_id)
     if not channel:
@@ -78,7 +78,7 @@ def get_channel(
 def create_channel(
     body: ChannelCreate,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:edit")),
+    current_user=Depends(require_permission("upstream:edit")),
 ):
     """新增通道"""
     supplier = db.get(Supplier, body.supplier_id)
@@ -96,7 +96,7 @@ def update_channel(
     channel_id: int,
     body: ChannelUpdate,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:edit")),
+    current_user=Depends(require_permission("upstream:edit")),
 ):
     channel = db.get(Channel, channel_id)
     if not channel:
@@ -114,7 +114,7 @@ def update_channel(
 def submit_channel_approval(
     channel_id: int,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:edit")),
+    current_user=Depends(require_permission("upstream:edit")),
 ):
     """提交通道价格变更审批"""
     from app.services import approval_engine
@@ -143,7 +143,7 @@ def submit_channel_approval(
 def delete_channel(
     channel_id: int,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:edit")),
+    current_user=Depends(require_permission("upstream:edit")),
 ):
     channel = db.get(Channel, channel_id)
     if not channel:

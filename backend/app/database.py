@@ -231,6 +231,12 @@ PERMISSION_DEFS = [
     ("share:create", "创建分享", "share", "create"),
     ("share:read", "查看分享", "share", "read"),
     ("share:comment", "评论分享", "share", "comment"),
+    # 上游管理（供应商 / 通道）
+    ("upstream:read", "查看上游", "upstream", "read"),
+    ("upstream:edit", "管理上游", "upstream", "edit"),
+    # 财务对账
+    ("reconcile:read", "查看对账", "reconcile", "read"),
+    ("reconcile:edit", "编辑对账", "reconcile", "edit"),
 ]
 
 ROLE_DEFS = {
@@ -249,6 +255,9 @@ ROLE_DEFS = {
             "wiki:read", "wiki:create", "wiki:edit", "wiki:delete", "wiki:manage_space",
             # AI
             "ai:use", "ai:manage_own", "ai:manage_shared",
+            # 上游与对账
+            "upstream:read", "upstream:edit",
+            "reconcile:read", "reconcile:edit",
             # 系统管理与运维
             "settings:read", "settings:edit",
             "dashboard:read",
@@ -265,6 +274,7 @@ ROLE_DEFS = {
         "name": "部门领导",
         "description": "部门领导，通过部门负责人机制自动获得本部门及子部门数据可见性，无需 view_all",
         "perms": [
+            "user:read",
             "project:read", "project:create", "project:edit",
             "customer:read", "customer:create", "customer:edit",
             "contract:read", "contract:parse",
@@ -272,6 +282,8 @@ ROLE_DEFS = {
             "meeting:read", "meeting:create",
             "ai:use", "ai:manage_own",
             "wiki:read", "wiki:create", "wiki:edit",
+            "upstream:read",
+            "reconcile:read",
             "settings:read",
             "dashboard:read",
             "task:read", "task:create",
@@ -283,7 +295,7 @@ ROLE_DEFS = {
     },
     "sales": {
         "name": "销售",
-        "description": "销售人员，管理项目和客户",
+        "description": "销售人员，负责项目拓展和客户维护，跟进合同签署",
         "perms": [
             "project:read", "project:create", "project:edit", "project:delete",
             "customer:read", "customer:create", "customer:edit", "customer:delete",
@@ -292,13 +304,12 @@ ROLE_DEFS = {
             "ai:use",
             "wiki:read",
             "dashboard:read",
-            # 分享
             "share:create", "share:read", "share:comment",
         ],
     },
     "tech": {
         "name": "技术",
-        "description": "技术人员，管理会议和 Wiki",
+        "description": "技术人员，负责项目交付、会议协作和技术文档管理",
         "perms": [
             "project:read",
             "meeting:read", "meeting:create", "meeting:edit", "meeting:delete",
@@ -306,32 +317,32 @@ ROLE_DEFS = {
             "ai:use", "ai:manage_own",
             "report:read", "report:create", "report:submit",
             "dashboard:read",
-            # 分享
             "share:create", "share:read", "share:comment",
         ],
     },
     "operations": {
         "name": "运营",
-        "description": "运营人员，查看报告和客户数据",
+        "description": "运营人员，跟进日常运营数据，协助会议记录",
         "perms": [
-            "report:read", "report:submit",
+            "report:read", "report:create", "report:submit",
             "meeting:read", "meeting:create", "meeting:edit",
             "customer:read",
             "project:read",
             "wiki:read",
             "ai:use",
             "dashboard:read",
-            "share:create", "share:read", "share:comment",
+            "share:read", "share:comment",
         ],
     },
     "business": {
         "name": "商务",
-        "description": "商务人员，管理合同和客户",
+        "description": "商务人员，负责合同谈判、客户对接和上游供应商管理",
         "perms": [
             "contract:read", "contract:create", "contract:edit", "contract:delete", "contract:parse",
             "customer:read", "customer:create", "customer:edit",
             "project:read",
             "report:read", "report:submit",
+            "upstream:read", "upstream:edit",
             "ai:use",
             "dashboard:read",
             "share:create", "share:read", "share:comment",
@@ -345,6 +356,8 @@ ROLE_DEFS = {
             "contract:read", "contract:view_all",
             "project:read", "customer:read",
             "report:read", "report:submit",
+            "upstream:read",
+            "reconcile:read", "reconcile:edit",
             "ai:use", "wiki:read",
             "dashboard:read",
             "share:create", "share:read", "share:comment",
@@ -352,11 +365,12 @@ ROLE_DEFS = {
     },
     "legal": {
         "name": "法务",
-        "description": "法务人员，负责合同审查与合规把关；作为合同审批链的法务节点",
+        "description": "法务人员，负责合同审查与合规把关，需查看供应商资质；作为合同审批链的法务节点",
         "ensure_exists": True,
         "perms": [
             "contract:read", "contract:view_all", "contract:parse",
             "project:read", "customer:read",
+            "upstream:read",
             "ai:use", "wiki:read",
             "dashboard:read",
             "share:create", "share:read", "share:comment",
@@ -372,6 +386,8 @@ ROLE_DEFS = {
             "contract:read", "contract:view_all",
             "report:read", "report:view_all",
             "meeting:read", "meeting:view_all",
+            "upstream:read",
+            "reconcile:read",
             "ai:use",
             "wiki:read",
             "settings:read",
@@ -384,7 +400,7 @@ ROLE_DEFS = {
     },
     "user": {
         "name": "普通用户",
-        "description": "基础用户，查看和记录个人数据",
+        "description": "基础用户，记录个人日报周报，参与会议和协作",
         "perms": [
             "project:read",
             "report:read", "report:create", "report:submit",

@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/v1/suppliers", tags=["供应商管理"])
 @router.get("/summary/all", response_model=list[SupplierSummary])
 def get_suppliers_summary(
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:read")),
+    current_user=Depends(require_permission("upstream:read")),
 ):
     """获取所有供应商的汇总统计（成本、项目数、模型列表）"""
     suppliers = db.exec(select(Supplier).order_by(col(Supplier.id))).all()
@@ -52,7 +52,7 @@ def list_suppliers(
     status: Optional[str] = None,
     category: Optional[str] = None,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:read")),
+    current_user=Depends(require_permission("upstream:read")),
 ):
     """获取供应商列表，可按状态/类别筛选"""
     query = select(Supplier).order_by(col(Supplier.id))
@@ -67,7 +67,7 @@ def list_suppliers(
 def create_supplier(
     body: SupplierCreate,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:edit")),
+    current_user=Depends(require_permission("upstream:edit")),
 ):
     """新增供应商，自动发起新增审批流（无模板则直接生效）"""
     from app.services import approval_engine
@@ -101,7 +101,7 @@ def create_supplier(
 def get_supplier(
     supplier_id: int,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:read")),
+    current_user=Depends(require_permission("upstream:read")),
 ):
     supplier = db.get(Supplier, supplier_id)
     if not supplier:
@@ -114,7 +114,7 @@ def update_supplier(
     supplier_id: int,
     body: SupplierUpdate,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:edit")),
+    current_user=Depends(require_permission("upstream:edit")),
 ):
     """更新供应商信息"""
     supplier = db.get(Supplier, supplier_id)
@@ -138,7 +138,7 @@ def update_supplier(
 def delete_supplier(
     supplier_id: int,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:edit")),
+    current_user=Depends(require_permission("upstream:edit")),
 ):
     """删除供应商（需先解除关联的成本条目与通道）"""
     supplier = db.get(Supplier, supplier_id)
@@ -167,7 +167,7 @@ def delete_supplier(
 def get_supplier_projects(
     supplier_id: int,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:read")),
+    current_user=Depends(require_permission("upstream:read")),
 ):
     """获取供应商关联的项目列表及成本明细"""
     supplier = db.get(Supplier, supplier_id)
@@ -242,7 +242,7 @@ def get_supplier_projects(
 def sync_supplier_stats(
     supplier_id: int,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:edit")),
+    current_user=Depends(require_permission("upstream:edit")),
 ):
     """手动同步供应商的业务统计数据（累计成本、项目数）"""
     supplier = db.get(Supplier, supplier_id)
@@ -268,7 +268,7 @@ def sync_supplier_stats(
 def submit_supplier_approval(
     supplier_id: int,
     db: Session = Depends(get_session),
-    current_user=Depends(require_permission("project:edit")),
+    current_user=Depends(require_permission("upstream:edit")),
 ):
     """为供应商手动发起新增审批"""
     from app.services import approval_engine

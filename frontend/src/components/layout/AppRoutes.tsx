@@ -31,17 +31,17 @@ function AppRoutes({ homePage }: AppRoutesProps) {
       <Route path="/" element={<Navigate to={homePage} replace />} />
       <Route path="/dashboard"     element={hasPermission('dashboard:read') ? <DashboardPage />    : <Navigate to={homePage} replace />} />
       <Route path="/reports"       element={hasPermission('report:read')    ? <ReportHubPage />    : <Navigate to={homePage} replace />} />
-      <Route path="/team"          element={hasPermission('report:read')    ? <TeamManagementPage /> : <Navigate to={homePage} replace />} />
+      <Route path="/team"          element={hasPermission('user:read')      ? <TeamManagementPage /> : <Navigate to={homePage} replace />} />
       <Route path="/meetings"      element={hasPermission('meeting:read')   ? <MeetingsPage />     : <Navigate to={homePage} replace />} />
       <Route path="/approvals"     element={<ApprovalsPage />} />
       <Route path="/tasks"         element={hasPermission('task:read')      ? <ScheduledTasksPage /> : <Navigate to={homePage} replace />} />
       <Route path="/projects"      element={hasPermission('project:read')   ? <ProjectsPage />     : <Navigate to={homePage} replace />} />
       <Route path="/project-costs" element={hasPermission('project:read')   ? <ProjectCostPage />  : <Navigate to={homePage} replace />} />
-      <Route path="/upstream"      element={hasPermission('project:read')   ? <UpstreamPage />     : <Navigate to={homePage} replace />} />
+      <Route path="/upstream"      element={hasPermission('upstream:read')  ? <UpstreamPage />     : <Navigate to={homePage} replace />} />
       <Route path="/suppliers"     element={<Navigate to="/upstream" replace />} />
       <Route path="/channels"      element={<Navigate to="/upstream" replace />} />
-      <Route path="/reconcile"     element={hasPermission('project:read')   ? <ReconcilePage />    : <Navigate to={homePage} replace />} />
-      <Route path="/model-changes" element={hasPermission('project:read')   ? <ModelChangePage />  : <Navigate to={homePage} replace />} />
+      <Route path="/reconcile"     element={hasPermission('reconcile:read') ? <ReconcilePage />    : <Navigate to={homePage} replace />} />
+      <Route path="/model-changes" element={hasPermission('management:console') ? <ModelChangePage /> : <Navigate to={homePage} replace />} />
       <Route path="/customers"     element={hasPermission('customer:read')  ? <CustomersPage />    : <Navigate to={homePage} replace />} />
       <Route path="/contracts"     element={hasPermission('contract:read')  ? <ContractsPage />    : <Navigate to={homePage} replace />} />
       <Route path="/wiki"          element={hasPermission('wiki:read')      ? <WikiPage />         : <Navigate to={homePage} replace />} />
