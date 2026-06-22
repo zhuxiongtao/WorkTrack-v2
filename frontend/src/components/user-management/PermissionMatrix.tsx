@@ -7,6 +7,7 @@ const MODULE_ICONS: Record<string, string> = {
   meeting: '📅', ai: '🤖', wiki: '📚', settings: '⚙️', dashboard: '📊',
   task: '⏰', log: '📜', monitor: '🖥️', data: '💾',
   management: '🛡️', share: '🔗',
+  upstream: '🔗', reconcile: '🧮', model: '🔄',
 }
 
 interface RoleDetailProps {

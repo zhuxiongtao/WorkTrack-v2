@@ -48,7 +48,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
       { to: '/project-costs', label: '成本利润',   icon: BarChart3,  gradientFrom: '#10B981', gradientTo: '#14B8A6', permission: 'project:read' },
       { to: '/upstream',      label: '上游管理',   icon: Layers,     gradientFrom: '#3B82F6', gradientTo: '#06B6D4', permission: 'upstream:read' },
       { to: '/reconcile',      label: '财务对账',   icon: Calculator,  gradientFrom: '#8B5CF6', gradientTo: '#6366F1', permission: 'reconcile:read' },
-      { to: '/model-changes',  label: '模型变更',   icon: RefreshCw,   gradientFrom: '#F59E0B', gradientTo: '#EF4444', permission: 'management:console' },
+      { to: '/model-changes',  label: '模型变更',   icon: RefreshCw,   gradientFrom: '#F59E0B', gradientTo: '#EF4444', permission: 'model:read' },
       { to: '/customers',     label: '客户管理',   icon: Users,      gradientFrom: '#EC4899', gradientTo: '#F472B6', permission: 'customer:read' },
       { to: '/contracts',     label: '合同管理',   icon: FileText,   gradientFrom: '#06B6D4', gradientTo: '#14B8A6', permission: 'contract:read' },
     ],

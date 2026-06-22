@@ -338,7 +338,7 @@ def list_users(
 # ===== 用户全局统计（用于统计卡） =====
 @router.get("/stats")
 def get_user_stats(db: Session = Depends(get_session),
-                   _admin: User = Depends(require_permission("user:manage_roles"))):
+                   _admin: User = Depends(require_permission("user:read"))):
     """返回用户全量统计：总成员/活跃/离职/锁定制中/管理员/无部门"""
     from sqlalchemy import func as sql_func
     now = datetime.now(timezone.utc)
@@ -371,7 +371,7 @@ class UserBatchAction(BaseModel):
 
 
 @router.post("/batch")
-def batch_user_action(data: UserBatchAction, current_user: User = Depends(require_permission("user:manage_roles")),
+def batch_user_action(data: UserBatchAction, current_user: User = Depends(require_permission("user:edit")),
                       db: Session = Depends(get_session)):
     """批量用户操作：启停/改部门/重置密码"""
     if not data.user_ids:
@@ -837,7 +837,7 @@ def create_user(data: UserCreate, db: Session = Depends(get_session),
 # ===== 编辑用户 =====
 @router.put("/{user_id}")
 def update_user(user_id: int, data: UserUpdate, db: Session = Depends(get_session),
-                actor: User = Depends(require_permission("user:manage_roles"))):
+                actor: User = Depends(require_permission("user:edit"))):
     """管理员编辑用户信息"""
     user = db.get(User, user_id)
     if not user:
@@ -896,7 +896,7 @@ def update_user(user_id: int, data: UserUpdate, db: Session = Depends(get_sessio
 # ===== 启用/禁用用户 =====
 @router.put("/{user_id}/toggle-active")
 def toggle_user_active(user_id: int, db: Session = Depends(get_session),
-                       actor: User = Depends(require_permission("user:manage_roles"))):
+                       actor: User = Depends(require_permission("user:edit"))):
     """管理员启用或禁用用户"""
     user = db.get(User, user_id)
     if not user:
@@ -928,7 +928,7 @@ def toggle_user_active(user_id: int, db: Session = Depends(get_session),
 @router.put("/{user_id}/status")
 def set_user_status(user_id: int, data: UserStatusSet,
                     db: Session = Depends(get_session),
-                    _admin: User = Depends(require_permission("user:manage_roles"))):
+                    _admin: User = Depends(require_permission("user:edit"))):
     """管理员设置用户账号状态: active / disabled / resigned"""
     user = db.get(User, user_id)
     if not user:
@@ -964,7 +964,7 @@ def set_user_status(user_id: int, data: UserStatusSet,
 @router.post("/{user_id}/reset-password")
 def reset_user_password(user_id: int, data: ResetPasswordRequest,
                         db: Session = Depends(get_session),
-                        _admin: User = Depends(require_permission("user:manage_roles"))):
+                        _admin: User = Depends(require_permission("user:edit"))):
     """管理员重置用户密码"""
     user = db.get(User, user_id)
     if not user:
@@ -985,7 +985,7 @@ def reset_user_password(user_id: int, data: ResetPasswordRequest,
 # ===== 删除用户 =====
 @router.delete("/{user_id}", status_code=204)
 def delete_user(user_id: int, db: Session = Depends(get_session),
-                _admin: User = Depends(require_permission("user:manage_roles"))):
+                _admin: User = Depends(require_permission("user:delete"))):
     """管理员删除用户"""
     from app.models.rbac import UserRole
     from app.models.wiki import UserGroupMember

@@ -160,7 +160,7 @@ function fmtDatetime(s: string | null) {
 export default function ModelChangePage() {
   const { toast: addToast } = useToast()
   const { hasPermission } = useAuth()
-  const canEdit = hasPermission('project:edit')
+  const canEdit = hasPermission('model:edit')
 
   const [view, setView] = useState<'list' | 'detail'>('list')
   const [events, setEvents] = useState<EventListItem[]>([])

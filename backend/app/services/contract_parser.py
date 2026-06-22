@@ -18,7 +18,7 @@ import struct
 from typing import Any
 import olefile
 from sqlmodel import Session, select
-from app.services.ai_service import _get_active_provider, _get_active_provider_full, _get_client
+from app.services.ai_service import _get_active_provider, _get_active_provider_full, _get_client, _record_usage_silent
 from app.models.model_provider import TaskModelConfig, ModelProvider
 from app.exceptions import DocumentParseError
 from app.config import settings
@@ -98,6 +98,7 @@ def _extract_text_via_vision(file_path: str, db: Session, user_id: int = 0) -> s
             }],
             temperature=0.1,
         )
+        _record_usage_silent(db, response, user_id, provider.id, model_name, "vision")
         all_text += (response.choices[0].message.content or "") + "\n\n"
     doc.close()
     return all_text.strip()
@@ -653,6 +654,7 @@ def parse_contract(raw_text: str, db: Session, user_id: int = 0) -> dict:
                 ],
                 **params,
             )
+            _record_usage_silent(db, response, user_id, provider.id, model, "contract_parse")
             content = (response.choices[0].message.content or "").strip()
             last_response = content
             parsed = _try_parse_json(content)

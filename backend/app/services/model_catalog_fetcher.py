@@ -322,9 +322,9 @@ TRANSLATE_PROMPT = """你是 AI 模型介绍翻译专家。请把下面每条英
 """
 
 
-def _call_translate_batch(client, model_name: str, batch: list[dict]) -> list[dict]:
+def _call_translate_batch(client, model_name: str, batch: list[dict], provider_id=None) -> list[dict]:
     """调用 LLM 翻译一批 description，返回 [{"id": n, "text": "中文"}]"""
-    from app.services.ai_service import _extract_message_text
+    from app.services.ai_service import _extract_message_text, _record_usage_silent
     payload = json.dumps(batch, ensure_ascii=False)
     prompt = TRANSLATE_PROMPT.replace("{payload}", payload[:20000])
     response = client.chat.completions.create(
@@ -336,6 +336,9 @@ def _call_translate_batch(client, model_name: str, batch: list[dict]) -> list[di
         temperature=0.2,
         timeout=120,
     )
+    if provider_id is not None:
+        with Session(engine) as _db:
+            _record_usage_silent(_db, response, 0, provider_id, model_name, "catalog_translate")
     content = _extract_message_text(response.choices[0].message)
     return json.loads(_strip_code_fence(content))
 
@@ -350,7 +353,7 @@ def _translate_items_descriptions(items: list[dict]) -> int:
     if not extractor:
         logger.info("LLM 翻译器未配置，跳过模型介绍中文化")
         return 0
-    _, model_name, llm_client = extractor
+    _ep, model_name, llm_client = extractor
 
     # 收集需要翻译的 description
     todo: list[dict] = []  # {"id": idx, "text": ...}
@@ -371,7 +374,7 @@ def _translate_items_descriptions(items: list[dict]) -> int:
     for start in range(0, total, TRANSLATE_BATCH_SIZE):
         batch = todo[start:start + TRANSLATE_BATCH_SIZE]
         try:
-            results = _call_translate_batch(llm_client, model_name, batch)
+            results = _call_translate_batch(llm_client, model_name, batch, provider_id=getattr(_ep, "id", None))
             for r in results:
                 bid = r.get("id")
                 zh = (r.get("text") or "").strip()
@@ -400,7 +403,7 @@ def translate_existing_descriptions(only_english: bool = True) -> dict:
         if not extractor:
             return {"success": False, "error": "LLM 翻译器未配置，请先在系统设置配置 AI Provider",
                     "translated": 0, "skipped": 0, "duration_ms": 0}
-        _, model_name, llm_client = extractor
+        _ep, model_name, llm_client = extractor
 
         with Session(engine) as db:
             rows = db.exec(select(ModelCatalog)).all()
@@ -427,7 +430,7 @@ def translate_existing_descriptions(only_english: bool = True) -> dict:
                 batch = [{"id": i, "text": (r.description or "")[:500]}
                          for i, r in enumerate(batch_rows)]
                 try:
-                    results = _call_translate_batch(llm_client, model_name, batch)
+                    results = _call_translate_batch(llm_client, model_name, batch, provider_id=getattr(_ep, "id", None))
                     res_map = {r.get("id"): (r.get("text") or "").strip() for r in results}
                     for i, row in enumerate(batch_rows):
                         zh = res_map.get(i, "")
@@ -693,7 +696,7 @@ async def _search_domestic_only() -> list[dict]:
     if not extractor:
         logger.info("LLM 抽取器未配置，跳过 Tavily 国内模型搜索")
         return []
-    _, model_name, llm_client = extractor
+    _ep, model_name, llm_client = extractor
 
     async with httpx.AsyncClient() as client:
         tasks = [_tavily_search(client, q, api_key) for q in DOMESTIC_SEARCH_QUERIES]
@@ -714,7 +717,7 @@ async def _search_domestic_only() -> list[dict]:
     logger.info("Tavily 国内搜索完成，内容 %d 字符", len(search_content))
 
     try:
-        raw_items = _call_extractor(llm_client, model_name, search_content)
+        raw_items = _call_extractor(llm_client, model_name, search_content, provider_id=getattr(_ep, "id", None))
     except Exception as e:
         logger.error("Tavily 国内模型 LLM 抽取失败: %s", e)
         return []
@@ -725,8 +728,8 @@ async def _search_domestic_only() -> list[dict]:
     return domestic
 
 
-def _call_extractor(client, model_name: str, search_content: str) -> list[dict]:
-    from app.services.ai_service import _extract_message_text
+def _call_extractor(client, model_name: str, search_content: str, provider_id=None) -> list[dict]:
+    from app.services.ai_service import _extract_message_text, _record_usage_silent
     prompt = EXTRACT_PROMPT.replace("{search_content}", search_content[:30000])
     response = client.chat.completions.create(
         model=model_name,
@@ -737,6 +740,9 @@ def _call_extractor(client, model_name: str, search_content: str) -> list[dict]:
         temperature=0.1,
         timeout=120,  # 长文本抽取任务，覆盖客户端 30s 默认值
     )
+    if provider_id is not None:
+        with Session(engine) as _db:
+            _record_usage_silent(_db, response, 0, provider_id, model_name, "catalog_extract")
     content = _extract_message_text(response.choices[0].message)
     return json.loads(_strip_code_fence(content))
 

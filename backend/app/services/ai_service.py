@@ -1083,7 +1083,7 @@ def _search_company_names_impl(keyword: str, db: Session, user_id: int) -> list[
             continue
         try:
             client = _get_client(base_url, api_key, provider)
-            results = _llm_company_names(client, model, task_cfg, pm, db, keyword, with_search_hint=False)
+            results = _llm_company_names(client, model, task_cfg, pm, db, keyword, with_search_hint=False, user_id=user_id, provider_id=provider.id)
             if len(results) >= 2:
                 return results
             last_error = None
@@ -1102,7 +1102,7 @@ def _search_company_names_impl(keyword: str, db: Session, user_id: int) -> list[
         try:
             search_context = search_and_summarize(
                 f"{keyword} 公司 全称 注册名 官网",
-                db, search_depth="basic", user_id=user_id,
+                db, search_depth="basic", user_id=user_id, force_tavily=True,
             )
             if search_context:
                 # 重新选一个可用的 chat provider（避免主循环残留 FakePM）
@@ -1113,6 +1113,7 @@ def _search_company_names_impl(keyword: str, db: Session, user_id: int) -> list[
                     results2 = _llm_company_names(
                         fallback_client, fallback_model, None, fallback_pm, db, keyword,
                         with_search_hint=search_context[:3000],
+                        user_id=user_id,
                     )
                     if len(results2) > len(results):
                         results = results2
@@ -1160,7 +1161,7 @@ def _pick_chat_provider(db: Session, user_id: int, exclude_vertex: bool = True):
     return None, None, None
 
 
-def _llm_company_names(client, model, task_cfg, pm, db, keyword: str, with_search_hint: str = "") -> list[dict]:
+def _llm_company_names(client, model, task_cfg, pm, db, keyword: str, with_search_hint: str = "", user_id: int = None, provider_id=None) -> list[dict]:
     """单次 LLM 调用：根据关键词给 5-8 个公司全称候选"""
     search_hint = (
         f"\n\n以下是从联网搜索获取的信息，请参考：\n{with_search_hint}"
@@ -1194,6 +1195,7 @@ def _llm_company_names(client, model, task_cfg, pm, db, keyword: str, with_searc
         ],
         **params,
     )
+    _record_usage_silent(db, response, user_id or 0, provider_id, model, "chat")
     text = _extract_message_text(response.choices[0].message)
     return _parse_company_names_json(text)
 
@@ -1253,38 +1255,66 @@ def fetch_company_info(company_name: str, db: Session, user_id: int = 0, progres
         if progress is not None:
             progress.append({"stage": stage, "msg": msg})
 
-    # 阶段1：Tavily 3 角度搜索
-    _emit("tavily", f"开始联网搜索 {company_name}")
+    # 阶段1：联网搜索
+    _emit("search", f"开始联网搜索 {company_name}")
     search_context = ""
     search_sources: list[dict] = []
     website_sources: list[dict] = []
     news_context = ""
     ai_context = ""
     ai_sources: list[dict] = []
-    has_tavily = False
+
+    # 优先：Gemini 接地搜索。单次调用即可返回综合信息 + 来源，避免多次慢调用
+    # （接地搜索单次 ~20-30s，若沿用 Tavily 的 6 次调用模式会非常慢甚至超时）
+    grounding_done = False
     try:
-        has_tavily = bool(_get_tavily_api_key(db, user_id))
-    except Exception:
-        pass
-    if has_tavily:
+        from app.services.web_search import _resolve_search_provider
+        from app.services.grounding_search import grounding_search, has_grounding_provider
+        _mode = _resolve_search_provider(db, user_id)
+        if _mode in ("auto", "gemini_grounding") and has_grounding_provider(db, user_id):
+            _emit("grounding", f"Gemini 接地搜索 {company_name}")
+            _cur = utc_now().year
+            _gq = (
+                f"{company_name} 公司简介、主营业务、所属行业、规模人数、官网网址；"
+                f"以及 {_cur} 年最新动态（融资/合作/新品发布/财报）；"
+                f"以及该公司在 AI、大模型、生成式AI 领域的真实动向"
+            )
+            _g = grounding_search(_gq, db, user_id=user_id, max_results=8)
+            _ans = next((r.get("content", "") for r in _g if r.get("type") == "answer"), "")
+            if _ans:
+                search_context = _ans
+                for _r in _g:
+                    if _r.get("type") == "result" and _r.get("url"):
+                        search_sources.append({"title": _r.get("title", ""), "url": _r.get("url", "")})
+                grounding_done = True
+    except Exception as e:
+        logger.warning("接地搜索采集公司信息失败，回退 Tavily: %s", e)
+
+    has_tavily = False
+    if not grounding_done:
+        try:
+            has_tavily = bool(_get_tavily_api_key(db, user_id))
+        except Exception:
+            pass
+    if not grounding_done and has_tavily:
         from app.services.web_search import search_web
         # 并发跑 3 角度
         def _tavily_basic():
             return search_web(
                 f"{company_name} 公司简介 主营业务 行业 规模 官网",
-                db, search_depth="advanced", max_results=5, user_id=user_id,
+                db, search_depth="advanced", max_results=5, user_id=user_id, force_tavily=True,
             )
         def _tavily_news():
             current_year = utc_now().year
             last_year = current_year - 1
             return search_web(
                 f"{company_name} {current_year} {last_year} 最新新闻 动态 融资 合作 产品发布 财报",
-                db, search_depth="advanced", max_results=5, user_id=user_id,
+                db, search_depth="advanced", max_results=5, user_id=user_id, force_tavily=True,
             )
         def _tavily_ai():
             return search_web(
                 f"{company_name} AI 人工智能 大模型 生成式AI LLM 机器学习 智能化转型 创新 应用 落地",
-                db, search_depth="advanced", max_results=5, user_id=user_id,
+                db, search_depth="advanced", max_results=5, user_id=user_id, force_tavily=True,
             )
         with ThreadPoolExecutor(max_workers=3) as ex:
             f_basic = ex.submit(_tavily_basic)
@@ -1323,7 +1353,7 @@ def fetch_company_info(company_name: str, db: Session, user_id: int = 0, progres
         try:
             search_context = search_and_summarize(
                 f"{company_name} 公司简介 主营业务 行业 规模 官网",
-                db, search_depth="advanced", user_id=user_id,
+                db, search_depth="advanced", user_id=user_id, force_tavily=True,
             )
         except Exception as e:
             logger.error("summarize basic fail: %s", e)
@@ -1332,14 +1362,14 @@ def fetch_company_info(company_name: str, db: Session, user_id: int = 0, progres
             last_year = current_year - 1
             news_context = search_and_summarize(
                 f"{company_name} {current_year} {last_year} 最新新闻 动态 融资 合作 产品发布 财报",
-                db, search_depth="advanced", user_id=user_id,
+                db, search_depth="advanced", user_id=user_id, force_tavily=True,
             )
         except Exception as e:
             logger.error("summarize news fail: %s", e)
         try:
             ai_context = search_and_summarize(
                 f"{company_name} AI 人工智能 大模型 生成式AI LLM 机器学习 智能化转型 创新 应用 落地",
-                db, search_depth="advanced", user_id=user_id,
+                db, search_depth="advanced", user_id=user_id, force_tavily=True,
             )
         except Exception as e:
             logger.error("summarize ai fail: %s", e)

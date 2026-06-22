@@ -12,12 +12,16 @@ interface UserTableRowProps {
   onDelete: () => void
   onResetPassword: () => void
   onManageRoles: () => void
+  canEdit: boolean
+  canDelete: boolean
+  canManageRoles: boolean
   getAvatarColor: (name: string) => string
   formatTime: (s: string | null) => string
 }
 
 export function UserTableRow({
   user: u, isSelf, selected, onSelectChange, onEdit, onToggleActive, onSetStatus, onDelete, onResetPassword, onManageRoles,
+  canEdit, canDelete, canManageRoles,
   getAvatarColor, formatTime,
 }: UserTableRowProps) {
   const isLocked = u.locked_until && new Date(u.locked_until) > new Date()
@@ -115,20 +119,20 @@ export function UserTableRow({
             </span>
           ) : u.status === 'disabled' ? (
             <button
-              onClick={onToggleActive}
-              className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full cursor-pointer transition-all font-semibold shadow-sm bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20 border border-red-200 dark:border-red-500/15 whitespace-nowrap"
-              title={isSelf ? "不能操作自己的账号" : "点击启用账号"}
-              disabled={isSelf}
+              onClick={canEdit ? onToggleActive : undefined}
+              className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full transition-all font-semibold shadow-sm bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20 border border-red-200 dark:border-red-500/15 whitespace-nowrap disabled:cursor-default disabled:opacity-90 enabled:cursor-pointer"
+              title={!canEdit ? "账号已停用" : (isSelf ? "不能操作自己的账号" : "点击启用账号")}
+              disabled={isSelf || !canEdit}
             >
               <span className="w-1.5 h-1.5 rounded-full bg-red-500 dark:bg-red-400" />
               已停用
             </button>
           ) : (
             <button
-              onClick={onToggleActive}
-              className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full cursor-pointer transition-all font-semibold shadow-sm bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 border border-emerald-200 dark:border-emerald-500/15 whitespace-nowrap"
-              title={isSelf ? "不能禁用自己的账号" : "点击停用账号"}
-              disabled={isSelf}
+              onClick={canEdit ? onToggleActive : undefined}
+              className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full transition-all font-semibold shadow-sm bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 border border-emerald-200 dark:border-emerald-500/15 whitespace-nowrap disabled:cursor-default disabled:opacity-90 enabled:cursor-pointer"
+              title={!canEdit ? "账号正常" : (isSelf ? "不能禁用自己的账号" : "点击停用账号")}
+              disabled={isSelf || !canEdit}
             >
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
               正常
@@ -148,17 +152,23 @@ export function UserTableRow({
       {/* 操作 */}
       <td className="px-5 py-4 text-right">
         <div className="flex items-center justify-end gap-1">
-          <button onClick={onManageRoles} className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-accent-blue/10 text-gray-400 hover:text-accent-blue transition-colors cursor-pointer" title="管理角色">
-            <Shield size={14} />
-          </button>
-          <button onClick={onEdit} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-bg-hover text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors cursor-pointer" title="编辑个人资料">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
-          </button>
-          <button onClick={onResetPassword} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-bg-hover text-gray-400 hover:text-amber-500 dark:hover:text-amber-400 transition-colors cursor-pointer" title="重置登录密码">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-          </button>
+          {canManageRoles && (
+            <button onClick={onManageRoles} className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-accent-blue/10 text-gray-400 hover:text-accent-blue transition-colors cursor-pointer" title="管理角色">
+              <Shield size={14} />
+            </button>
+          )}
+          {canEdit && (
+            <button onClick={onEdit} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-bg-hover text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors cursor-pointer" title="编辑个人资料">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+            </button>
+          )}
+          {canEdit && (
+            <button onClick={onResetPassword} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-bg-hover text-gray-400 hover:text-amber-500 dark:hover:text-amber-400 transition-colors cursor-pointer" title="重置登录密码">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+            </button>
+          )}
           {/* 离职操作按钮——仅对活跃用户显示 */}
-          {u.status === 'active' && (
+          {canEdit && u.status === 'active' && (
             <button
               onClick={() => onSetStatus('resigned')}
               className="p-1.5 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-500/10 text-gray-400 hover:text-amber-500 transition-colors cursor-pointer"
@@ -169,7 +179,7 @@ export function UserTableRow({
             </button>
           )}
           {/* 恢复操作——对已离职用户 */}
-          {u.status === 'resigned' && (
+          {canEdit && u.status === 'resigned' && (
             <button
               onClick={() => onSetStatus('active')}
               className="p-1.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-500/10 text-gray-400 hover:text-emerald-500 transition-colors cursor-pointer"
@@ -178,9 +188,14 @@ export function UserTableRow({
               <UserCheck size={14} />
             </button>
           )}
-          <button onClick={onDelete} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 text-gray-400 hover:text-red-500 transition-colors cursor-pointer" title="物理删除成员" disabled={isSelf}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-          </button>
+          {canDelete && (
+            <button onClick={onDelete} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 text-gray-400 hover:text-red-500 transition-colors cursor-pointer" title="物理删除成员" disabled={isSelf}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+            </button>
+          )}
+          {!canManageRoles && !canEdit && !canDelete && (
+            <span className="text-[11px] text-gray-400">仅查看</span>
+          )}
         </div>
       </td>
     </tr>

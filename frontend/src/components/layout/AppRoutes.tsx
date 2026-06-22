@@ -41,7 +41,7 @@ function AppRoutes({ homePage }: AppRoutesProps) {
       <Route path="/suppliers"     element={<Navigate to="/upstream" replace />} />
       <Route path="/channels"      element={<Navigate to="/upstream" replace />} />
       <Route path="/reconcile"     element={hasPermission('reconcile:read') ? <ReconcilePage />    : <Navigate to={homePage} replace />} />
-      <Route path="/model-changes" element={hasPermission('management:console') ? <ModelChangePage /> : <Navigate to={homePage} replace />} />
+      <Route path="/model-changes" element={hasPermission('model:read') ? <ModelChangePage /> : <Navigate to={homePage} replace />} />
       <Route path="/customers"     element={hasPermission('customer:read')  ? <CustomersPage />    : <Navigate to={homePage} replace />} />
       <Route path="/contracts"     element={hasPermission('contract:read')  ? <ContractsPage />    : <Navigate to={homePage} replace />} />
       <Route path="/wiki"          element={hasPermission('wiki:read')      ? <WikiPage />         : <Navigate to={homePage} replace />} />

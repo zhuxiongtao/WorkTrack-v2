@@ -35,9 +35,10 @@ RUN rm -f /etc/nginx/sites-enabled/default
 # 复制 Nginx 配置
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# 复制启动脚本
+# 复制启动脚本（用 sed 去除可能的 CRLF：Windows 上构建时换行符会污染 shebang，
+# 导致容器启动报 "exec /entrypoint.sh: no such file or directory"）
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 
 # 创建数据目录（ChromaDB 等）
 RUN mkdir -p /app/data

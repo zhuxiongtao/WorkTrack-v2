@@ -29,7 +29,7 @@ def _ensure_chroma():
 
 
 def _get_embedding_config(db: Session = None) -> tuple:
-    """获取嵌入模型配置"""
+    """获取嵌入模型配置，返回 (base_url, api_key, model_name, provider_id)"""
     if db:
         task_cfg = db.exec(
             select(TaskModelConfig).where(TaskModelConfig.task_type == "embedding")
@@ -37,7 +37,7 @@ def _get_embedding_config(db: Session = None) -> tuple:
         if task_cfg and task_cfg.provider_id and task_cfg.model_name:
             provider = db.get(ModelProvider, task_cfg.provider_id)
             if provider and provider.is_active and provider.api_key:
-                return provider.base_url, provider.api_key, task_cfg.model_name
+                return provider.base_url, provider.api_key, task_cfg.model_name, task_cfg.provider_id
         provider = db.exec(
             select(ModelProvider).where(
                 ModelProvider.is_active == True, ModelProvider.api_key != ""
@@ -45,11 +45,12 @@ def _get_embedding_config(db: Session = None) -> tuple:
         ).first()
         if provider:
             model = settings.embedding_model_name
-            return provider.base_url, provider.api_key, model
+            return provider.base_url, provider.api_key, model, provider.id
     return (
         settings.effective_embedding_base_url,
         settings.effective_embedding_api_key,
         settings.embedding_model_name,
+        None,
     )
 
 
@@ -70,11 +71,14 @@ def _get_embedding_client(base_url: str, api_key: str) -> OpenAI:
 _get_embedding_client._cache = {}
 
 
-def embed_text(text: str, db: Session = None) -> list[float]:
+def embed_text(text: str, db: Session = None, user_id: int = None) -> list[float]:
     """将文本转换为向量嵌入"""
-    base_url, api_key, model = _get_embedding_config(db)
+    base_url, api_key, model, provider_id = _get_embedding_config(db)
     client = _get_embedding_client(base_url, api_key)
     resp = client.embeddings.create(model=model, input=text)
+    if db is not None and provider_id is not None:
+        from app.services.ai_service import _record_usage_silent
+        _record_usage_silent(db, resp, user_id or 0, provider_id, model, "embedding")
     return resp.data[0].embedding
 
 

@@ -912,6 +912,8 @@ export default function SettingsPage() {
   const [homePageSaving, setHomePageSaving] = useState(false)
   const [tavilyApiKey, setTavilyApiKey] = useState('')
   const [tavilySaving, setTavilySaving] = useState(false)
+  const [searchProvider, setSearchProvider] = useState('auto')
+  const [searchProviderSaving, setSearchProviderSaving] = useState(false)
 
   // 加载 Tavily 配置
   useEffect(() => {
@@ -930,6 +932,18 @@ export default function SettingsPage() {
       })
       showToast('Tavily API Key 已保存', 'success')
     } finally { setTavilySaving(false) }
+  }
+
+  const handleSaveSearchProvider = async (value: string) => {
+    setSearchProvider(value)
+    setSearchProviderSaving(true)
+    try {
+      await fetch('/api/v1/settings/preferences', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'search_provider', value }),
+      })
+      showToast('搜索通道已更新', 'success')
+    } finally { setSearchProviderSaving(false) }
   }
 
   // ===== 系统信息 =====
@@ -1024,7 +1038,10 @@ export default function SettingsPage() {
   useEffect(() => {
     fetch('/api/v1/settings/preferences')
       .then((r) => r.json())
-      .then((d) => { if (d.home_page) setHomePage(d.home_page) })
+      .then((d) => {
+        if (d.home_page) setHomePage(d.home_page)
+        if (d.search_provider) setSearchProvider(d.search_provider)
+      })
       .catch(() => {})
   }, [])
   useEffect(() => {
@@ -1553,7 +1570,36 @@ export default function SettingsPage() {
       {/* 联网搜索服务 */}
       <div className="mt-10">
         <h3 className="text-base font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2"><Search size={18} className="text-emerald-400" /> 联网搜索服务</h3>
-        <p className="text-xs text-gray-500 mb-4 dark:text-gray-400">配置 Tavily Search API 以启用 AI 联网搜索能力（获取客户信息、行业动态等）</p>
+        <p className="text-xs text-gray-500 mb-4 dark:text-gray-400">选择联网搜索通道。Gemini 接地搜索（Grounding）借助所配置的 Vertex/Gemini 供应商直接联网获取实时信息并附带引用来源；Tavily 为传统搜索 API。</p>
+
+        {/* 搜索通道选择 */}
+        <div className="p-4 rounded-xl bg-bg-card border border-border max-w-lg mb-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Search size={15} className="text-emerald-400" />
+            <span className="text-sm font-medium text-gray-900 dark:text-white">搜索通道</span>
+            {searchProviderSaving && <Loader2 size={12} className="animate-spin text-gray-400 ml-1" />}
+          </div>
+          <div className="space-y-2">
+            {[
+              { v: 'auto', label: '自动（推荐）', desc: '已配置 Vertex/Gemini 时优先用接地搜索，失败自动回退 Tavily' },
+              { v: 'gemini_grounding', label: 'Gemini 接地搜索', desc: '优先 Gemini 接地搜索，异常时回退 Tavily 兜底' },
+              { v: 'tavily', label: 'Tavily', desc: '仅使用 Tavily Search API（传统行为）' },
+            ].map((opt) => (
+              <label key={opt.v}
+                className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-colors ${searchProvider === opt.v ? 'border-emerald-400/60 bg-emerald-500/5' : 'border-border hover:bg-bg-hover/40'}`}>
+                <input type="radio" name="search_provider" value={opt.v}
+                  checked={searchProvider === opt.v}
+                  onChange={() => handleSaveSearchProvider(opt.v)}
+                  className="mt-0.5 accent-emerald-500" />
+                <div>
+                  <div className="text-sm text-gray-900 dark:text-white font-medium">{opt.label}</div>
+                  <div className="text-[11px] text-gray-500 dark:text-gray-400">{opt.desc}</div>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+
         <div className="p-4 rounded-xl bg-bg-card border border-border max-w-lg">
           <div className="flex items-center gap-2 mb-3">
             <Globe size={15} className="text-emerald-400" />

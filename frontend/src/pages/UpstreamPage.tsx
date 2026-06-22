@@ -421,7 +421,7 @@ export default function UpstreamPage() {
           { label: '活跃项目', value: channelStats.totalActive, tone: 'purple' },
         ]}
         right={
-          hasPermission('project:edit') && (
+          hasPermission('upstream:edit') && (
             <button onClick={openCreateSupplier}
               className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#3B82F6] text-white text-xs font-bold hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 transition-all cursor-pointer">
               <Plus size={14} strokeWidth={2.5} />新增供应商
@@ -564,7 +564,7 @@ export default function UpstreamPage() {
                       </div>
                     </div>
                   </div>
-                  {hasPermission('project:edit') && (
+                  {hasPermission('upstream:edit') && (
                     <div className="flex items-center gap-2 shrink-0">
                       {selectedSupplierDetail.status === '待审批' && (
                         <button onClick={() => handleSubmitSupplierApproval(selectedSupplierDetail)} disabled={submittingSupplierApproval}
@@ -656,7 +656,7 @@ export default function UpstreamPage() {
                                   </div>
                                 </div>
                               </div>
-                              {hasPermission('project:edit') && (
+                              {hasPermission('upstream:edit') && (
                                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                   <button onClick={() => openEditChannel(c)} className="p-1.5 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-bg-hover transition-colors"><Edit3 size={13} /></button>
                                   <button onClick={() => handleDeleteChannel(c.id)} disabled={deletingChannelId === c.id}
@@ -783,7 +783,7 @@ export default function UpstreamPage() {
               <option value="">全部状态</option>
               {CHANNEL_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
-            {hasPermission('project:edit') && (
+            {hasPermission('upstream:edit') && (
               <button onClick={() => openCreateChannel()}
                 className="ml-auto inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-cyan-500 to-blue-500 rounded-lg hover:opacity-90">
                 <Plus size={14} /> 新建通道

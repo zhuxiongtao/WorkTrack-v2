@@ -23,6 +23,9 @@ interface UserTableProps {
   onDelete: (user: UserData) => void
   onResetPassword: (user: UserData) => void
   onManageRoles: (user: UserData) => void
+  canEdit: boolean
+  canDelete: boolean
+  canManageRoles: boolean
   getAvatarColor: (name: string) => string
   formatTime: (s: string | null) => string
 }
@@ -31,6 +34,7 @@ export function UserTable({
   users, loading, currentUserId, pagination,
   selectedIds, onSelectionChange,
   onPageChange, onEdit, onToggleActive, onSetStatus, onDelete, onResetPassword, onManageRoles,
+  canEdit, canDelete, canManageRoles,
   getAvatarColor, formatTime,
 }: UserTableProps) {
   const selectableUsers = users.filter(u => u.id !== currentUserId)
@@ -102,6 +106,9 @@ export function UserTable({
                 onSetStatus={(status: string) => onSetStatus(u, status)}
                 onResetPassword={() => onResetPassword(u)}
                 onManageRoles={() => onManageRoles(u)}
+                canEdit={canEdit}
+                canDelete={canDelete}
+                canManageRoles={canManageRoles}
                 getAvatarColor={getAvatarColor}
                 formatTime={formatTime}
               />

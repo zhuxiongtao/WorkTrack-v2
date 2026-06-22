@@ -364,7 +364,7 @@ export default function SuppliersPage() {
           { label: '合作中', value: activeSuppliers },
         ]}
         right={
-          hasPermission('project:edit') && (
+          hasPermission('upstream:edit') && (
             <button
               onClick={openCreate}
               className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#3B82F6] text-[#fff] text-xs font-bold hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 transition-all cursor-pointer"
@@ -532,7 +532,7 @@ export default function SuppliersPage() {
                       </div>
                     </div>
                   </div>
-                  {hasPermission('project:edit') && (
+                  {hasPermission('upstream:edit') && (
                     <div className="flex items-center gap-1">
                       {selectedDetail.status === '待审批' && (
                         <button

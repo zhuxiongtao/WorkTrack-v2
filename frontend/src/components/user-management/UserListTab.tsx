@@ -43,8 +43,14 @@ interface UserListTabProps {
 }
 
 export function UserListTab({ departmentId }: UserListTabProps) {
-  const { user: currentUser } = useAuth()
+  const { user: currentUser, hasPermission } = useAuth()
   const { toast: showToast, confirm: showConfirm } = useToast()
+
+  // 操作权限（与后端 require_permission 对齐：避免渲染会 403 的按钮）
+  const canCreate = hasPermission('user:create')
+  const canEdit = hasPermission('user:edit')
+  const canDelete = hasPermission('user:delete')
+  const canManageRoles = hasPermission('user:manage_roles')
 
   // 筛选状态
   const [search, setSearch] = useState('')
@@ -173,12 +179,14 @@ export function UserListTab({ departmentId }: UserListTabProps) {
     <div className="space-y-4">
       <UserStatsBar />
 
-      <BatchActionsBar
-        selectedCount={selectedIds.size}
-        onClearSelection={() => setSelectedIds(new Set())}
-        onAction={handleBatchAction}
-        loading={batchActionMutation.isPending}
-      />
+      {canEdit && (
+        <BatchActionsBar
+          selectedCount={selectedIds.size}
+          onClearSelection={() => setSelectedIds(new Set())}
+          onAction={handleBatchAction}
+          loading={batchActionMutation.isPending}
+        />
+      )}
 
       <div className="flex items-center justify-between gap-4">
         <div className="flex-1">
@@ -189,13 +197,15 @@ export function UserListTab({ departmentId }: UserListTabProps) {
             roles={roles}
           />
         </div>
-        <button
-          onClick={openCreate}
-          className="shrink-0 flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-accent-blue text-white text-xs font-bold hover:bg-blue-600 transition-colors cursor-pointer shadow-sm"
-        >
-          <UserPlus size={14} />
-          录入新成员
-        </button>
+        {canCreate && (
+          <button
+            onClick={openCreate}
+            className="shrink-0 flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-accent-blue text-white text-xs font-bold hover:bg-blue-600 transition-colors cursor-pointer shadow-sm"
+          >
+            <UserPlus size={14} />
+            录入新成员
+          </button>
+        )}
       </div>
 
       <UserTable
@@ -212,6 +222,9 @@ export function UserListTab({ departmentId }: UserListTabProps) {
         onDelete={handleDelete}
         onResetPassword={(u) => setResetPwdUser(u)}
         onManageRoles={openRoles}
+        canEdit={canEdit}
+        canDelete={canDelete}
+        canManageRoles={canManageRoles}
         getAvatarColor={getAvatarColor}
         formatTime={formatTime}
       />

@@ -237,6 +237,9 @@ PERMISSION_DEFS = [
     # 财务对账
     ("reconcile:read", "查看对账", "reconcile", "read"),
     ("reconcile:edit", "编辑对账", "reconcile", "edit"),
+    # 模型变更（上游 LLM 模型上下线 / 价格变动追踪，独立于「管理总览」）
+    ("model:read", "查看模型变更", "model", "read"),
+    ("model:edit", "管理模型变更", "model", "edit"),
 ]
 
 ROLE_DEFS = {
@@ -258,6 +261,8 @@ ROLE_DEFS = {
             # 上游与对账
             "upstream:read", "upstream:edit",
             "reconcile:read", "reconcile:edit",
+            # 模型变更
+            "model:read", "model:edit",
             # 系统管理与运维
             "settings:read", "settings:edit",
             "dashboard:read",
@@ -295,11 +300,11 @@ ROLE_DEFS = {
     },
     "sales": {
         "name": "销售",
-        "description": "销售人员，负责项目拓展和客户维护，跟进合同签署",
+        "description": "销售人员，负责项目拓展和客户维护，跟进合同签署（删除权归管理员，防止误删丢失审计链）",
         "perms": [
-            "project:read", "project:create", "project:edit", "project:delete",
-            "customer:read", "customer:create", "customer:edit", "customer:delete",
-            "contract:read", "contract:create", "contract:edit", "contract:delete", "contract:parse",
+            "project:read", "project:create", "project:edit",
+            "customer:read", "customer:create", "customer:edit",
+            "contract:read", "contract:create", "contract:edit", "contract:parse",
             "report:read", "report:create", "report:submit",
             "ai:use",
             "wiki:read",
@@ -336,9 +341,9 @@ ROLE_DEFS = {
     },
     "business": {
         "name": "商务",
-        "description": "商务人员，负责合同谈判、客户对接和上游供应商管理",
+        "description": "商务人员，负责合同谈判、客户对接和上游供应商管理（删除权归管理员）",
         "perms": [
-            "contract:read", "contract:create", "contract:edit", "contract:delete", "contract:parse",
+            "contract:read", "contract:create", "contract:edit", "contract:parse",
             "customer:read", "customer:create", "customer:edit",
             "project:read",
             "report:read", "report:submit",
@@ -388,6 +393,7 @@ ROLE_DEFS = {
             "meeting:read", "meeting:view_all",
             "upstream:read",
             "reconcile:read",
+            "model:read",
             "ai:use",
             "wiki:read",
             "settings:read",
@@ -411,6 +417,19 @@ ROLE_DEFS = {
             "share:read", "share:comment",
         ],
     },
+}
+
+
+# ===== 系统角色权限「回收」清单 =====
+# 背景：_init_rbac_data 的权限同步是"仅新增、不删除"（避免抹掉管理员手动定制）。
+# 当某个系统角色需要"收回"历史上误授的权限时，必须在此显式声明，启动时会幂等删除。
+# 仅作用于这里列出的 (角色, 权限) 组合，不影响任何其它授权。
+ROLE_PERM_REVOCATIONS = {
+    # 销售/商务收回物理删除权（删除归管理员，防止一线误删丢失审计链）
+    "sales": ["project:delete", "customer:delete", "contract:delete"],
+    "business": ["contract:delete"],
+    # 运营不再拥有创建分享（与角色定义对齐，仅保留查看/评论）
+    "operations": ["share:create"],
 }
 
 
@@ -592,6 +611,28 @@ def _init_rbac_data(engine):
                 role_obj.is_system = True
                 session.add(role_obj)
         session.commit()
+
+        # 2.5 权限回收（幂等）：删除 ROLE_PERM_REVOCATIONS 中显式声明要收回的授权
+        revoked = 0
+        for role_code, perm_codes in ROLE_PERM_REVOCATIONS.items():
+            role_obj = next((r for r in existing_roles if r.code == role_code), None)
+            if not role_obj:
+                continue
+            for pc in perm_codes:
+                perm_obj = perm_map.get(pc)
+                if not perm_obj:
+                    continue
+                rp = session.exec(
+                    select(RolePermission).where(
+                        RolePermission.role_id == role_obj.id,
+                        RolePermission.permission_id == perm_obj.id,
+                    )
+                ).first()
+                if rp:
+                    session.delete(rp)
+                    revoked += 1
+        if revoked:
+            session.commit()
 
         # 重新查询角色列表（首次部署时 existing_roles 为空，但角色已创建）
         existing_roles = session.exec(select(Role)).all()

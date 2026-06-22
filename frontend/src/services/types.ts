@@ -156,11 +156,14 @@ export const MODULE_LABELS: Record<string, string> = {
   project: '项目管理',
   customer: '客户管理',
   contract: '合同管理',
+  upstream: '上游管理',
+  reconcile: '财务对账',
   report: '日报周报',
   meeting: '会议纪要',
   ai: 'AI模型',
   wiki: 'AI文档',
   settings: '系统设置',
+  model: '模型变更',
   dashboard: '数据看板',
   task: '定时任务',
   log: '运行日志',
@@ -171,7 +174,8 @@ export const MODULE_LABELS: Record<string, string> = {
 }
 
 export const PERM_GROUPS = [
-  'user', 'project', 'customer', 'contract', 'report', 'meeting',
-  'ai', 'wiki', 'settings', 'dashboard', 'task', 'log', 'monitor', 'data',
+  'user', 'project', 'customer', 'contract', 'upstream', 'reconcile',
+  'report', 'meeting', 'ai', 'wiki', 'settings', 'model',
+  'dashboard', 'task', 'log', 'monitor', 'data',
   'management', 'share',
 ] as const

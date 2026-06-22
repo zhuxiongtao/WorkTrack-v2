@@ -188,7 +188,7 @@ def list_events(
     risk_level: Optional[str] = None,
     supplier_id: Optional[int] = None,
     db: Session = Depends(get_session),
-    current_user: User = Depends(require_permission("management:console")),
+    current_user: User = Depends(require_permission("model:read")),
 ):
     query = select(ModelChangeEvent).order_by(col(ModelChangeEvent.id).desc())
     if status:
@@ -240,7 +240,7 @@ def list_events(
 def create_event(
     body: ModelChangeEventCreate,
     db: Session = Depends(get_session),
-    current_user: User = Depends(require_permission("settings:edit")),
+    current_user: User = Depends(require_permission("model:edit")),
 ):
     now = _now()
     event = ModelChangeEvent(
@@ -286,7 +286,7 @@ def create_event(
 def get_event(
     event_id: int,
     db: Session = Depends(get_session),
-    current_user: User = Depends(require_permission("management:console")),
+    current_user: User = Depends(require_permission("model:read")),
 ):
     event = _get_event_or_404(event_id, db)
     return _build_event_out(event, db)
@@ -297,7 +297,7 @@ def update_event(
     event_id: int,
     body: ModelChangeEventUpdate,
     db: Session = Depends(get_session),
-    current_user: User = Depends(require_permission("settings:edit")),
+    current_user: User = Depends(require_permission("model:edit")),
 ):
     event = _get_event_or_404(event_id, db)
     if event.status == "completed":
@@ -318,7 +318,7 @@ def update_event(
 def delete_event(
     event_id: int,
     db: Session = Depends(get_session),
-    current_user: User = Depends(require_permission("settings:edit")),
+    current_user: User = Depends(require_permission("model:edit")),
 ):
     event = _get_event_or_404(event_id, db)
     # cascade: delete child records first
@@ -342,7 +342,7 @@ def delete_event(
 def analyze_impact(
     event_id: int,
     db: Session = Depends(get_session),
-    current_user: User = Depends(require_permission("settings:edit")),
+    current_user: User = Depends(require_permission("model:edit")),
 ):
     """
     自动影响分析：通过 supplier_id → ProjectCost → Project → Customer
@@ -451,7 +451,7 @@ def assign_stage(
     stage_id: int,
     body: StageAssignIn,
     db: Session = Depends(get_session),
-    current_user: User = Depends(require_permission("settings:edit")),
+    current_user: User = Depends(require_permission("model:edit")),
 ):
     """为阶段指派执行人"""
     event = _get_event_or_404(event_id, db)
@@ -482,7 +482,7 @@ def start_stage(
     event_id: int,
     stage_id: int,
     db: Session = Depends(get_session),
-    current_user: User = Depends(require_permission("settings:edit")),
+    current_user: User = Depends(require_permission("model:edit")),
 ):
     """开始执行阶段 (pending → in_progress)"""
     event = _get_event_or_404(event_id, db)
@@ -520,7 +520,7 @@ def complete_stage(
     stage_id: int,
     body: StageCompleteIn,
     db: Session = Depends(get_session),
-    current_user: User = Depends(require_permission("settings:edit")),
+    current_user: User = Depends(require_permission("model:edit")),
 ):
     """完成阶段执行 (in_progress → awaiting_approval 或直接 completed)"""
     event = _get_event_or_404(event_id, db)
@@ -556,7 +556,7 @@ def approve_stage(
     stage_id: int,
     body: StageApproveIn,
     db: Session = Depends(get_session),
-    current_user: User = Depends(require_permission("settings:edit")),
+    current_user: User = Depends(require_permission("model:edit")),
 ):
     """审批通过/驳回 (awaiting_approval → completed / in_progress)"""
     event = _get_event_or_404(event_id, db)
@@ -614,7 +614,7 @@ def list_customer_tasks(
     event_id: int,
     status: Optional[str] = None,
     db: Session = Depends(get_session),
-    current_user: User = Depends(require_permission("management:console")),
+    current_user: User = Depends(require_permission("model:read")),
 ):
     _get_event_or_404(event_id, db)
     query = select(ModelChangeCustomerTask).where(ModelChangeCustomerTask.event_id == event_id)
@@ -645,7 +645,7 @@ def update_customer_task(
     task_id: int,
     body: CustomerTaskUpdate,
     db: Session = Depends(get_session),
-    current_user: User = Depends(require_permission("settings:edit")),
+    current_user: User = Depends(require_permission("model:edit")),
 ):
     task = db.exec(
         select(ModelChangeCustomerTask).where(

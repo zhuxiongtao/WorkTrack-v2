@@ -17,6 +17,7 @@ const MODULE_ICONS: Record<string, string> = {
   user: '👤', project: '📋', customer: '🏢', contract: '📑', report: '📝',
   meeting: '📅', ai: '🤖', wiki: '📚', settings: '⚙️', dashboard: '📊',
   task: '⏰', log: '📜', monitor: '🖥️', data: '💾',
+  upstream: '🔗', reconcile: '🧮', model: '🔄', management: '🗂️', share: '🔁',
 }
 
 const ACTION_LABELS: Record<string, string> = {
