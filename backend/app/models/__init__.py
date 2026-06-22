@@ -31,6 +31,7 @@ from app.models.reconcile import (
 from app.models.model_catalog import ModelCatalog
 from app.models.approval import ApprovalFlow, ApprovalInstance, ApprovalRecord
 from app.models.model_change import ModelChangeEvent, ModelChangeStage, ModelChangeCustomerTask
+from app.models.model_usage_log import ModelUsageLog
 
 __all__ = [
     "User",
@@ -84,4 +85,5 @@ __all__ = [
     "ModelChangeEvent",
     "ModelChangeStage",
     "ModelChangeCustomerTask",
+    "ModelUsageLog",
 ]

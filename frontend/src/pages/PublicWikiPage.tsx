@@ -279,7 +279,7 @@ export default function PublicWikiPage() {
           {treeLoading ? (
             <div className="flex justify-center py-12"><Loader2 size={16} className="animate-spin text-accent-blue" /></div>
           ) : pageTree.length === 0 ? (
-            <p className="text-[10px] text-gray-400 text-center py-8 italic">空间内暂无公开文档</p>
+            <p className="text-[11px] text-gray-400 text-center py-8 italic">空间内暂无公开文档</p>
           ) : (
             pageTree.map(node => <TreeNode key={node.id} node={node} />)
           )}

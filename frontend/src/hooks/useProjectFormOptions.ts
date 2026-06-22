@@ -76,7 +76,7 @@ export function useProjectFormOptions() {
     setLoading(true)
     try {
       const [custRes, optRes, meetingRes, chanRes, supRes, modelRes, modelStatusRes] = await Promise.all([
-        fetchWithAuth('/api/v1/customers?scope=all').catch(() => null),
+        fetchWithAuth('/api/v1/customers/selector').catch(() => null),
         fetchWithAuth('/api/v1/settings/field-options').catch(() => null),
         fetchWithAuth('/api/v1/meetings?simple=1').catch(() => null),
         fetchWithAuth('/api/v1/channels?status=合作中').catch(() => null),

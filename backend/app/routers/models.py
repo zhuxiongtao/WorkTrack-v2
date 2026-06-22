@@ -149,6 +149,7 @@ def manual_refresh(
         inserted=res.get("inserted", 0),
         updated=res.get("updated", 0),
         skipped=0,
+        translated=res.get("translated", 0),
         duration_ms=res.get("duration_ms", 0),
     )
 

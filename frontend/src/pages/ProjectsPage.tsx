@@ -22,6 +22,9 @@ interface Project {
   monthly_call_volume: string | null
   usage_scenario: string | null
   contract_period: string | null
+  discount_rate: number | null
+  cost_amount: number | null
+  gross_margin: number | null
   contract_count?: number
 }
 
@@ -34,6 +37,18 @@ interface LinkedContract {
 
 interface MeetingLink {
   id: number; title: string; meeting_date: string
+}
+
+interface CostItem {
+  id: number; category: string; description: string; amount: number
+  cost_month: string | null; supplier_id: number | null
+}
+
+interface CostSummary {
+  total_cost: number
+  gross_profit: number | null
+  gross_margin: number | null
+  cost_items: CostItem[]
 }
 
 interface FieldOption {
@@ -64,6 +79,7 @@ export default function ProjectsPage() {
   const [linkedContracts, setLinkedContracts] = useState<LinkedContract[]>([])
   const [allMeetings, setAllMeetings] = useState<MeetingLink[]>([])
   const [selectedMeetingIds, setSelectedMeetingIds] = useState<Set<number>>(new Set())
+  const [costSummary, setCostSummary] = useState<CostSummary | null>(null)
 
   // 快捷跟进
   const [quickProgressOpen, setQuickProgressOpen] = useState(false)
@@ -142,6 +158,17 @@ export default function ProjectsPage() {
     }
   }
 
+  const loadCostSummary = async (pid: number) => {
+    try {
+      const res = await fetch(`/api/v1/project-costs/project/${pid}`)
+      if (!res.ok) { setCostSummary(null); return }
+      const data = await res.json()
+      setCostSummary(data)
+    } catch {
+      setCostSummary(null)
+    }
+  }
+
   // 挂载触发监听
   useEffect(() => {
     loadProjects()
@@ -178,9 +205,10 @@ export default function ProjectsPage() {
     setModalProject(p)
     loadLinkedMeetings(p.id)
     loadLinkedContracts(p.id)
+    loadCostSummary(p.id)
   }
 
-  const closeDetail = () => { setModalProject(null); setQuickProgressOpen(false); setQuickText(''); setQuickDate(new Date().toISOString().slice(0, 10)) }
+  const closeDetail = () => { setModalProject(null); setQuickProgressOpen(false); setQuickText(''); setQuickDate(new Date().toISOString().slice(0, 10)); setCostSummary(null) }
 
   const handleQuickProgress = async () => {
     if (!quickText.trim() || !modalProject) return
@@ -407,7 +435,7 @@ export default function ProjectsPage() {
                 {/* 状态 */}
                 {statuses.length > 0 && (
                   <div className="mb-4">
-                    <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">状态</div>
+                    <div className="text-[11px] text-gray-500 uppercase tracking-wider mb-2">状态</div>
                     <div className="flex flex-wrap gap-1.5">
                       {statuses.map((st) => {
                         const cnt = statusCounts(st)
@@ -422,7 +450,7 @@ export default function ProjectsPage() {
                                 : 'bg-bg-hover text-gray-400 border-transparent hover:border-border hover:text-gray-300'
                             }`}
                           >
-                            {st}<span className="text-[9px] opacity-50 ml-1">{cnt}</span>
+                            {st}<span className="text-[11px] opacity-50 ml-1">{cnt}</span>
                           </button>
                         )
                       })}
@@ -433,7 +461,7 @@ export default function ProjectsPage() {
                 {/* 产品 */}
                 {products.length > 0 && (
                   <div className="mb-4">
-                    <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">产品</div>
+                    <div className="text-[11px] text-gray-500 uppercase tracking-wider mb-2">产品</div>
                     <div className="flex flex-wrap gap-1.5">
                       {products.map((prod) => {
                         const cnt = productCounts(prod)
@@ -448,7 +476,7 @@ export default function ProjectsPage() {
                                 : 'bg-bg-hover text-gray-400 border-transparent hover:border-border hover:text-gray-300'
                             }`}
                           >
-                            {prod}<span className="text-[9px] opacity-50 ml-1">{cnt}</span>
+                            {prod}<span className="text-[11px] opacity-50 ml-1">{cnt}</span>
                           </button>
                         )
                       })}
@@ -459,7 +487,7 @@ export default function ProjectsPage() {
                 {/* 场景 */}
                 {scenarios.length > 0 && (
                   <div>
-                    <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">场景</div>
+                    <div className="text-[11px] text-gray-500 uppercase tracking-wider mb-2">场景</div>
                     <div className="flex flex-wrap gap-1.5">
                       {scenarios.map((sc) => {
                         const cnt = scenarioCounts(sc)
@@ -474,7 +502,7 @@ export default function ProjectsPage() {
                                 : 'bg-bg-hover text-gray-400 border-transparent hover:border-border hover:text-gray-300'
                             }`}
                           >
-                            {sc}<span className="text-[9px] opacity-50 ml-1">{cnt}</span>
+                            {sc}<span className="text-[11px] opacity-50 ml-1">{cnt}</span>
                           </button>
                         )
                       })}
@@ -538,15 +566,16 @@ export default function ProjectsPage() {
           {/* 项目列表视图（紧凑表格）*/}
           <div className="rounded-xl border border-border bg-bg-card overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[1100px]">
+              <table className="w-full text-sm min-w-[1280px]">
                 <thead className="bg-bg-hover/50 text-[11px] text-gray-500 uppercase tracking-wider">
                   <tr>
                     <th className="text-left px-4 py-2.5 font-medium whitespace-nowrap">项目</th>
-                    <th className="text-left px-4 py-2.5 font-medium whitespace-nowrap">客户 / 销售</th>
+                    <th className="text-left px-4 py-2.5 font-medium whitespace-nowrap">客户 / 负责人</th>
                     <th className="text-left px-4 py-2.5 font-medium whitespace-nowrap">状态</th>
                     <th className="text-right px-4 py-2.5 font-medium whitespace-nowrap">商机</th>
                     <th className="text-right px-4 py-2.5 font-medium whitespace-nowrap">成交</th>
-                    <th className="text-left px-4 py-2.5 font-medium whitespace-nowrap">产品 / 渠道</th>
+                    <th className="text-left px-4 py-2.5 font-medium whitespace-nowrap">产品 / 模型</th>
+                    <th className="text-left px-4 py-2.5 font-medium whitespace-nowrap">调用量 / 时间节点</th>
                     <th className="text-left px-4 py-2.5 font-medium whitespace-nowrap">合同</th>
                   </tr>
                 </thead>
@@ -569,91 +598,25 @@ export default function ProjectsPage() {
 
       {/* 全屏详情弹窗 */}
       {modalProject && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end md:items-start justify-center md:pt-[10vh] pb-0 md:pb-10 overflow-y-auto" onClick={closeDetail}>
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end md:items-start justify-center md:pt-[6vh] pb-0 md:pb-10 overflow-y-auto" onClick={closeDetail}>
           <div className="w-full max-w-2xl mx-0 md:mx-4 rounded-none md:rounded-2xl bg-bg-card border border-border shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            {/* Header */}
-            <div className="flex flex-wrap items-start justify-between gap-2 px-4 md:px-6 py-4 border-b border-border bg-bg-card rounded-t-none md:rounded-t-2xl">
+            {/* Header —— 精简：项目名 + 状态 + 客户 + 操作 */}
+            <div className="flex flex-wrap items-start justify-between gap-3 px-4 md:px-6 py-4 border-b border-border bg-bg-card rounded-t-none md:rounded-t-2xl">
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 mb-2 flex-wrap">
-                  <h3 className="text-lg font-bold text-white truncate">{modalProject.name}</h3>
+                <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white truncate">{modalProject.name}</h3>
                   <span className={`text-[11px] px-2 py-0.5 rounded-full border flex-shrink-0 ${getStatusColor(modalProject.status)}`}>{modalProject.status}</span>
-                  {(modalProject.opportunity_amount || modalProject.deal_amount) && (
-                    <div className="flex items-center gap-3 text-[11px] flex-shrink-0">
-                      {modalProject.opportunity_amount && (
-                        <span className="text-blue-400/80 font-medium">商机 {(() => { const a = formatAmount(modalProject.opportunity_amount, modalProject.currency); return `${a.symbol}${a.display}` })()}</span>
-                      )}
-                      {modalProject.deal_amount && (
-                        <span className="text-emerald-400/80 font-medium">成交 {(() => { const a = formatAmount(modalProject.deal_amount, modalProject.currency); return `${a.symbol}${a.display}` })()}</span>
-                      )}
-                    </div>
-                  )}
                 </div>
-                {/* 紧凑元信息 */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  {modalProject.customer_name && (
-                    <button
-                      onClick={() => modalProject.customer_id && window.open(`/customers?customer=${modalProject.customer_id}`, '_blank')}
-                      disabled={!modalProject.customer_id}
-                      className="inline-flex items-center gap-1 text-[11px] text-gray-400 bg-bg-input px-2 py-0.5 rounded-md border border-border hover:text-[#3B82F6] hover:border-[#3B82F6]/40 transition-colors"
-                    >
-                      <Building2 size={10} className="text-gray-500" />{modalProject.customer_name}
-                      {modalProject.customer_id && <ExternalLink size={9} className="text-gray-600" />}
-                    </button>
-                  )}
-                  {modalProject.product && (
-                    <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 bg-bg-input px-2 py-0.5 rounded-md border border-border">
-                      <Pin size={10} className="text-gray-500" />{modalProject.product.split(',').map(s => s.trim()).filter(Boolean).join(' / ')}
-                    </span>
-                  )}
-                  {modalProject.project_scenario && (
-                    <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 bg-bg-input px-2 py-0.5 rounded-md border border-border">
-                      <Pin size={10} className="text-gray-500" />{modalProject.project_scenario}
-                    </span>
-                  )}
-                  {modalProject.sales_person && (
-                    <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 bg-bg-input px-2 py-0.5 rounded-md border border-border">
-                      <User size={10} className="text-gray-500" />销售 {modalProject.sales_person}
-                    </span>
-                  )}
-                  {modalProject.tech_support_person && (
-                    <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 bg-bg-input px-2 py-0.5 rounded-md border border-border">
-                      <Wrench size={10} className="text-gray-500" />技术支持 {modalProject.tech_support_person}
-                    </span>
-                  )}
-                  {modalProject.cloud_provider && (
-                    <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 bg-bg-input px-2 py-0.5 rounded-md border border-border">
-                      <Cloud size={10} className="text-gray-500" />{modalProject.cloud_provider.split(',').map(s => s.trim()).filter(Boolean).join(' / ')}
-                    </span>
-                  )}
-                  {modalProject.upstream_channels && (
-                    <span className="inline-flex items-center gap-1 text-[11px] text-cyan-300 bg-cyan-500/10 px-2 py-0.5 rounded-md border border-cyan-500/30">
-                      <Activity size={10} className="text-cyan-400" />{modalProject.upstream_channels.split(',').map(s => s.trim()).filter(Boolean).join(' / ')}
-                    </span>
-                  )}
-                  {modalProject.models && (
-                    <span className="inline-flex items-center gap-1 text-[11px] text-purple-300 bg-purple-500/10 px-2 py-0.5 rounded-md border border-purple-500/30 font-mono">
-                      <Zap size={10} className="text-purple-400" />{modalProject.models.split(',').map(s => s.trim()).filter(Boolean).join(' / ')}
-                    </span>
-                  )}
-                  {modalProject.monthly_call_volume && (
-                    <span className="inline-flex items-center gap-1 text-[11px] text-cyan-300 bg-cyan-500/10 px-2 py-0.5 rounded-md border border-cyan-500/30">
-                      <BarChart3 size={10} className="text-cyan-400" />{modalProject.monthly_call_volume}/月
-                    </span>
-                  )}
-                  {modalProject.contract_period && (
-                    <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 bg-bg-input px-2 py-0.5 rounded-md border border-border">
-                      <Hash size={10} className="text-gray-500" />{modalProject.contract_period}
-                    </span>
-                  )}
-                  {(modalProject.start_date || modalProject.deadline || modalProject.termination_date) && (
-                    <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 bg-bg-input px-2 py-0.5 rounded-md border border-border">
-                      <Calendar size={10} className="text-gray-500" />
-                      {modalProject.start_date && new Date(modalProject.start_date).toLocaleDateString('zh-CN')}
-                      {modalProject.termination_date && <span className="text-red-400">→ 终止 {new Date(modalProject.termination_date).toLocaleDateString('zh-CN')}</span>}
-                      {modalProject.deadline && <span className="text-gray-600">→ {new Date(modalProject.deadline).toLocaleDateString('zh-CN')}</span>}
-                    </span>
-                  )}
-                </div>
+                {modalProject.customer_name && (
+                  <button
+                    onClick={() => modalProject.customer_id && window.open(`/customers?customer=${modalProject.customer_id}`, '_blank')}
+                    disabled={!modalProject.customer_id}
+                    className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-[#3B82F6] transition-colors"
+                  >
+                    <Building2 size={11} />{modalProject.customer_name}
+                    {modalProject.customer_id && <ExternalLink size={10} />}
+                  </button>
+                )}
               </div>
               <div className="flex items-center gap-2 ml-3 flex-shrink-0">
                 {hasPermission('project:edit') && (modalProject.status === '待立项') && (
@@ -663,7 +626,7 @@ export default function ProjectsPage() {
                     className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-semibold text-amber-400 border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 disabled:opacity-50 transition-colors"
                   >
                     {submittingCharter ? <Loader2 size={12} className="animate-spin" /> : <GitBranch size={12} />}
-                    提交立项申请
+                    提交立项
                   </button>
                 )}
                 {hasPermission('project:edit') && (
@@ -679,7 +642,98 @@ export default function ProjectsPage() {
             </div>
 
             <div className="p-4 md:p-6 space-y-4">
-              {/* 待立项提示：无法协调资源 */}
+              {/* ② 财务利润专区（MaaS 核心） */}
+              {(() => {
+                const op = formatAmount(modalProject.opportunity_amount, modalProject.currency)
+                const deal = formatAmount(modalProject.deal_amount, modalProject.currency)
+                const cost = formatAmount(modalProject.cost_amount, modalProject.currency)
+                const hasAny = op.hasValue || deal.hasValue || cost.hasValue || modalProject.gross_margin != null
+                if (!hasAny) return null
+                const grossProfit = modalProject.deal_amount != null && modalProject.cost_amount != null
+                  ? modalProject.deal_amount - modalProject.cost_amount : null
+                const gp = formatAmount(grossProfit, modalProject.currency)
+                return (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+                    {op.hasValue && (
+                      <div className="rounded-lg bg-blue-50/70 dark:bg-blue-500/5 px-3 py-2.5">
+                        <div className="text-[11px] text-blue-600/70 dark:text-blue-400/70 font-medium">商机金额</div>
+                        <div className="text-base font-bold text-blue-700 dark:text-blue-300 tabular-nums mt-0.5">{op.symbol}{op.display}<span className="text-[11px] font-normal ml-0.5 opacity-70">{op.unit}</span></div>
+                      </div>
+                    )}
+                    {deal.hasValue && (
+                      <div className="rounded-lg bg-emerald-50/70 dark:bg-emerald-500/5 px-3 py-2.5">
+                        <div className="text-[11px] text-emerald-600/70 dark:text-emerald-400/70 font-medium">成交金额</div>
+                        <div className="text-base font-bold text-emerald-700 dark:text-emerald-300 tabular-nums mt-0.5">{deal.symbol}{deal.display}<span className="text-[11px] font-normal ml-0.5 opacity-70">{deal.unit}</span></div>
+                      </div>
+                    )}
+                    {cost.hasValue && (
+                      <div className="rounded-lg bg-amber-50/70 dark:bg-amber-500/5 px-3 py-2.5">
+                        <div className="text-[11px] text-amber-600/70 dark:text-amber-400/70 font-medium">内部成本</div>
+                        <div className="text-base font-bold text-amber-700 dark:text-amber-300 tabular-nums mt-0.5">{cost.symbol}{cost.display}<span className="text-[11px] font-normal ml-0.5 opacity-70">{cost.unit}</span></div>
+                      </div>
+                    )}
+                    {(modalProject.gross_margin != null || gp.hasValue) && (
+                      <div className="rounded-lg bg-green-50/70 dark:bg-green-500/5 px-3 py-2.5">
+                        <div className="text-[11px] text-green-600/70 dark:text-green-400/70 font-medium flex items-center gap-1">
+                          毛利率
+                          {modalProject.discount_rate != null && <span className="opacity-70">· 折扣{modalProject.discount_rate}%</span>}
+                        </div>
+                        <div className="text-base font-bold text-green-700 dark:text-green-300 tabular-nums mt-0.5">
+                          {modalProject.gross_margin != null && <span>{modalProject.gross_margin}%</span>}
+                          {gp.hasValue && <span className="ml-1.5 text-sm">({gp.symbol}{gp.display}{gp.unit})</span>}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* ③ 项目信息网格 */}
+              {(() => {
+                const split = (s: string | null) => s ? s.split(',').map(x => x.trim()).filter(Boolean) : []
+                const products = split(modalProject.product)
+                const channels = split(modalProject.upstream_channels)
+                const models = split(modalProject.models)
+                const clouds = split(modalProject.cloud_provider)
+                const items: { icon: any; label: string; value: string }[] = []
+                if (modalProject.sales_person) items.push({ icon: User, label: '销售', value: modalProject.sales_person })
+                if (modalProject.tech_support_person) items.push({ icon: Wrench, label: '技术支持', value: modalProject.tech_support_person })
+                if (products.length) items.push({ icon: Pin, label: '产品', value: products.join(' / ') })
+                if (modalProject.project_scenario) items.push({ icon: Target, label: '场景', value: modalProject.project_scenario })
+                if (clouds.length) items.push({ icon: Cloud, label: '云厂商', value: clouds.join(' / ') })
+                if (channels.length) items.push({ icon: Activity, label: '上游通道', value: channels.join(' / ') })
+                if (models.length) items.push({ icon: Zap, label: '模型', value: models.join(' / ') })
+                if (modalProject.monthly_call_volume) items.push({ icon: BarChart3, label: '月调用量', value: modalProject.monthly_call_volume })
+                if (modalProject.contract_period) items.push({ icon: Hash, label: '合同期', value: modalProject.contract_period })
+                if (modalProject.usage_scenario) items.push({ icon: Tag, label: '使用场景', value: modalProject.usage_scenario })
+                const dateParts: string[] = []
+                if (modalProject.start_date) dateParts.push(new Date(modalProject.start_date).toLocaleDateString('zh-CN'))
+                if (modalProject.termination_date) dateParts.push(`→ 终止 ${new Date(modalProject.termination_date).toLocaleDateString('zh-CN')}`)
+                else if (modalProject.deadline) dateParts.push(`→ ${new Date(modalProject.deadline).toLocaleDateString('zh-CN')}`)
+                if (dateParts.length) items.push({ icon: Calendar, label: '起止', value: dateParts.join(' ') })
+                if (!items.length) return null
+                return (
+                  <div className="rounded-xl bg-bg-input border border-border p-3">
+                    <div className="text-[11px] font-medium text-gray-400 dark:text-gray-500 mb-2 px-1">项目信息</div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2.5">
+                      {items.map((it, i) => {
+                        const Icon = it.icon
+                        return (
+                          <div key={i} className="flex items-start gap-1.5 min-w-0">
+                            <Icon size={11} className="text-gray-400 dark:text-gray-500 mt-0.5 shrink-0" />
+                            <div className="min-w-0">
+                              <span className="text-[11px] text-gray-400 dark:text-gray-500">{it.label} </span>
+                              <span className="text-xs text-gray-700 dark:text-gray-200 break-words">{it.value}</span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })()}
+
+              {/* 待立项提示 */}
               {(modalProject.status === '待立项' || modalProject.status === '审批中') && (
                 <div className={`rounded-xl p-3 flex items-start gap-3 border ${
                   modalProject.status === '审批中'
@@ -691,10 +745,10 @@ export default function ProjectsPage() {
                     <p className={`text-xs font-semibold ${modalProject.status === '审批中' ? 'text-blue-300' : 'text-amber-300'}`}>
                       {modalProject.status === '审批中' ? '立项审批中，暂不可协调资源' : '待立项：尚未正式立项，无法协调资源'}
                     </p>
-                    <p className="text-[10px] text-gray-500 mt-0.5">
+                    <p className="text-[11px] text-gray-500 mt-0.5">
                       {modalProject.status === '审批中'
                         ? '审批通过后项目自动变为「进行中」状态'
-                        : '点击「提交立项申请」发起审批流，经部门主管、商务、老板审批后正式立项'}
+                        : '点击「提交立项」发起审批流，经部门主管、商务、老板审批后正式立项'}
                     </p>
                   </div>
                 </div>
@@ -717,6 +771,66 @@ export default function ProjectsPage() {
                 />
               )}
 
+              {/* ④ 成本明细 */}
+              {costSummary && costSummary.cost_items.length > 0 && (
+                <div className="rounded-xl bg-bg-input border border-border overflow-hidden">
+                  <div className="px-4 py-2.5 border-b border-border flex items-center gap-2 bg-bg-card/50">
+                    <BarChart3 size={13} className="text-amber-400" />
+                    <span className="text-xs font-medium text-gray-300">成本明细</span>
+                    <span className="ml-auto text-[11px] text-gray-500">
+                      合计 <span className="text-amber-400 font-semibold">¥{costSummary.total_cost.toLocaleString('zh-CN', { maximumFractionDigits: 2 })}</span>
+                      {costSummary.gross_margin != null && <span className="ml-2">毛利率 <span className="text-green-400 font-semibold">{costSummary.gross_margin}%</span></span>}
+                    </span>
+                  </div>
+                  <div className="divide-y divide-border/50">
+                    {costSummary.cost_items.map((c) => (
+                      <div key={c.id} className="px-4 py-2 flex items-center gap-2 text-xs">
+                        <span className="px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-300 text-[11px] shrink-0">{c.category}</span>
+                        <span className="text-gray-600 dark:text-gray-400 truncate flex-1">{c.description || '—'}</span>
+                        {c.cost_month && <span className="text-gray-500 text-[11px] shrink-0">{c.cost_month}</span>}
+                        <span className="text-gray-700 dark:text-gray-200 font-semibold tabular-nums shrink-0">¥{c.amount.toLocaleString('zh-CN', { maximumFractionDigits: 2 })}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ⑤ 关联合同 + 关联会议 */}
+              {(linkedContracts.length > 0 || linkedMeetings.length > 0) && (
+                <div className="rounded-xl bg-bg-input border border-border overflow-hidden">
+                  <div className="px-4 py-2.5 border-b border-border flex items-center gap-2 bg-bg-card/50">
+                    <FileText size={13} className="text-blue-400" />
+                    <span className="text-xs font-medium text-gray-300">关联合同与会议</span>
+                  </div>
+                  <div className="divide-y divide-border/50">
+                    {linkedContracts.map((c) => (
+                      <button
+                        key={c.id}
+                        onClick={() => { closeDetail(); navigate(`/contracts?project=${c.id}`) }}
+                        className="w-full px-4 py-2 flex items-center gap-2 text-xs hover:bg-bg-hover/40 transition-colors text-left"
+                      >
+                        <FileText size={11} className="text-emerald-400 shrink-0" />
+                        <span className="text-gray-300 truncate flex-1">{c.title}</span>
+                        <span className="text-gray-500 text-[11px] shrink-0">{c.contract_no}</span>
+                        {c.contract_amount != null && <span className="text-emerald-400 font-semibold tabular-nums shrink-0">¥{c.contract_amount.toLocaleString('zh-CN', { maximumFractionDigits: 0 })}</span>}
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 text-[11px] shrink-0">{c.status}</span>
+                      </button>
+                    ))}
+                    {linkedMeetings.map((m) => (
+                      <button
+                        key={m.id}
+                        onClick={() => { closeDetail(); navigate(`/meetings?meeting=${m.id}`) }}
+                        className="w-full px-4 py-2 flex items-center gap-2 text-xs hover:bg-bg-hover/40 transition-colors text-left"
+                      >
+                        <Activity size={11} className="text-purple-400 shrink-0" />
+                        <span className="text-gray-300 truncate flex-1">{m.title}</span>
+                        <span className="text-gray-500 text-[11px] shrink-0">{m.meeting_date ? new Date(m.meeting_date).toLocaleDateString('zh-CN') : ''}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* AI 项目分析（默认收起） */}
               <div className="rounded-xl bg-bg-input border border-border overflow-hidden">
                 <button
@@ -726,12 +840,12 @@ export default function ProjectsPage() {
                   <Sparkles size={14} className="text-[#F59E0B]" />
                   <span className="text-xs font-medium text-gray-300">AI 项目分析</span>
                   {modalProject.analysis && (
-                    <span className="text-[10px] text-gray-500 ml-1">({modalProject.analysis.slice(0, 40).replace(/[#*\n]/g, '').trim()}…)</span>
+                    <span className="text-[11px] text-gray-500 ml-1">({modalProject.analysis.slice(0, 40).replace(/[#*\n]/g, '').trim()}…)</span>
                   )}
                   <button
                     onClick={(e) => { e.stopPropagation(); analyzeProject(modalProject.id) }}
                     disabled={analyzingId === modalProject.id}
-                    className="ml-auto mr-2 flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-lg border border-transparent text-gray-500 hover:text-gray-300 hover:border-border transition-colors disabled:opacity-50"
+                    className="ml-auto mr-2 flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-lg border border-transparent text-gray-500 hover:text-gray-300 hover:border-border transition-colors disabled:opacity-50"
                   >
                     {analyzingId === modalProject.id ? (
                       <Loader2 size={11} className="animate-spin" />
@@ -773,7 +887,7 @@ export default function ProjectsPage() {
                   <span className="text-xs font-medium text-gray-300">跟进记录</span>
                   <button
                     onClick={() => { setQuickProgressOpen(!quickProgressOpen); setQuickText(''); setQuickDate(new Date().toISOString().slice(0, 10)) }}
-                    className={`ml-auto flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-lg border transition-colors ${quickProgressOpen ? 'bg-[#3B82F6]/10 text-[#3B82F6] border-[#3B82F6]/30' : 'text-gray-500 border-transparent hover:text-gray-300 hover:border-border'}`}
+                    className={`ml-auto flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-lg border transition-colors ${quickProgressOpen ? 'bg-[#3B82F6]/10 text-[#3B82F6] border-[#3B82F6]/30' : 'text-gray-500 border-transparent hover:text-gray-300 hover:border-border'}`}
                   >
                     <Plus size={11} />{quickProgressOpen ? '收起' : '新增'}
                   </button>
@@ -783,7 +897,7 @@ export default function ProjectsPage() {
                 {quickProgressOpen && (
                   <div className="px-4 py-3 border-b border-border bg-bg-input/50">
                     <div className="flex items-center gap-3 mb-2">
-                      <label className="text-[10px] text-gray-500 flex-shrink-0">日期</label>
+                      <label className="text-[11px] text-gray-500 flex-shrink-0">日期</label>
                       <input
                         type="date"
                         value={quickDate}
@@ -799,7 +913,7 @@ export default function ProjectsPage() {
                       autoFocus
                     />
                     <div className="flex items-center justify-between mt-2">
-                      <span className="text-[10px] text-gray-600">新记录将追加到现有进展之后</span>
+                      <span className="text-[11px] text-gray-600">新记录将追加到现有进展之后</span>
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => { setQuickProgressOpen(false); setQuickText(''); setQuickDate(new Date().toISOString().slice(0, 10)) }}
@@ -883,7 +997,7 @@ export default function ProjectsPage() {
                                       ) : (
                                         <span className="text-[11px] text-gray-600 font-mono">无日期</span>
                                       )}
-                                      <span className="text-[9px] text-gray-600 bg-bg-card/50 px-1.5 py-0.5 rounded">
+                                      <span className="text-[11px] text-gray-600 bg-bg-card/50 px-1.5 py-0.5 rounded">
                                         #{entries.length - i}
                                       </span>
                                     </div>
@@ -917,10 +1031,10 @@ export default function ProjectsPage() {
                 <div className="flex items-center gap-2 mb-2">
                   <FileText size={12} className="text-emerald-400" />
                   <span className="text-[11px] font-medium text-gray-400">关联合同</span>
-                  <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full">{linkedContracts.length}</span>
+                  <span className="text-[11px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full">{linkedContracts.length}</span>
                   <button
                     onClick={() => navigate(`/contracts?project=${modalProject.id}`)}
-                    className="ml-auto text-[10px] text-[#3B82F6] hover:underline"
+                    className="ml-auto text-[11px] text-[#3B82F6] hover:underline"
                   >查看全部 →</button>
                 </div>
                 {linkedContracts.length === 0 ? (
@@ -938,7 +1052,7 @@ export default function ProjectsPage() {
                           <FileText size={10} className="text-emerald-400 flex-shrink-0" />
                           <div className="flex-1 min-w-0">
                             <div className="font-medium truncate">{c.title}</div>
-                            <div className="text-[10px] text-gray-500 flex items-center gap-1.5 mt-0.5">
+                            <div className="text-[11px] text-gray-500 flex items-center gap-1.5 mt-0.5">
                               {c.contract_no && <span>NO. {c.contract_no}</span>}
                               {c.sign_date && <span>· 签订 {new Date(c.sign_date).toLocaleDateString('zh-CN')}</span>}
                               {amt?.hasValue && <span className="text-emerald-400 font-semibold">· {amt.symbol}{amt.display} {amt.unit}</span>}
@@ -957,7 +1071,7 @@ export default function ProjectsPage() {
                 <div className="flex items-center gap-2 mb-2">
                   <Link2 size={12} className="text-[#8B5CF6]" />
                   <span className="text-[11px] font-medium text-gray-400">关联会议</span>
-                  <span className="text-[10px] text-[#8B5CF6] bg-[#8B5CF6]/10 px-1.5 py-0.5 rounded-full">{linkedMeetings.length}</span>
+                  <span className="text-[11px] text-[#8B5CF6] bg-[#8B5CF6]/10 px-1.5 py-0.5 rounded-full">{linkedMeetings.length}</span>
                 </div>
                 {linkedMeetings.length === 0 ? (
                   <p className="text-[11px] text-gray-600 py-1">暂无，编辑项目可添加关联</p>
@@ -987,7 +1101,7 @@ export default function ProjectsPage() {
                       <div className="flex items-center gap-2 mb-2">
                         <FileText size={12} className="text-gray-500" />
                         <span className="text-[11px] font-medium text-gray-400">附件</span>
-                        <span className="text-[10px] text-gray-500 bg-bg-hover px-1.5 py-0.5 rounded-full">{files.length}</span>
+                        <span className="text-[11px] text-gray-500 bg-bg-hover px-1.5 py-0.5 rounded-full">{files.length}</span>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {files.map((f: any, idx: number) => (

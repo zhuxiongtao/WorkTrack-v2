@@ -99,7 +99,7 @@ export function RoleFormModal({ isOpen, editingRole, permissions, onClose }: Rol
           <div className="flex items-center gap-2">
             <Shield size={16} className="text-accent-blue" />
             <h3 className="text-sm font-bold text-gray-100">{editingRole ? '编辑角色' : '新建角色'}</h3>
-            {isSystemRole && <span className="text-[9px] px-1.5 py-0.3 rounded bg-amber-500/10 text-amber-400 font-bold border border-amber-500/15">系统内置</span>}
+            {isSystemRole && <span className="text-[11px] px-1.5 py-0.3 rounded bg-amber-500/10 text-amber-400 font-bold border border-amber-500/15">系统内置</span>}
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-bg-hover text-gray-500 hover:text-white"><X size={16} /></button>
         </div>
@@ -108,13 +108,13 @@ export function RoleFormModal({ isOpen, editingRole, permissions, onClose }: Rol
           {/* 角色基本信息 */}
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-[10px] font-semibold text-gray-400 mb-1">角色名称 *</label>
+              <label className="block text-[11px] font-semibold text-gray-400 mb-1">角色名称 *</label>
               <input value={roleForm.name} onChange={e => setRoleForm({ ...roleForm, name: e.target.value })}
                 className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border/60 text-sm text-gray-100 outline-none focus:border-accent-blue"
                 placeholder="如：销售经理" />
             </div>
             <div>
-              <label className="block text-[10px] font-semibold text-gray-400 mb-1">唯一编码 *</label>
+              <label className="block text-[11px] font-semibold text-gray-400 mb-1">唯一编码 *</label>
               <input value={roleForm.code}
                 onChange={e => setRoleForm({ ...roleForm, code: e.target.value.toLowerCase().replace(/\s/g, '_') })}
                 className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border/60 text-sm text-gray-100 outline-none focus:border-accent-blue font-mono"
@@ -122,7 +122,7 @@ export function RoleFormModal({ isOpen, editingRole, permissions, onClose }: Rol
                 disabled={isSystemRole} />
             </div>
             <div>
-              <label className="block text-[10px] font-semibold text-gray-400 mb-1">描述</label>
+              <label className="block text-[11px] font-semibold text-gray-400 mb-1">描述</label>
               <input value={roleForm.description} onChange={e => setRoleForm({ ...roleForm, description: e.target.value })}
                 className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border/60 text-sm text-gray-100 outline-none focus:border-accent-blue"
                 placeholder="角色职责说明" />
@@ -132,8 +132,8 @@ export function RoleFormModal({ isOpen, editingRole, permissions, onClose }: Rol
           {/* 权限分配：模块级一键开关 */}
           <div>
             <div className="flex items-center justify-between mb-2.5">
-              <span className="text-[10px] font-bold tracking-wider text-gray-400 uppercase">模块权限分配</span>
-              <span className="text-[10px] text-gray-500">{selectedPerms.size} / {permissions.length} 项已选</span>
+              <span className="text-[11px] font-bold tracking-wider text-gray-400 uppercase">模块权限分配</span>
+              <span className="text-[11px] text-gray-500">{selectedPerms.size} / {permissions.length} 项已选</span>
             </div>
             <div className="space-y-1.5">
               {PERM_GROUPS.map(mod => {
@@ -156,7 +156,7 @@ export function RoleFormModal({ isOpen, editingRole, permissions, onClose }: Rol
                       </button>
                       <span className="text-xs">{MODULE_ICONS[mod] || '📦'}</span>
                       <span className="text-xs font-bold text-gray-200 flex-1">{MODULE_LABELS[mod] || mod}</span>
-                      <span className={`text-[10px] px-1.5 py-0.3 rounded-full font-bold ${allSelected ? 'bg-accent-blue/20 text-accent-blue' : someSelected ? 'bg-blue-400/15 text-blue-300' : 'bg-bg-hover text-gray-500'}`}>
+                      <span className={`text-[11px] px-1.5 py-0.3 rounded-full font-bold ${allSelected ? 'bg-accent-blue/20 text-accent-blue' : someSelected ? 'bg-blue-400/15 text-blue-300' : 'bg-bg-hover text-gray-500'}`}>
                         {selectedCount}/{modPerms.length}
                       </span>
                       {isExpanded ? <ChevronDown size={13} className="text-gray-500" /> : <ChevronRight size={13} className="text-gray-500" />}
@@ -178,7 +178,7 @@ export function RoleFormModal({ isOpen, editingRole, permissions, onClose }: Rol
                                   {isChecked && <Check size={8} className="text-white" strokeWidth={3} />}
                                 </span>
                                 <span className="font-medium">{ACTION_LABELS[p.action] || p.action}</span>
-                                <span className="text-gray-500 font-mono text-[9px]">{p.code}</span>
+                                <span className="text-gray-500 font-mono text-[11px]">{p.code}</span>
                               </span>
                             </button>
                           )

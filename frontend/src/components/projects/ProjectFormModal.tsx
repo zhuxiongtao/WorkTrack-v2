@@ -228,13 +228,13 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
                         <Icon size={14} className="shrink-0" />
                         <span className="text-xs font-bold whitespace-nowrap">{s.title}</span>
                       </div>
-                      <span className="hidden md:block text-[10px] text-gray-400 dark:text-gray-500 ml-6">{s.desc}</span>
+                      <span className="hidden md:block text-[11px] text-gray-400 dark:text-gray-500 ml-6">{s.desc}</span>
                     </button>
                   )
                 })}
               </div>
               {loading && (
-                <div className="hidden md:flex items-center gap-1.5 mt-4 px-2 text-[10px] text-gray-400">
+                <div className="hidden md:flex items-center gap-1.5 mt-4 px-2 text-[11px] text-gray-400">
                   <div className="w-2 h-2 bg-accent-blue rounded-full animate-pulse" />
                   正在加载选项…
                 </div>
@@ -293,7 +293,7 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
                       {form.selectedProducts.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1.5">
                           {form.selectedProducts.map(p => (
-                            <span key={p} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-accent-blue/10 text-accent-blue text-[10px] font-semibold">
+                            <span key={p} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-accent-blue/10 text-accent-blue text-[11px] font-semibold">
                               {p}
                             </span>
                           ))}
@@ -440,7 +440,7 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
                       )}
                       {suggestedModelsByChannels.length > 0 && (
                         <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                          <span className="text-[10px] text-gray-400">基于所选通道推荐：</span>
+                          <span className="text-[11px] text-gray-400">基于所选通道推荐：</span>
                           {suggestedModelsByChannels.map((s) => (
                             <button
                               key={s}
@@ -450,7 +450,7 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
                                   updateField('selectedModels', [...form.selectedModels, s])
                                 }
                               }}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-accent-blue/10 text-accent-blue text-[10px] font-semibold hover:bg-accent-blue/20 transition-colors"
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-accent-blue/10 text-accent-blue text-[11px] font-semibold hover:bg-accent-blue/20 transition-colors"
                               title="点击加入已选"
                             >
                               + {s}
@@ -620,7 +620,7 @@ function FormField({ label, required, colSpan, hint, icon: Icon, children }: { l
           {label}
           {required && <span className="text-red-500">*</span>}
         </label>
-        {hint && <span className="text-[10px] text-gray-400 dark:text-gray-500">{hint}</span>}
+        {hint && <span className="text-[11px] text-gray-400 dark:text-gray-500">{hint}</span>}
       </div>
       {children}
     </div>
@@ -659,7 +659,7 @@ function AmountInput({ value, onChange, currency }: { value: string; onChange: (
         placeholder="0.00"
         className="w-full pl-7 pr-14 py-2 rounded-lg bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-sm outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all"
       />
-      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 font-medium">{currency.code}</span>
+      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-gray-400 font-medium">{currency.code}</span>
     </div>
   )
 }
@@ -710,7 +710,7 @@ function ChannelChips({ options, selected, onChange, allowCustom, placeholder, f
         )}
       </div>
       {selected.length > 0 && (
-        <div className="text-[10px] text-gray-500 dark:text-gray-400">
+        <div className="text-[11px] text-gray-500 dark:text-gray-400">
           已选 {selected.length} 项
         </div>
       )}

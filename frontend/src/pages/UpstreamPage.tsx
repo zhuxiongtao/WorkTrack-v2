@@ -99,7 +99,7 @@ const EMPTY_CHANNEL_FORM = {
 function fmtAmt(v: number | null | undefined, currency?: string) {
   if (v == null) return '—'
   const m = CURRENCY_META[currency || 'CNY'] || CURRENCY_META.CNY
-  return `${m.symbol}${v.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+  return `${m.symbol}${v.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} 万`
 }
 function fmtUSD(v: number | null | undefined) {
   if (v == null) return '—'
@@ -436,7 +436,7 @@ export default function UpstreamPage() {
           <div className="flex items-center gap-2 mb-2">
             <IconBox icon={AlertTriangle} size="sm" tone="orange" variant="soft" />
             <span className="text-xs font-semibold text-amber-400">合同到期提醒</span>
-            <span className="text-[10px] text-gray-500">{expiringSuppliers.length} 家供应商</span>
+            <span className="text-[11px] text-gray-500">{expiringSuppliers.length} 家供应商</span>
           </div>
           <div className="flex flex-wrap gap-2">
             {expiringSuppliers.map(s => {
@@ -477,7 +477,7 @@ export default function UpstreamPage() {
               <div className="flex items-center gap-2">
                 <IconBox icon={Building2} size="sm" tone="blue" variant="soft" />
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">供应商</span>
-                <span className="text-[10px] text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded-full ml-auto">{filteredSuppliers.length}</span>
+                <span className="text-[11px] text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded-full ml-auto">{filteredSuppliers.length}</span>
               </div>
               <div className="relative">
                 <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-600" />
@@ -511,8 +511,8 @@ export default function UpstreamPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm font-medium text-white truncate">{s.name}</span>
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0" style={{ background: `${catColor}15`, color: catColor }}>{s.category}</span>
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0" style={{ background: stColor.bg, color: stColor.text }}>{s.status}</span>
+                          <span className="px-1.5 py-0.5 rounded text-[11px] font-medium shrink-0" style={{ background: `${catColor}15`, color: catColor }}>{s.category}</span>
+                          <span className="px-1.5 py-0.5 rounded text-[11px] font-medium shrink-0" style={{ background: stColor.bg, color: stColor.text }}>{s.status}</span>
                         </div>
                         <div className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
                           {s.code && <span>{s.code}</span>}
@@ -548,11 +548,11 @@ export default function UpstreamPage() {
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="text-base font-bold text-white">{selectedSupplierDetail.name}</h3>
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium"
+                        <span className="px-1.5 py-0.5 rounded text-[11px] font-medium"
                           style={{ background: `${CATEGORY_COLORS[selectedSupplierDetail.category] || '#6B7280'}15`, color: CATEGORY_COLORS[selectedSupplierDetail.category] || '#6B7280' }}>
                           {selectedSupplierDetail.category}
                         </span>
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium"
+                        <span className="px-1.5 py-0.5 rounded text-[11px] font-medium"
                           style={{ background: (SUPPLIER_STATUS_COLORS[selectedSupplierDetail.status] || { bg: '#6B728015', text: '#6B7280' }).bg, color: (SUPPLIER_STATUS_COLORS[selectedSupplierDetail.status] || { bg: '#6B728015', text: '#6B7280' }).text }}>
                           {selectedSupplierDetail.status}
                         </span>
@@ -619,7 +619,7 @@ export default function UpstreamPage() {
                       className={`relative px-3 py-2 text-xs font-semibold flex items-center gap-1.5 transition-colors ${supplierDetailTab === t.key ? 'text-blue-400' : 'text-gray-500 hover:text-gray-300'}`}>
                       <t.icon size={13} />{t.label}
                       {'count' in t && (t as { count?: number }).count! > 0 && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 font-bold">{(t as { count?: number }).count}</span>
+                        <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 font-bold">{(t as { count?: number }).count}</span>
                       )}
                       {supplierDetailTab === t.key && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-t" />}
                     </button>
@@ -644,11 +644,11 @@ export default function UpstreamPage() {
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-1.5 flex-wrap">
                                     <span className="text-xs font-semibold text-white">{c.name}</span>
-                                    {c.code && <span className="text-[10px] text-gray-500 font-mono">#{c.code}</span>}
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: kindC.bg, color: kindC.text }}>{c.kind}</span>
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: statusC.bg, color: statusC.text }}>{c.status}</span>
+                                    {c.code && <span className="text-[11px] text-gray-500 font-mono">#{c.code}</span>}
+                                    <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: kindC.bg, color: kindC.text }}>{c.kind}</span>
+                                    <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: statusC.bg, color: statusC.text }}>{c.status}</span>
                                   </div>
-                                  <div className="text-[10px] text-gray-500 mt-0.5 flex items-center gap-3 flex-wrap">
+                                  <div className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-3 flex-wrap">
                                     {c.model_type && <span>{c.model_type}</span>}
                                     <span>折扣率 {(c.discount_rate * 100).toFixed(0)}%</span>
                                     <span>{c.active_projects} 个项目</span>
@@ -692,8 +692,8 @@ export default function UpstreamPage() {
                           {selectedSupplierDetail.api_endpoint && <div className="flex items-center gap-2 text-gray-300 min-w-0"><Globe size={11} className="text-gray-500 shrink-0" /><a href={selectedSupplierDetail.api_endpoint} target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 truncate">{selectedSupplierDetail.api_endpoint}</a></div>}
                           {selectedSupplierDetail.auth_type && <div className="flex items-center gap-2 text-gray-300"><Key size={11} className="text-gray-500 shrink-0" /><span>认证: {selectedSupplierDetail.auth_type}</span></div>}
                           {selectedSupplierDetail.models_provided && (
-                            <div className="mt-2"><span className="text-gray-500 text-[10px]">提供模型</span>
-                              <div className="flex flex-wrap gap-1 mt-1">{selectedSupplierDetail.models_provided.split(',').filter(Boolean).map(m => <span key={m} className="px-1.5 py-0.5 rounded text-[10px] bg-blue-500/10 text-blue-400 font-medium">{m.trim()}</span>)}</div>
+                            <div className="mt-2"><span className="text-gray-500 text-[11px]">提供模型</span>
+                              <div className="flex flex-wrap gap-1 mt-1">{selectedSupplierDetail.models_provided.split(',').filter(Boolean).map(m => <span key={m} className="px-1.5 py-0.5 rounded text-[11px] bg-blue-500/10 text-blue-400 font-medium">{m.trim()}</span>)}</div>
                             </div>
                           )}
                           {!selectedSupplierDetail.api_endpoint && !selectedSupplierDetail.auth_type && !selectedSupplierDetail.models_provided && <span className="text-gray-600">暂无技术信息</span>}
@@ -715,7 +715,7 @@ export default function UpstreamPage() {
                     <div className="flex items-center gap-2 mb-3">
                       <IconBox icon={Briefcase} size="sm" tone="orange" variant="soft" />
                       <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">关联项目</span>
-                      <span className="text-[10px] text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded-full">{supplierProjects.projects.length}个</span>
+                      <span className="text-[11px] text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded-full">{supplierProjects.projects.length}个</span>
                     </div>
                     {supplierProjects.projects.length === 0 ? (
                       <EmptyState icon={Briefcase} title="暂无关联项目" description="在成本利润模块录入成本时关联该供应商" tone="gray" size="sm" />
@@ -726,16 +726,16 @@ export default function UpstreamPage() {
                             className="w-full text-left rounded-xl bg-bg-input/50 border border-border/40 p-3 hover:border-border/80 hover:bg-bg-input transition-all group">
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2 min-w-0 flex-1">
-                                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-orange-500 to-amber-400 flex items-center justify-center text-[10px] font-bold text-white shrink-0">{p.project_name.slice(0, 1)}</div>
+                                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-orange-500 to-amber-400 flex items-center justify-center text-[11px] font-bold text-white shrink-0">{p.project_name.slice(0, 1)}</div>
                                 <div className="min-w-0">
                                   <div className="text-xs font-medium text-white truncate">{p.project_name}</div>
-                                  <div className="text-[10px] text-gray-500 truncate">{p.customer_name} · {p.currency}{p.sales_person && ` · ${p.sales_person}`}</div>
+                                  <div className="text-[11px] text-gray-500 truncate">{p.customer_name} · {p.currency}{p.sales_person && ` · ${p.sales_person}`}</div>
                                 </div>
                               </div>
                               <div className="flex items-center gap-2 shrink-0">
                                 <div className="text-right">
                                   <div className="text-xs font-bold text-amber-400 tabular-nums">{fmtAmt(p.total_cost, p.currency)}</div>
-                                  {p.gross_margin != null && <div className={`text-[10px] tabular-nums ${p.gross_margin >= 30 ? 'text-emerald-400' : p.gross_margin >= 10 ? 'text-amber-400' : 'text-red-400'}`}>毛利率 {p.gross_margin}%</div>}
+                                  {p.gross_margin != null && <div className={`text-[11px] tabular-nums ${p.gross_margin >= 30 ? 'text-emerald-400' : p.gross_margin >= 10 ? 'text-amber-400' : 'text-red-400'}`}>毛利率 {p.gross_margin}%</div>}
                                 </div>
                                 <ExternalLink size={12} className="text-gray-600 group-hover:text-blue-400 transition-colors" />
                               </div>
@@ -808,9 +808,9 @@ export default function UpstreamPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm font-semibold text-white">{c.name}</span>
-                          {c.code && <span className="text-[10px] text-gray-500 font-mono">#{c.code}</span>}
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: kindC.bg, color: kindC.text }}>{c.kind}</span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: statusC.bg, color: statusC.text }}>{c.status}</span>
+                          {c.code && <span className="text-[11px] text-gray-500 font-mono">#{c.code}</span>}
+                          <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: kindC.bg, color: kindC.text }}>{c.kind}</span>
+                          <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: statusC.bg, color: statusC.text }}>{c.status}</span>
                         </div>
                         <div className="mt-1 text-[11px] text-gray-500 flex items-center gap-3 flex-wrap">
                           <span className="inline-flex items-center gap-1"><Building2 size={11} />{sup?.name || '—'}</span>
@@ -954,14 +954,14 @@ function ChannelDetailPanel({ channel, supplier, prices, onEdit, onDelete, delet
             {familyPrices.map(p => (
               <div key={p.id} className="flex items-center justify-between text-[11px] py-1 px-2 rounded-lg bg-black/20">
                 <span className="text-gray-300 font-medium truncate max-w-[110px]">{p.name}</span>
-                <div className="flex gap-3 text-[10px] tabular-nums shrink-0">
+                <div className="flex gap-3 text-[11px] tabular-nums shrink-0">
                   {p.input_price != null && <span className="text-emerald-400">输入 {fmtUSD(p.input_price * channel.discount_rate)}/1M</span>}
                   {p.output_price != null && <span className="text-orange-400">输出 {fmtUSD(p.output_price * channel.discount_rate)}/1M</span>}
                 </div>
               </div>
             ))}
           </div>
-          <p className="mt-1.5 text-[10px] text-gray-600">官网价 × 折扣率，仅作成本估算参考</p>
+          <p className="mt-1.5 text-[11px] text-gray-600">官网价 × 折扣率，仅作成本估算参考</p>
         </div>
       )}
       {(sla.cache_hit_rate != null || sla.tpm != null || sla.rpm != null || sla.avg_latency_ms != null) && (
@@ -1035,7 +1035,7 @@ function StatsView({ suppliers, supplierSummaries, channels, channelSummaries, c
           <div className="flex items-center gap-2.5 mb-4">
             <IconBox icon={DollarSign} size="sm" tone="orange" variant="soft" />
             <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">按结算币种分布</h4>
-            {multiCurrency && <span className="text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-full">多币种</span>}
+            {multiCurrency && <span className="text-[11px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-full">多币种</span>}
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {Object.entries(costByCurrency).map(([cur, data]) => {
@@ -1045,11 +1045,11 @@ function StatsView({ suppliers, supplierSummaries, channels, channelSummaries, c
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-400 flex items-center justify-center text-xs font-bold text-white">{meta.symbol}</div>
-                      <div><div className="text-sm font-bold text-white">{cur}</div><div className="text-[10px] text-gray-500">{meta.name}</div></div>
+                      <div><div className="text-sm font-bold text-white">{cur}</div><div className="text-[11px] text-gray-500">{meta.name}</div></div>
                     </div>
                     <div className="text-right">
                       <div className="text-sm font-bold text-amber-400 tabular-nums">{fmtAmt(data.cost, cur)}</div>
-                      <div className="text-[10px] text-gray-500">{data.count}家 · {data.projects}个项目</div>
+                      <div className="text-[11px] text-gray-500">{data.count}家 · {data.projects}个项目</div>
                     </div>
                   </div>
                 </div>
@@ -1098,32 +1098,32 @@ function StatsView({ suppliers, supplierSummaries, channels, channelSummaries, c
               return (
                 <div key={prov}>
                   <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2"><span className="text-sm font-bold text-white">{prov}</span><span className="text-[10px] text-gray-600 px-2 py-0.5 rounded-full bg-white/5">{models.length} 个模型</span></div>
-                    {linkedChannels.length > 0 && <span className="text-[10px] text-gray-500 flex items-center gap-1 flex-wrap"><Network size={10} />{linkedChannels.length} 条关联通道：{linkedChannels.map(c => <span key={c.id} className="px-1.5 py-0.5 rounded-md text-[9px] font-semibold bg-cyan-500/10 text-cyan-300">{c.name} {(c.discount_rate * 100).toFixed(0)}%折</span>)}</span>}
+                    <div className="flex items-center gap-2"><span className="text-sm font-bold text-white">{prov}</span><span className="text-[11px] text-gray-600 px-2 py-0.5 rounded-full bg-white/5">{models.length} 个模型</span></div>
+                    {linkedChannels.length > 0 && <span className="text-[11px] text-gray-500 flex items-center gap-1 flex-wrap"><Network size={10} />{linkedChannels.length} 条关联通道：{linkedChannels.map(c => <span key={c.id} className="px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-cyan-500/10 text-cyan-300">{c.name} {(c.discount_rate * 100).toFixed(0)}%折</span>)}</span>}
                   </div>
                   <div className="rounded-xl border border-white/10 overflow-hidden">
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs">
-                        <thead><tr className="text-left text-[10px] text-gray-500 uppercase tracking-wider bg-white/[0.02]">
+                        <thead><tr className="text-left text-[11px] text-gray-500 uppercase tracking-wider bg-white/[0.02]">
                           <th className="px-4 py-2.5 font-semibold">模型</th>
                           <th className="px-4 py-2.5 font-semibold text-right">输入 $/1M</th>
                           <th className="px-4 py-2.5 font-semibold text-right">输出 $/1M</th>
                           <th className="px-4 py-2.5 font-semibold text-right">缓存读取</th>
                           <th className="px-4 py-2.5 font-semibold text-right">缓存写入</th>
-                          {linkedChannels.map(c => <th key={c.id} className="px-4 py-2.5 font-semibold text-right text-cyan-400">{c.name}<br /><span className="text-[9px] font-normal text-gray-500">×{(c.discount_rate * 100).toFixed(0)}%</span></th>)}
+                          {linkedChannels.map(c => <th key={c.id} className="px-4 py-2.5 font-semibold text-right text-cyan-400">{c.name}<br /><span className="text-[11px] font-normal text-gray-500">×{(c.discount_rate * 100).toFixed(0)}%</span></th>)}
                         </tr></thead>
                         <tbody>
                           {models.map((m, i) => (
                             <tr key={m.id} className={`border-t ${i % 2 === 0 ? 'bg-white/[0.01]' : ''}`} style={{ borderColor: '#ffffff08' }}>
-                              <td className="px-4 py-2.5"><div className="font-semibold text-white">{m.name}</div>{m.version_id && <div className="text-[10px] text-gray-600 font-mono">{m.version_id}</div>}</td>
+                              <td className="px-4 py-2.5"><div className="font-semibold text-white">{m.name}</div>{m.version_id && <div className="text-[11px] text-gray-600 font-mono">{m.version_id}</div>}</td>
                               <td className="px-4 py-2.5 text-right tabular-nums text-emerald-400 font-semibold">{fmtUSD(m.input_price)}</td>
                               <td className="px-4 py-2.5 text-right tabular-nums text-orange-400 font-semibold">{fmtUSD(m.output_price)}</td>
                               <td className="px-4 py-2.5 text-right tabular-nums text-blue-400">{m.cache_read_price != null ? fmtUSD(m.cache_read_price) : '—'}</td>
                               <td className="px-4 py-2.5 text-right tabular-nums text-violet-400">{m.cache_write_price != null ? fmtUSD(m.cache_write_price) : '—'}</td>
                               {linkedChannels.map(c => (
                                 <td key={c.id} className="px-4 py-2.5 text-right tabular-nums">
-                                  {m.input_price != null && <div className="text-emerald-300/80 text-[10px]">↑ {fmtUSD(m.input_price * c.discount_rate)}</div>}
-                                  {m.output_price != null && <div className="text-orange-300/80 text-[10px]">↓ {fmtUSD(m.output_price * c.discount_rate)}</div>}
+                                  {m.input_price != null && <div className="text-emerald-300/80 text-[11px]">↑ {fmtUSD(m.input_price * c.discount_rate)}</div>}
+                                  {m.output_price != null && <div className="text-orange-300/80 text-[11px]">↓ {fmtUSD(m.output_price * c.discount_rate)}</div>}
                                 </td>
                               ))}
                             </tr>
@@ -1219,7 +1219,7 @@ function MetricBox({ label, value, tone }: { label: string; value: React.ReactNo
   const t = TONE_MAP[tone] || TONE_MAP.blue
   return (
     <div className="rounded-xl p-3" style={{ background: t.bg, border: `1px solid ${t.border}` }}>
-      <div className="text-[10px] text-gray-500 mb-0.5">{label}</div>
+      <div className="text-[11px] text-gray-500 mb-0.5">{label}</div>
       <div className="text-sm font-bold tabular-nums" style={{ color: t.text }}>{value}</div>
     </div>
   )
@@ -1254,9 +1254,9 @@ function StatBox({ label, value, sub, tone }: { label: string; value: string; su
   const textCls = colors[tone].split(' ').pop()!
   return (
     <div className={`rounded-lg p-2.5 bg-gradient-to-br ${colors[tone]} border`}>
-      <div className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</div>
+      <div className="text-[11px] text-gray-500 uppercase tracking-wider">{label}</div>
       <div className={`mt-0.5 text-base font-bold tabular-nums ${textCls}`}>{value}</div>
-      {sub && <div className="text-[10px] text-gray-600 mt-0.5">{sub}</div>}
+      {sub && <div className="text-[11px] text-gray-600 mt-0.5">{sub}</div>}
     </div>
   )
 }
@@ -1265,7 +1265,7 @@ function SlaBox({ label, value, tone }: { label: string; value: string; tone: 'g
   const colors: Record<string, string> = { green: 'text-emerald-400', blue: 'text-blue-400', purple: 'text-violet-400', orange: 'text-orange-400' }
   return (
     <div className="rounded-md p-2 bg-black/20">
-      <div className="text-[10px] text-gray-500">{label}</div>
+      <div className="text-[11px] text-gray-500">{label}</div>
       <div className={`mt-0.5 text-sm font-bold tabular-nums ${colors[tone]}`}>{value}</div>
     </div>
   )

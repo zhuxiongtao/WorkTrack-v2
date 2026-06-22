@@ -90,5 +90,10 @@ class ProjectOut(BaseModel):
     usage_scenario: Optional[str] = None
     contract_period: Optional[str] = None
 
+    # ====== MaaS 财务核心字段（详情/卡片均需展示） ======
+    discount_rate: Optional[float] = None
+    cost_amount: Optional[float] = None
+    gross_margin: Optional[float] = None
+
     # 关联合同数（反查，避免前端 N+1）
     contract_count: int = 0

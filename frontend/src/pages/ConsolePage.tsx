@@ -174,7 +174,7 @@ export default function ConsolePage() {
           )}
           <Users size={14} className="shrink-0 text-gray-500" />
           <span className="truncate flex-1 text-sm">{node.name}</span>
-          <span className="text-[10px] text-gray-500 shrink-0">{node.member_count}人</span>
+          <span className="text-[11px] text-gray-500 shrink-0">{node.member_count}人</span>
         </div>
         {isExpanded && hasChildren && (
           <div>
@@ -192,7 +192,7 @@ export default function ConsolePage() {
         <IconBox icon={Icon} size="md" tone={tone} variant="solid" />
         <div>
           <div className="text-2xl max-md:text-xl font-bold text-white">{value}</div>
-          <div className="text-xs max-md:text-[10px] text-gray-500">{label}</div>
+          <div className="text-xs max-md:text-[11px] text-gray-500">{label}</div>
         </div>
       </div>
     </div>
@@ -213,7 +213,7 @@ export default function ConsolePage() {
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-sm text-white truncate">{member.name}</div>
-        <div className="text-[10px] text-gray-500 truncate">{member.department_name}</div>
+        <div className="text-[11px] text-gray-500 truncate">{member.department_name}</div>
       </div>
       <div className="flex items-center gap-6 max-md:gap-3 text-xs shrink-0">
         <div className="flex items-center gap-1.5 max-md:hidden" title="本周日报">
@@ -486,8 +486,8 @@ function MemberDetail({ memberId }: { memberId: number }) {
               >
                 <div className="text-xs text-white mb-1">{p.name}</div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-gray-500">{p.customer_name}</span>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                  <span className="text-[11px] text-gray-500">{p.customer_name}</span>
+                  <span className={`text-[11px] px-1.5 py-0.5 rounded ${
                     p.status === '进行中' ? 'bg-blue-500/20 text-blue-400' : 'bg-gray-500/20 text-gray-400'
                   }`}>{p.status}</span>
                 </div>
@@ -506,7 +506,7 @@ function MemberDetail({ memberId }: { memberId: number }) {
                 className="block p-3 bg-bg-hover rounded-lg hover:bg-bg-hover/80 transition-colors"
               >
                 <div className="text-xs text-white mb-1">{m.title}</div>
-                <div className="text-[10px] text-gray-500">{m.date}</div>
+                <div className="text-[11px] text-gray-500">{m.date}</div>
               </a>
             ))
           )

@@ -106,18 +106,18 @@ export default function ContractTemplatesPage() {
                     <div className="min-w-0">
                       <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary)' }}>{tpl.name}</p>
                       {tpl.category && (
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded border ${CATEGORY_COLORS[tpl.category] || 'bg-gray-500/10 text-gray-400 border-gray-500/30'}`}>
+                        <span className={`text-[11px] px-1.5 py-0.5 rounded border ${CATEGORY_COLORS[tpl.category] || 'bg-gray-500/10 text-gray-400 border-gray-500/30'}`}>
                           {tpl.category}
                         </span>
                       )}
                     </div>
                   </div>
                   {tpl.is_active ? (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 shrink-0 flex items-center gap-1">
+                    <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 shrink-0 flex items-center gap-1">
                       <CheckCircle2 size={9} />启用中
                     </span>
                   ) : (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-500/10 text-gray-500 border border-gray-500/20 shrink-0">已停用</span>
+                    <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-gray-500/10 text-gray-500 border border-gray-500/20 shrink-0">已停用</span>
                   )}
                 </div>
                 {tpl.description && (
@@ -232,7 +232,7 @@ function TemplateEditorModal({ template, onClose, onSaved }: TemplateEditorModal
         {/* 模板元字段（紧凑横排） */}
         <div className="shrink-0 px-5 py-2.5 border-b border-border/20 bg-bg-hover/10 flex items-end gap-3">
           <div className="flex-1">
-            <label className="block text-[9px] text-gray-500 uppercase tracking-wider mb-1">
+            <label className="block text-[11px] text-gray-500 uppercase tracking-wider mb-1">
               模板名称 <span className="text-red-400 normal-case">*</span>
             </label>
             <input
@@ -244,7 +244,7 @@ function TemplateEditorModal({ template, onClose, onSaved }: TemplateEditorModal
             />
           </div>
           <div style={{ width: '160px', flexShrink: 0 }}>
-            <label className="block text-[9px] text-gray-500 uppercase tracking-wider mb-1">合同类型</label>
+            <label className="block text-[11px] text-gray-500 uppercase tracking-wider mb-1">合同类型</label>
             <select
               value={category}
               onChange={e => setCategory(e.target.value)}
@@ -257,7 +257,7 @@ function TemplateEditorModal({ template, onClose, onSaved }: TemplateEditorModal
             </select>
           </div>
           <div className="flex-1">
-            <label className="block text-[9px] text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-1">
+            <label className="block text-[11px] text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-1">
               <AlignLeft size={9} />说明（显示在选模板页面）
             </label>
             <input
@@ -267,7 +267,7 @@ function TemplateEditorModal({ template, onClose, onSaved }: TemplateEditorModal
               placeholder="适用场景说明，如：适用于软件开发、技术服务等场景"
             />
           </div>
-          <div className="text-[10px] text-gray-600 flex items-center gap-1 pb-1.5 shrink-0">
+          <div className="text-[11px] text-gray-600 flex items-center gap-1 pb-1.5 shrink-0">
             <Tag size={10} />用 [变量名] 标记占位符
           </div>
         </div>

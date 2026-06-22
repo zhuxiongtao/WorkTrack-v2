@@ -69,9 +69,9 @@ function StatCard({ icon: Icon, color, label, value, unit }: { icon: any; color:
         <Icon size={16} className={c.icon} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium leading-tight">{label}</p>
+        <p className="text-[11px] text-gray-500 dark:text-gray-400 font-medium leading-tight">{label}</p>
         <p className={`text-lg font-bold ${c.value} mt-0.5 leading-tight`}>
-          {value} <span className="text-[10px] font-normal text-gray-500">{unit}</span>
+          {value} <span className="text-[11px] font-normal text-gray-500">{unit}</span>
         </p>
       </div>
     </div>

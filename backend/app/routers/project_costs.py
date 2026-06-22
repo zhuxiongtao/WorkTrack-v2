@@ -104,6 +104,21 @@ def delete_cost_item(item_id: int, db: Session = Depends(get_session), current_u
 
 # ──── 整体统计 ────
 
+@router.get("/project/{project_id}", response_model=ProjectProfitSummary)
+def get_project_profit_detail(
+    project_id: int,
+    db: Session = Depends(get_session),
+    current_user=Depends(require_permission("project:read")),
+):
+    """获取单个项目的成本明细 + 利润汇总（项目详情弹窗用）"""
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(404, "项目不存在")
+    if not check_data_access(project.user_id, current_user, db):
+        raise HTTPException(403, "无权查看该项目")
+    return _build_project_summary(db, project)
+
+
 @router.get("/overview", response_model=OverallProfitSummary)
 def get_overall_profit(
     user_id: Optional[int] = None,

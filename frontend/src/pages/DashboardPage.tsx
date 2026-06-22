@@ -196,6 +196,31 @@ export default function DashboardPage() {
     return '晚上好'
   }
 
+  const getSubGreeting = (): { text: string; accent: boolean } => {
+    const pending = overview?.approvals?.pending_for_me ?? 0
+    const expiring = overview?.contracts?.expiring_soon ?? 0
+    const streak = overview?.personal?.report_streak ?? 0
+
+    if (pending > 0 && expiring > 0)
+      return { text: `${pending} 条审批待处理，另有 ${expiring} 份合同即将到期，请注意跟进`, accent: true }
+    if (pending > 0)
+      return { text: `有 ${pending} 条审批事项在等你，记得及时处理`, accent: true }
+    if (expiring > 0)
+      return { text: `${expiring} 份合同即将到期，留意续签时间`, accent: true }
+
+    const dow = new Date().getDay()
+    const dayLines: Record<number, string> = {
+      1: '新的一周开始了，把本周最重要的事列出来',
+      2: '周二，保持节奏，一件一件做扎实',
+      3: '周中关键节点，看看本周目标完成得如何',
+      4: '再坚持一天，周五就在前面了',
+      5: `周五了，收好今天的工作，轻松进入周末${streak > 1 ? `，日报已连续打卡 ${streak} 天` : ''}`,
+      6: '周末也在，辛苦了，注意休息',
+      0: '周日，养精蓄锐，明天又是新的开始',
+    }
+    return { text: dayLines[dow] ?? '今天也加油！', accent: false }
+  }
+
   const INSIGHT_PERIODS = [
     { key: 'week',    label: '周度', icon: Brain,     color: '#8B5CF6' },
     { key: 'month',   label: '月度', icon: TrendingUp, color: '#3B82F6' },
@@ -219,12 +244,22 @@ export default function DashboardPage() {
         <div className="relative flex flex-col gap-2 lg:flex-row lg:items-stretch lg:gap-3">
           <div className="flex flex-col shrink-0 min-w-0 flex-1">
             <div className="flex-1 flex items-center px-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <Sparkles size={15} className="text-amber-500 shrink-0" />
-                <h2 className="text-lg font-bold leading-tight" style={{ color: 'var(--text-primary)' }}>
-                  {getGreeting()}，{user?.name || user?.username}
-                </h2>
-                <span className="text-[11px] text-gray-500">· {dateRangeText}</span>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Sparkles size={15} className="text-amber-500 shrink-0" />
+                  <h2 className="text-lg font-bold leading-tight" style={{ color: 'var(--text-primary)' }}>
+                    {getGreeting()}，{user?.name || user?.username}
+                  </h2>
+                  <span className="text-[11px] text-gray-500">· {dateRangeText}</span>
+                </div>
+                {(() => {
+                  const sub = getSubGreeting()
+                  return (
+                    <p className={`text-xs mt-0.5 pl-[23px] ${sub.accent ? 'text-amber-400 dark:text-amber-400' : 'text-gray-500 dark:text-gray-500'}`}>
+                      {sub.accent && <span className="mr-1">⚠</span>}{sub.text}
+                    </p>
+                  )
+                })()}
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-1.5 mt-2">
@@ -304,7 +339,7 @@ export default function DashboardPage() {
             <BizCard
               icon={FileText} label="合同" tone="indigo"
               main={`${overview.contracts.status['生效中'] ?? 0}`} mainSub="生效中"
-              sub={`共 ${overview.contracts.total} 份${overview.contracts.total_active_amount > 0 ? ' · 在效 ¥' + fmtAmount(overview.contracts.total_active_amount) : ''}`}
+              sub={`共 ${overview.contracts.total} 份${overview.contracts.total_active_amount > 0 ? ' · 在效 ¥' + overview.contracts.total_active_amount.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 1 }) + ' 万' : ''}`}
               onClick={() => navigate('/contracts')}
             />
             <BizCard
@@ -374,7 +409,7 @@ export default function DashboardPage() {
                             <div className={`w-2.5 h-2.5 rounded-full ${style.bar}`} />
                             <span className={`text-[11px] font-medium ${style.text}`}>{status}</span>
                             <span className="text-[13px] font-bold" style={{ color: 'var(--text-primary)' }}>{count}</span>
-                            <span className="text-[10px] text-gray-600">({Math.round(count / overview.contracts.total * 100)}%)</span>
+                            <span className="text-[11px] text-gray-600">({Math.round(count / overview.contracts.total * 100)}%)</span>
                           </div>
                         )
                       })}
@@ -392,7 +427,7 @@ export default function DashboardPage() {
                     </div>
                     <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>进行中的模型变更</span>
                     {overview.model_changes.length > 0 && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-bold">
+                      <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-bold">
                         {overview.model_changes.length}
                       </span>
                     )}
@@ -417,17 +452,17 @@ export default function DashboardPage() {
                           <p className="text-xs font-medium truncate" style={{ color: 'var(--text-primary)' }}>{ev.title}</p>
                           <div className="flex items-center gap-2 mt-0.5">
                             {ev.current_stage_name && (
-                              <span className="text-[10px] text-blue-400">
+                              <span className="text-[11px] text-blue-400">
                                 阶段 {ev.current_stage_order}：{ev.current_stage_name}
                                 {ev.current_stage_status === 'awaiting_approval' && <span className="ml-1 text-amber-400">（待审批）</span>}
                               </span>
                             )}
                             {ev.effective_date && (
-                              <span className="text-[10px] text-gray-500">生效 {fmtDate(ev.effective_date)}</span>
+                              <span className="text-[11px] text-gray-500">生效 {fmtDate(ev.effective_date)}</span>
                             )}
                           </div>
                         </div>
-                        <span className={`text-[10px] font-medium shrink-0 ${RISK_COLOR[ev.risk_level]}`}>
+                        <span className={`text-[11px] font-medium shrink-0 ${RISK_COLOR[ev.risk_level]}`}>
                           {ev.risk_level === 'high' ? '高风险' : ev.risk_level === 'medium' ? '中风险' : '低风险'}
                         </span>
                       </button>
@@ -456,7 +491,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="flex items-baseline gap-1">
                       <span className="text-xl font-bold text-amber-400">{overview.personal.report_streak}</span>
-                      <span className="text-[10px] text-gray-500">天</span>
+                      <span className="text-[11px] text-gray-500">天</span>
                     </div>
                   </div>
                   <div className="flex items-center justify-between p-3 rounded-xl bg-bg-hover/30">
@@ -466,7 +501,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="flex items-baseline gap-1">
                       <span className="text-xl font-bold text-green-400">{overview.personal.meetings_this_month}</span>
-                      <span className="text-[10px] text-gray-500">次</span>
+                      <span className="text-[11px] text-gray-500">次</span>
                     </div>
                   </div>
                   <div className="flex items-center justify-between p-3 rounded-xl bg-bg-hover/30">
@@ -476,7 +511,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="flex items-baseline gap-1">
                       <span className="text-xl font-bold text-purple-400">{overview.customers.new_this_month}</span>
-                      <span className="text-[10px] text-gray-500">家</span>
+                      <span className="text-[11px] text-gray-500">家</span>
                     </div>
                   </div>
                 </div>
@@ -507,7 +542,7 @@ export default function DashboardPage() {
                         <div key={status}>
                           <div className="flex items-center justify-between mb-1">
                             <span className="text-[11px] text-gray-400">{status}</span>
-                            <span className="text-[11px] font-semibold" style={{ color: 'var(--text-primary)' }}>{count} <span className="text-[10px] text-gray-600 font-normal">({pct}%)</span></span>
+                            <span className="text-[11px] font-semibold" style={{ color: 'var(--text-primary)' }}>{count} <span className="text-[11px] text-gray-600 font-normal">({pct}%)</span></span>
                           </div>
                           <div className="h-1.5 bg-bg-hover rounded-full overflow-hidden">
                             <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
@@ -534,9 +569,9 @@ export default function DashboardPage() {
                 <div>
                   <h4 className="text-sm font-bold flex items-center gap-1.5" style={{ color: 'var(--text-primary)' }}>
                     AI 智能洞察
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-gradient-to-r from-purple-500 to-pink-500 text-white">AI</span>
+                    <span className="text-[11px] px-1.5 py-0.5 rounded-full font-bold bg-gradient-to-r from-purple-500 to-pink-500 text-white">AI</span>
                   </h4>
-                  <p className="text-[10px] text-gray-500 mt-0.5">
+                  <p className="text-[11px] text-gray-500 mt-0.5">
                     {insights[aiTab]?.updatedAt
                       ? `更新于 ${formatUpdatedAt(insights[aiTab]!.updatedAt!)}`
                       : '基于项目/客户/会议/日报数据自动生成'}
@@ -546,7 +581,7 @@ export default function DashboardPage() {
               <div className="flex items-center gap-1 bg-bg-hover/50 rounded-lg p-0.5 ring-1 ring-white/5">
                 {INSIGHT_PERIODS.map(({ key, label, color }) => (
                   <button key={key} onClick={() => setAiTab(key)}
-                    className={`px-2.5 py-1 text-[10px] rounded-md font-medium transition-all ${aiTab === key ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                    className={`px-2.5 py-1 text-[11px] rounded-md font-medium transition-all ${aiTab === key ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
                     style={aiTab === key ? { background: `${color}25`, color } : {}}>
                     {label}
                   </button>
@@ -579,7 +614,7 @@ export default function DashboardPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {data.items.map((line, i) => (
                     <div key={i} className="flex items-start gap-3 p-3 rounded-xl border border-border/30 hover:border-purple-500/30 bg-gradient-to-r from-white/[0.02] to-transparent hover:from-purple-500/5 transition-all">
-                      <span className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 mt-0.5"
+                      <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5"
                         style={{ background: `${color}25`, color }}>
                         {i + 1}
                       </span>
@@ -661,9 +696,9 @@ function BizCard({
       </div>
       <div className="flex items-baseline gap-1 mb-1">
         <span className={`text-2xl font-bold ${s.text}`}>{main}</span>
-        <span className="text-[10px] text-gray-500">{mainSub}</span>
+        <span className="text-[11px] text-gray-500">{mainSub}</span>
       </div>
-      <p className="text-[10px] text-gray-600 truncate">{sub}</p>
+      <p className="text-[11px] text-gray-600 truncate">{sub}</p>
     </button>
   )
 }

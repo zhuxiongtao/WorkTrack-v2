@@ -201,7 +201,7 @@ export default function ApprovalsPage() {
           >
             <t.icon size={12} />{t.label}
             {t.count > 0 && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-bold">{t.count}</span>
+              <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-bold">{t.count}</span>
             )}
           </button>
         ))}
@@ -245,7 +245,7 @@ export default function ApprovalsPage() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {item.can_act && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-bold">待处理</span>
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-bold">待处理</span>
                   )}
                   <ChevronRight size={16} className="text-gray-600 group-hover:text-amber-400 transition-colors" />
                 </div>
@@ -294,9 +294,9 @@ export default function ApprovalsPage() {
                         <div className={`pb-4 flex-1 ${n.is_current ? '' : 'opacity-90'}`}>
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium text-white">{n.name}</span>
-                            {n.is_current && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 font-bold">当前</span>}
-                            {n.status === 'approved' && <span className="text-[10px] text-green-400">已通过</span>}
-                            {n.status === 'rejected' && <span className="text-[10px] text-red-400">已驳回</span>}
+                            {n.is_current && <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 font-bold">当前</span>}
+                            {n.status === 'approved' && <span className="text-[11px] text-green-400">已通过</span>}
+                            {n.status === 'rejected' && <span className="text-[11px] text-red-400">已驳回</span>}
                           </div>
                           <div className="text-[11px] text-gray-500 mt-0.5">
                             审批人：{n.approver_names.length ? n.approver_names.join('、') : '（无可用审批人，自动通过）'}

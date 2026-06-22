@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react'
 import { NavLink, Navigate, useNavigate } from 'react-router-dom'
 import {
-  Sun, Moon, Monitor, LogOut, ArrowLeft, ChevronDown,
+  Sun, Moon, Monitor, LogOut, ChevronDown,
   BarChart3, Shield, GitBranch, Activity, Database,
-  Settings, Cpu, FileText, Menu, type LucideIcon,
+  Settings, Cpu, FileText, Menu, BarChart2, type LucideIcon,
 } from 'lucide-react'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -48,9 +48,10 @@ const ADMIN_SECTIONS: AdminMenuSection[] = [
     id: 'platform',
     title: '平台配置',
     items: [
-      { to: '/admin/models',             label: '模型管理',   icon: Cpu,      gradientFrom: '#EC4899', gradientTo: '#F472B6' },
-      { to: '/admin/contract-templates', label: '合同模板',   icon: FileText, gradientFrom: '#F97316', gradientTo: '#FB923C' },
-      { to: '/admin/settings',           label: '系统设置',   icon: Settings, gradientFrom: '#6B7280', gradientTo: '#9CA3AF' },
+      { to: '/admin/models',             label: '模型管理',   icon: Cpu,       gradientFrom: '#EC4899', gradientTo: '#F472B6' },
+      { to: '/admin/model-usage',        label: '用量统计',   icon: BarChart2, gradientFrom: '#06B6D4', gradientTo: '#3B82F6' },
+      { to: '/admin/contract-templates', label: '合同模板',   icon: FileText,  gradientFrom: '#F97316', gradientTo: '#FB923C' },
+      { to: '/admin/settings',           label: '系统设置',   icon: Settings,  gradientFrom: '#6B7280', gradientTo: '#9CA3AF' },
     ],
   },
 ]
@@ -104,11 +105,11 @@ export default function AdminLayout({ brandLogo, brandTitle }: AdminLayoutProps)
                 <Settings size={13} className="text-purple-400" />
               </div>
             )}
-            <span className="text-[14px] font-bold text-white/90 truncate tracking-tight">{brandTitle}</span>
+            <span className="text-sm font-bold text-white/90 truncate tracking-tight">{brandTitle}</span>
           </div>
           <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-purple-500/15 border border-purple-500/20">
             <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
-            <span className="text-[10px] font-bold tracking-wider text-purple-300">管理后台</span>
+            <span className="text-[11px] font-bold tracking-wider text-purple-300">管理后台</span>
           </div>
         </div>
 
@@ -123,7 +124,7 @@ export default function AdminLayout({ brandLogo, brandTitle }: AdminLayoutProps)
                     onClick={() => toggleSection(section.id)}
                     className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-white/5 transition-colors group"
                   >
-                    <span className="text-[10.5px] font-bold tracking-widest uppercase text-purple-400/60 flex-1 text-left group-hover:text-purple-300 transition-colors">
+                    <span className="text-[11px] font-bold tracking-widest uppercase text-purple-400/60 flex-1 text-left group-hover:text-purple-300 transition-colors">
                       {section.title}
                     </span>
                     <ChevronDown
@@ -139,7 +140,7 @@ export default function AdminLayout({ brandLogo, brandTitle }: AdminLayoutProps)
                           to={it.to}
                           onClick={() => setMobileOpen(false)}
                           className={({ isActive }) =>
-                            `relative group flex items-center gap-2.5 pl-3 pr-2 py-1.5 rounded-lg text-[12.5px] transition-all ${
+                            `relative group flex items-center gap-2.5 pl-3 pr-2 py-1.5 rounded-lg text-xs transition-all ${
                               isActive
                                 ? 'text-white bg-purple-500/20 font-medium'
                                 : 'text-gray-400 hover:text-white hover:bg-white/5'
@@ -168,25 +169,18 @@ export default function AdminLayout({ brandLogo, brandTitle }: AdminLayoutProps)
 
         {/* 底部：返回前台 + 用户信息 */}
         <div className="px-4 py-3 border-t border-white/5">
-          <button
-            onClick={() => navigate('/')}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-purple-300/80 hover:text-purple-200 transition-colors mb-3 text-[12px] font-medium"
-          >
-            <ArrowLeft size={13} />
-            <span>返回业务前台</span>
-          </button>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 min-w-0">
               {user?.avatar ? (
                 <img src={user.avatar} alt="头像" className="w-6 h-6 rounded-full object-cover shrink-0" />
               ) : (
-                <div className="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center text-[10px] text-purple-300 font-medium shrink-0">
+                <div className="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center text-[11px] text-purple-300 font-medium shrink-0">
                   {(user?.name || user?.username || '?')[0].toUpperCase()}
                 </div>
               )}
               <div className="min-w-0">
                 <p className="text-[11px] text-gray-300 truncate">{user?.name || user?.username}</p>
-                <p className="text-[9px] text-purple-400">管理员</p>
+                <p className="text-[11px] text-purple-400">管理员</p>
               </div>
             </div>
             <div className="flex items-center gap-1">

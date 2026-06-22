@@ -74,6 +74,16 @@ def _enrich(db: Session, project, info: dict):
     return out
 
 
+@router.get("/selector")
+def project_selector(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    """下拉选择器用——仅返回 {id, name, customer_id}，任何登录用户可访问，不需要 project:read 权限"""
+    rows = db.exec(select(Project.id, Project.name, Project.customer_id).order_by(Project.name)).all()
+    return [{"id": r[0], "name": r[1], "customer_id": r[2]} for r in rows]
+
+
 @router.get("", response_model=list[ProjectOut])
 def list_projects(
     user_id: Optional[int] = Query(None),

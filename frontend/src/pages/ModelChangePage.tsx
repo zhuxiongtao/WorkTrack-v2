@@ -430,13 +430,13 @@ export default function ModelChangePage() {
                   <div className="mt-3 grid grid-cols-2 gap-3">
                     {detail.old_value && (
                       <div className="bg-red-500/5 border border-red-500/15 rounded-lg p-2.5">
-                        <p className="text-[10px] text-red-400 font-medium mb-1">变更前</p>
+                        <p className="text-[11px] text-red-400 font-medium mb-1">变更前</p>
                         <p className="text-xs text-text-secondary whitespace-pre-wrap">{detail.old_value}</p>
                       </div>
                     )}
                     {detail.new_value && (
                       <div className="bg-green-500/5 border border-green-500/15 rounded-lg p-2.5">
-                        <p className="text-[10px] text-green-400 font-medium mb-1">变更后</p>
+                        <p className="text-[11px] text-green-400 font-medium mb-1">变更后</p>
                         <p className="text-xs text-text-secondary whitespace-pre-wrap">{detail.new_value}</p>
                       </div>
                     )}
@@ -490,7 +490,7 @@ export default function ModelChangePage() {
                       <td className="px-4 py-2.5 text-gray-400">{task.project_name || '—'}</td>
                       <td className="px-4 py-2.5 text-gray-400">{task.assigned_to_name || <span className="text-gray-600">未指派</span>}</td>
                       <td className="px-4 py-2.5">
-                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${TASK_STATUS_COLORS[task.status] || ''}`}>
+                        <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded ${TASK_STATUS_COLORS[task.status] || ''}`}>
                           {TASK_STATUS_LABELS[task.status] || task.status}
                         </span>
                       </td>
@@ -560,13 +560,13 @@ export default function ModelChangePage() {
             <div className="space-y-4 py-2">
               {showApprove.action_summary && (
                 <div className="bg-bg-hover/50 rounded-lg p-3">
-                  <p className="text-[10px] text-gray-500 mb-1">执行摘要</p>
+                  <p className="text-[11px] text-gray-500 mb-1">执行摘要</p>
                   <p className="text-sm text-text-secondary whitespace-pre-wrap">{showApprove.action_summary}</p>
                 </div>
               )}
               {showApprove.feedback && (
                 <div className="bg-bg-hover/50 rounded-lg p-3">
-                  <p className="text-[10px] text-gray-500 mb-1">阶段反馈</p>
+                  <p className="text-[11px] text-gray-500 mb-1">阶段反馈</p>
                   <p className="text-sm text-text-secondary whitespace-pre-wrap">{showApprove.feedback}</p>
                 </div>
               )}
@@ -694,13 +694,13 @@ export default function ModelChangePage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium text-text-primary text-sm">{event.title}</span>
-                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${STATUS_COLORS[event.status] || ''}`}>
+                    <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded border ${STATUS_COLORS[event.status] || ''}`}>
                       {STATUS_LABELS[event.status] || event.status}
                     </span>
-                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${RISK_COLORS[event.risk_level] || ''}`}>
+                    <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded border ${RISK_COLORS[event.risk_level] || ''}`}>
                       {RISK_LABELS[event.risk_level] || event.risk_level}
                     </span>
-                    <span className="text-[10px] text-gray-500 bg-gray-500/10 px-1.5 py-0.5 rounded">
+                    <span className="text-[11px] text-gray-500 bg-gray-500/10 px-1.5 py-0.5 rounded">
                       {CHANGE_TYPE_LABELS[event.change_type] || event.change_type}
                     </span>
                   </div>
@@ -844,11 +844,11 @@ function StageCard({ stage, isLast, canEdit, saving, onAssign, onStart, onComple
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-medium text-text-primary text-sm">{stage.name}</span>
-              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${STAGE_STATUS_COLORS[stage.status] || ''}`}>
+              <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded ${STAGE_STATUS_COLORS[stage.status] || ''}`}>
                 {STAGE_STATUS_LABELS[stage.status] || stage.status}
               </span>
               {stage.approval_required && (
-                <span className="text-[10px] text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded">需审批</span>
+                <span className="text-[11px] text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded">需审批</span>
               )}
             </div>
             <div className="flex flex-wrap gap-3 mt-1.5 text-xs text-gray-400">
@@ -895,25 +895,25 @@ function StageCard({ stage, isLast, canEdit, saving, onAssign, onStart, onComple
         {stage.action_summary && (
           <div className="mt-3 pt-3 border-t border-border/50 space-y-2">
             <div>
-              <p className="text-[10px] text-gray-500 mb-0.5">执行摘要</p>
+              <p className="text-[11px] text-gray-500 mb-0.5">执行摘要</p>
               <p className="text-xs text-text-secondary whitespace-pre-wrap">{stage.action_summary}</p>
             </div>
             {stage.feedback && (
               <div>
-                <p className="text-[10px] text-gray-500 mb-0.5">阶段反馈</p>
+                <p className="text-[11px] text-gray-500 mb-0.5">阶段反馈</p>
                 <p className="text-xs text-text-secondary whitespace-pre-wrap">{stage.feedback}</p>
               </div>
             )}
             {stage.approval_note && (
               <div className={`rounded-lg px-2.5 py-1.5 ${stage.status === 'completed' ? 'bg-green-500/5 border border-green-500/15' : 'bg-red-500/5 border border-red-500/15'}`}>
-                <p className="text-[10px] text-gray-500 mb-0.5">审批意见</p>
+                <p className="text-[11px] text-gray-500 mb-0.5">审批意见</p>
                 <p className="text-xs text-text-secondary">{stage.approval_note}</p>
               </div>
             )}
             {stage.attachments.length > 0 && (
               <div className="flex items-center gap-1 flex-wrap">
                 <Paperclip size={11} className="text-gray-500" />
-                {stage.attachments.map((a, i) => <span key={i} className="text-[10px] text-blue-400">{a}</span>)}
+                {stage.attachments.map((a, i) => <span key={i} className="text-[11px] text-blue-400">{a}</span>)}
               </div>
             )}
           </div>

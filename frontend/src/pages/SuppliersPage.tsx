@@ -103,7 +103,7 @@ function fmtAmt(v: number | null | undefined, currency?: string) {
   if (v == null) return '—'
   const cur = currency || 'CNY'
   const m = CURRENCY_META[cur] || CURRENCY_META.CNY
-  return `${m.symbol}${v.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+  return `${m.symbol}${v.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} 万`
 }
 
 /** 合同到期状态 */
@@ -381,7 +381,7 @@ export default function SuppliersPage() {
           <div className="flex items-center gap-2 mb-2">
             <IconBox icon={AlertTriangle} size="sm" tone="orange" variant="soft" />
             <span className="text-xs font-semibold text-amber-400">合同到期提醒</span>
-            <span className="text-[10px] text-gray-500">{expiringSuppliers.length} 家供应商</span>
+            <span className="text-[11px] text-gray-500">{expiringSuppliers.length} 家供应商</span>
           </div>
           <div className="flex flex-wrap gap-2">
             {expiringSuppliers.map(s => {
@@ -428,7 +428,7 @@ export default function SuppliersPage() {
               <div className="flex items-center gap-2 mb-2">
                 <IconBox icon={Building2} size="sm" tone="blue" variant="soft" />
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">供应商</span>
-                <span className="text-[10px] text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded-full ml-auto">{filteredSuppliers.length}</span>
+                <span className="text-[11px] text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded-full ml-auto">{filteredSuppliers.length}</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="relative flex-1">
@@ -477,10 +477,10 @@ export default function SuppliersPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm font-medium text-white truncate">{s.name}</span>
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0" style={{ background: `${catColor}15`, color: catColor }}>{s.category}</span>
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0" style={{ background: stColor.bg, color: stColor.text }}>{s.status}</span>
+                          <span className="px-1.5 py-0.5 rounded text-[11px] font-medium shrink-0" style={{ background: `${catColor}15`, color: catColor }}>{s.category}</span>
+                          <span className="px-1.5 py-0.5 rounded text-[11px] font-medium shrink-0" style={{ background: stColor.bg, color: stColor.text }}>{s.status}</span>
                           {(cs.state === 'expiring' || cs.state === 'expired') && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0 flex items-center gap-0.5" style={{ background: cs.color.bg, color: cs.color.text }}>
+                            <span className="px-1.5 py-0.5 rounded text-[11px] font-medium shrink-0 flex items-center gap-0.5" style={{ background: cs.color.bg, color: cs.color.text }}>
                               <AlertTriangle size={8} />{cs.label}
                             </span>
                           )}
@@ -522,8 +522,8 @@ export default function SuppliersPage() {
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="text-base font-bold text-white">{selectedDetail.name}</h3>
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ background: `${CATEGORY_COLORS[selectedDetail.category] || '#6B7280'}15`, color: CATEGORY_COLORS[selectedDetail.category] || '#6B7280' }}>{selectedDetail.category}</span>
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ background: (STATUS_COLORS[selectedDetail.status] || { bg: '#6B728015', text: '#6B7280' }).bg, color: (STATUS_COLORS[selectedDetail.status] || { bg: '#6B728015', text: '#6B7280' }).text }}>{selectedDetail.status}</span>
+                        <span className="px-1.5 py-0.5 rounded text-[11px] font-medium" style={{ background: `${CATEGORY_COLORS[selectedDetail.category] || '#6B7280'}15`, color: CATEGORY_COLORS[selectedDetail.category] || '#6B7280' }}>{selectedDetail.category}</span>
+                        <span className="px-1.5 py-0.5 rounded text-[11px] font-medium" style={{ background: (STATUS_COLORS[selectedDetail.status] || { bg: '#6B728015', text: '#6B7280' }).bg, color: (STATUS_COLORS[selectedDetail.status] || { bg: '#6B728015', text: '#6B7280' }).text }}>{selectedDetail.status}</span>
                       </div>
                       <div className="flex items-center gap-3 mt-1 text-[11px] text-gray-500 flex-wrap">
                         {selectedDetail.code && <span>简码: {selectedDetail.code}</span>}
@@ -610,7 +610,7 @@ export default function SuppliersPage() {
                     >
                       <t.icon size={13} />{t.label}
                       {'count' in t && t.count > 0 && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 font-bold">{t.count}</span>
+                        <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 font-bold">{t.count}</span>
                       )}
                       {detailTab === t.key && (
                         <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-t" />
@@ -676,10 +676,10 @@ export default function SuppliersPage() {
                           )}
                           {selectedDetail.models_provided && (
                             <div className="mt-2">
-                              <span className="text-gray-500 text-[10px]">提供模型</span>
+                              <span className="text-gray-500 text-[11px]">提供模型</span>
                               <div className="flex flex-wrap gap-1 mt-1">
                                 {selectedDetail.models_provided.split(',').filter(Boolean).map(m => (
-                                  <span key={m} className="px-1.5 py-0.5 rounded text-[10px] bg-blue-500/10 text-blue-400 font-medium">{m.trim()}</span>
+                                  <span key={m} className="px-1.5 py-0.5 rounded text-[11px] bg-blue-500/10 text-blue-400 font-medium">{m.trim()}</span>
                                 ))}
                               </div>
                             </div>
@@ -711,10 +711,10 @@ export default function SuppliersPage() {
                       <div className="flex items-center gap-2">
                         <IconBox icon={Briefcase} size="sm" tone="orange" variant="soft" />
                         <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">关联项目</span>
-                        <span className="text-[10px] text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded-full">{supplierProjects.projects.length}个</span>
+                        <span className="text-[11px] text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded-full">{supplierProjects.projects.length}个</span>
                       </div>
                       {supplierProjects.projects.length > 0 && (
-                        <span className="text-[10px] text-gray-600">按毛利率升序（关注低毛利）</span>
+                        <span className="text-[11px] text-gray-600">按毛利率升序（关注低毛利）</span>
                       )}
                     </div>
                     {supplierProjects.projects.length === 0 ? (
@@ -729,12 +729,12 @@ export default function SuppliersPage() {
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2 min-w-0 flex-1">
-                                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-orange-500 to-amber-400 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
+                                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-orange-500 to-amber-400 flex items-center justify-center text-[11px] font-bold text-white shrink-0">
                                   {p.project_name.slice(0, 1)}
                                 </div>
                                 <div className="min-w-0">
                                   <div className="text-xs font-medium text-white truncate">{p.project_name}</div>
-                                  <div className="text-[10px] text-gray-500 truncate">
+                                  <div className="text-[11px] text-gray-500 truncate">
                                     {p.customer_name} · {p.currency}
                                     {p.sales_person && <span> · {p.sales_person}</span>}
                                   </div>
@@ -744,7 +744,7 @@ export default function SuppliersPage() {
                                 <div className="text-right">
                                   <div className="text-xs font-bold text-amber-400 tabular-nums">{fmtAmt(p.total_cost, p.currency)}</div>
                                   {p.gross_margin != null && (
-                                    <div className={`text-[10px] tabular-nums ${p.gross_margin >= 30 ? 'text-emerald-400' : p.gross_margin >= 10 ? 'text-amber-400' : 'text-red-400'}`}>
+                                    <div className={`text-[11px] tabular-nums ${p.gross_margin >= 30 ? 'text-emerald-400' : p.gross_margin >= 10 ? 'text-amber-400' : 'text-red-400'}`}>
                                       毛利率 {p.gross_margin}%
                                     </div>
                                   )}
@@ -766,7 +766,7 @@ export default function SuppliersPage() {
                       <div className="flex items-center gap-2">
                         <IconBox icon={Network} size="sm" tone="cyan" variant="soft" />
                         <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">关联通道</span>
-                        <span className="text-[10px] text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded-full">{supplierChannels.length}个</span>
+                        <span className="text-[11px] text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded-full">{supplierChannels.length}个</span>
                       </div>
                       <button
                         onClick={() => navigate('/channels')}
@@ -789,15 +789,15 @@ export default function SuppliersPage() {
                             >
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2 min-w-0 flex-1">
-                                  <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold text-white shrink-0" style={{ background: `linear-gradient(135deg, ${kindColor} 0%, ${kindColor}cc 100%)` }}>
+                                  <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-bold text-white shrink-0" style={{ background: `linear-gradient(135deg, ${kindColor} 0%, ${kindColor}cc 100%)` }}>
                                     <Cpu size={14} />
                                   </div>
                                   <div className="min-w-0">
                                     <div className="text-xs font-medium text-white truncate flex items-center gap-1.5">
                                       {c.name}
-                                      <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold shrink-0" style={{ background: `${kindColor}15`, color: kindColor }}>{c.kind}</span>
+                                      <span className="text-[11px] px-1.5 py-0.5 rounded font-semibold shrink-0" style={{ background: `${kindColor}15`, color: kindColor }}>{c.kind}</span>
                                     </div>
-                                    <div className="text-[10px] text-gray-500 truncate">
+                                    <div className="text-[11px] text-gray-500 truncate">
                                       {c.model_type || '—'} · 成本 ${c.cost_price}/{PRICE_UNIT_SHORT[c.price_unit] || c.price_unit}
                                     </div>
                                   </div>
@@ -805,7 +805,7 @@ export default function SuppliersPage() {
                                 <div className="flex items-center gap-2 shrink-0">
                                   <div className="text-right">
                                     <div className="text-xs font-bold text-cyan-300 tabular-nums">{(c.discount_rate * 100).toFixed(0)}折</div>
-                                    <div className="text-[10px] text-gray-500">{c.active_projects} 个项目</div>
+                                    <div className="text-[11px] text-gray-500">{c.active_projects} 个项目</div>
                                   </div>
                                   <ExternalLink size={12} className="text-gray-600 group-hover:text-cyan-400 transition-colors" />
                                 </div>
@@ -854,7 +854,7 @@ export default function SuppliersPage() {
                 <IconBox icon={DollarSign} size="sm" tone="orange" variant="soft" />
                 <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">按结算币种分布</h4>
                 {multiCurrency && (
-                  <span className="text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-full">多币种</span>
+                  <span className="text-[11px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-full">多币种</span>
                 )}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -869,12 +869,12 @@ export default function SuppliersPage() {
                           </div>
                           <div>
                             <div className="text-sm font-bold text-white">{cur}</div>
-                            <div className="text-[10px] text-gray-500">{meta.name}</div>
+                            <div className="text-[11px] text-gray-500">{meta.name}</div>
                           </div>
                         </div>
                         <div className="text-right">
                           <div className="text-sm font-bold text-amber-400 tabular-nums">{fmtAmt(data.cost, cur)}</div>
-                          <div className="text-[10px] text-gray-500">{data.count}家供应商 · {data.projects}个项目</div>
+                          <div className="text-[11px] text-gray-500">{data.count}家供应商 · {data.projects}个项目</div>
                         </div>
                       </div>
                     </div>
@@ -911,15 +911,15 @@ export default function SuppliersPage() {
                     const catColor = CATEGORY_COLORS[s.category] || '#6B7280'
                     return (
                       <div key={s.supplier_id} className="flex items-center gap-3 p-2 rounded-lg bg-white/5 hover:bg-white/8 transition-colors">
-                        <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold text-white shrink-0" style={{ background: catColor }}>
+                        <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-bold text-white shrink-0" style={{ background: catColor }}>
                           {(s.supplier_name || '?').slice(0, 1)}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-1.5">
                               <span className="text-xs font-medium text-white truncate">{s.supplier_name || '未知供应商'}</span>
-                              <span className="px-1 py-0.5 rounded text-[9px] font-medium" style={{ background: `${catColor}15`, color: catColor }}>{s.category || '其他'}</span>
-                              <span className="text-[9px] text-gray-600">({s.settlement_currency || 'CNY'})</span>
+                              <span className="px-1 py-0.5 rounded text-[11px] font-medium" style={{ background: `${catColor}15`, color: catColor }}>{s.category || '其他'}</span>
+                              <span className="text-[11px] text-gray-600">({s.settlement_currency || 'CNY'})</span>
                             </div>
                             <span className="text-xs font-bold text-amber-400 tabular-nums">{fmtAmt(Number(s.total_cost) || 0, s.settlement_currency)}</span>
                           </div>
@@ -927,7 +927,7 @@ export default function SuppliersPage() {
                             <div className="flex-1 h-1.5 rounded-full bg-bg-hover overflow-hidden">
                               <div className="h-full rounded-full transition-all" style={{ width: `${Math.max(3, pct)}%`, background: `linear-gradient(90deg, ${catColor}, ${catColor}88)` }} />
                             </div>
-                            <span className="text-[10px] text-gray-500 shrink-0">{s.project_count || 0}个项目 · {(s.models || []).length}个模型</span>
+                            <span className="text-[11px] text-gray-500 shrink-0">{s.project_count || 0}个项目 · {(s.models || []).length}个模型</span>
                           </div>
                         </div>
                       </div>
@@ -951,7 +951,7 @@ export default function SuppliersPage() {
                 const models = (s.models_provided || '').split(',').map(m => m.trim()).filter(Boolean)
                 return (
                   <div key={s.id} className="flex items-center gap-3 p-2 rounded-lg bg-white/5">
-                    <div className="w-6 h-6 rounded flex items-center justify-center text-[9px] font-bold text-white shrink-0" style={{ background: CATEGORY_COLORS[s.category] || '#6B7280' }}>
+                    <div className="w-6 h-6 rounded flex items-center justify-center text-[11px] font-bold text-white shrink-0" style={{ background: CATEGORY_COLORS[s.category] || '#6B7280' }}>
                       {(s.name || '?').slice(0, 1)}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -959,12 +959,12 @@ export default function SuppliersPage() {
                       <div className="flex flex-wrap gap-1 mt-1">
                         {models.length > 0
                           ? models.map(m => (
-                              <span key={m} className="px-1.5 py-0.5 rounded text-[9px] bg-purple-500/10 text-purple-400 font-medium">{m}</span>
+                              <span key={m} className="px-1.5 py-0.5 rounded text-[11px] bg-purple-500/10 text-purple-400 font-medium">{m}</span>
                             ))
-                          : <span className="text-[10px] text-gray-600">未配置模型</span>}
+                          : <span className="text-[11px] text-gray-600">未配置模型</span>}
                       </div>
                     </div>
-                    <span className="text-[10px] text-gray-500 shrink-0">{s.status || '—'}</span>
+                    <span className="text-[11px] text-gray-500 shrink-0">{s.status || '—'}</span>
                   </div>
                 )
               })}
@@ -1122,7 +1122,7 @@ function MetricBox({ label, value, tone }: { label: string; value: React.ReactNo
   const t = TONE_MAP[tone] || TONE_MAP.blue
   return (
     <div className="rounded-xl p-3" style={{ background: t.bg, border: `1px solid ${t.border}` }}>
-      <div className="text-[10px] text-gray-500 mb-0.5">{label}</div>
+      <div className="text-[11px] text-gray-500 mb-0.5">{label}</div>
       <div className="text-sm font-bold tabular-nums" style={{ color: t.text }}>{value}</div>
     </div>
   )

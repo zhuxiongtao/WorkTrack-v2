@@ -63,6 +63,9 @@ class ProviderCreate(BaseModel):
     provider_type: str = "chat"
     project_id: Optional[str] = None  # Vertex AI: GCP 项目 ID
     location: Optional[str] = None  # Vertex AI: GCP 区域
+    gcp_label_team: Optional[str] = None  # GCP 账单标签：team
+    gcp_label_app: Optional[str] = None   # GCP 账单标签：app
+    gcp_label_env: Optional[str] = None   # GCP 账单标签：environment
 
 
 class ProviderUpdate(BaseModel):
@@ -73,6 +76,9 @@ class ProviderUpdate(BaseModel):
     provider_type: Optional[str] = None
     project_id: Optional[str] = None  # Vertex AI: GCP 项目 ID
     location: Optional[str] = None  # Vertex AI: GCP 区域
+    gcp_label_team: Optional[str] = None  # GCP 账单标签：team
+    gcp_label_app: Optional[str] = None   # GCP 账单标签：app
+    gcp_label_env: Optional[str] = None   # GCP 账单标签：environment
 
 
 # ===== 模型供应商 CRUD =====

@@ -165,7 +165,7 @@ function AppSearch() {
               className="w-full text-left px-3 py-2.5 hover:bg-bg-sidebar border-b border-border last:border-b-0 transition-colors"
             >
               <div className="flex items-center gap-1.5 mb-0.5">
-                <span className={`text-[9px] px-1 py-0.5 rounded ${typeColor[item.type] || 'text-gray-400 bg-gray-500/10'}`}>
+                <span className={`text-[11px] px-1 py-0.5 rounded ${typeColor[item.type] || 'text-gray-400 bg-gray-500/10'}`}>
                   {item.label}
                 </span>
                 <span className="text-xs font-medium text-gray-900 dark:text-white truncate">
@@ -173,7 +173,7 @@ function AppSearch() {
                 </span>
               </div>
               {item.snippet && (
-                <p className="text-[10px] text-gray-500 truncate mt-0.5 leading-tight">{item.snippet}</p>
+                <p className="text-[11px] text-gray-500 truncate mt-0.5 leading-tight">{item.snippet}</p>
               )}
             </button>
           ))}

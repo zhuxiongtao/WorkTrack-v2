@@ -50,7 +50,7 @@ export function GlobalTickerBar({ fetchWithAuth }: Props) {
       {/* 左侧图标 + 标签 */}
       <div className="flex items-center gap-1.5 px-2.5 shrink-0 h-full border-r border-amber-500/30">
         <Megaphone size={10} className="text-amber-500 shrink-0" />
-        <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap">公告</span>
+        <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap">公告</span>
       </div>
 
       {/* 横向滚动 */}

@@ -211,7 +211,7 @@ export default function TaskOverrideModal({ taskType, taskLabel, current, onClos
               </select>
               {form.preset_id && (
                 <button onClick={() => setOverride('preset_id', null)}
-                  className="text-[10px] text-gray-500 hover:text-amber-400 flex items-center gap-0.5 shrink-0">
+                  className="text-[11px] text-gray-500 hover:text-amber-400 flex items-center gap-0.5 shrink-0">
                   <RotateCcw size={9} />清空
                 </button>
               )}
@@ -223,7 +223,7 @@ export default function TaskOverrideModal({ taskType, taskLabel, current, onClos
             <NumberField label="Temperature" value={form.override_temperature} onChange={(v) => setOverride('override_temperature', v)} onNull={() => setOverride('override_temperature', null)} min={0} max={2} step={0.05} />
             <NumberField label="Top P" value={form.override_top_p} onChange={(v) => setOverride('override_top_p', v)} onNull={() => setOverride('override_top_p', null)} min={0} max={1} step={0.05} />
             {form.override_temperature != null && form.override_top_p != null && (
-              <p className="text-[10px] text-amber-400">建议 Temperature 和 Top P 只设其一，同时设置效果不可预期</p>
+              <p className="text-[11px] text-amber-400">建议 Temperature 和 Top P 只设其一，同时设置效果不可预期</p>
             )}
             <NumberField label="Max Tokens" value={form.override_max_tokens} onChange={(v) => setOverride('override_max_tokens', v)} onNull={() => setOverride('override_max_tokens', null)} min={1} step={1} />
           </Section>
@@ -269,7 +269,7 @@ function Section({ title, icon: Icon, color, hint, children }: { title: string; 
           <Icon size={13} style={{ color }} />
         </div>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h4>
-        {hint && <span className="text-[10px] text-gray-500">{hint}</span>}
+        {hint && <span className="text-[11px] text-gray-500">{hint}</span>}
       </div>
       <div className="space-y-3 pl-2 border-l border-border/40 ml-3">{children}</div>
     </div>
@@ -282,7 +282,7 @@ function NumberField({ label, value, onChange, onNull, min, max, step }: { label
       <div className="flex items-center justify-between mb-1.5">
         <label className="text-xs text-gray-400">{label}</label>
         <button onClick={onNull} disabled={value == null}
-          className="text-[10px] text-gray-500 hover:text-amber-400 disabled:opacity-30 flex items-center gap-0.5">
+          className="text-[11px] text-gray-500 hover:text-amber-400 disabled:opacity-30 flex items-center gap-0.5">
           <RotateCcw size={9} />继承
         </button>
       </div>
@@ -300,7 +300,7 @@ function SelectField({ label, value, options, onChange, onNull }: { label: strin
       <div className="flex items-center justify-between mb-1.5">
         <label className="text-xs text-gray-400">{label}</label>
         <button onClick={onNull} disabled={!value}
-          className="text-[10px] text-gray-500 hover:text-amber-400 disabled:opacity-30 flex items-center gap-0.5">
+          className="text-[11px] text-gray-500 hover:text-amber-400 disabled:opacity-30 flex items-center gap-0.5">
           <RotateCcw size={9} />继承
         </button>
       </div>

@@ -19,6 +19,9 @@ interface Provider {
   user_id: number | null
   project_id: string | null
   location: string | null
+  gcp_label_team: string | null
+  gcp_label_app: string | null
+  gcp_label_env: string | null
 }
 
 interface ProviderModelItem {
@@ -480,7 +483,7 @@ function AnnouncementTab({
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             {saving ? '保存中...' : (enabled ? '保存并发布' : '保存（停用）')}
           </button>
-          <span className="text-[10px] text-gray-500">公告为富文本，最多 50000 字符</span>
+          <span className="text-[11px] text-gray-500">公告为富文本，最多 50000 字符</span>
         </div>
       </div>
 
@@ -497,8 +500,8 @@ function AnnouncementTab({
           >
             <div className="flex items-center gap-2 mb-1">
               <Megaphone size={11} className="text-amber-400" />
-              <span className="text-[10px] font-bold text-amber-300">公告</span>
-              {!enabled && <span className="text-[10px] text-gray-500">（停用，不会显示）</span>}
+              <span className="text-[11px] font-bold text-amber-300">公告</span>
+              {!enabled && <span className="text-[11px] text-gray-500">（停用，不会显示）</span>}
             </div>
             <div
               className="text-[11px] text-amber-100 truncate"
@@ -510,7 +513,7 @@ function AnnouncementTab({
           <div className="px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/5">
             <div className="flex items-center gap-2 mb-1">
               <Sparkles size={11} className="text-cyan-400" />
-              <span className="text-[10px] font-bold text-cyan-300">AI 资讯</span>
+              <span className="text-[11px] font-bold text-cyan-300">AI 资讯</span>
             </div>
             <div className="text-[11px] text-gray-500">滚动条（30 条最新资讯，hover 暂停，点击跳转源链接）</div>
           </div>
@@ -581,7 +584,7 @@ export default function SettingsPage() {
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null)
-  const [form, setForm] = useState({ name: '', base_url: '', api_key: '', project_id: '', location: '' })
+  const [form, setForm] = useState({ name: '', base_url: '', api_key: '', project_id: '', location: '', gcp_label_team: '', gcp_label_app: '', gcp_label_env: '' })
   const [testingModelId, setTestingModelId] = useState<number | null>(null)
   const [testResults, setTestResults] = useState<Record<number, { success: boolean; message: string; reply?: string; elapsed?: number }>>({})
   const [fetchingModels, setFetchingModels] = useState<number | null>(null)
@@ -668,13 +671,13 @@ export default function SettingsPage() {
 
   const openCreate = () => {
     setEditingProvider(null)
-    setForm({ name: '', base_url: '', api_key: '', project_id: '', location: '' })
+    setForm({ name: '', base_url: '', api_key: '', project_id: '', location: '', gcp_label_team: '', gcp_label_app: '', gcp_label_env: '' })
     setShowForm(true)
   }
 
   const openEdit = (p: Provider) => {
     setEditingProvider(p)
-    setForm({ name: p.name, base_url: p.base_url, api_key: p.api_key, project_id: p.project_id || '', location: p.location || '' })
+    setForm({ name: p.name, base_url: p.base_url, api_key: p.api_key, project_id: p.project_id || '', location: p.location || '', gcp_label_team: p.gcp_label_team || '', gcp_label_app: p.gcp_label_app || '', gcp_label_env: p.gcp_label_env || '' })
     setShowForm(true)
   }
 
@@ -710,7 +713,7 @@ export default function SettingsPage() {
   const handleToggleActive = async (p: Provider) => {
     await fetch(`/api/v1/settings/providers/${p.id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: p.name, base_url: p.base_url, api_key: p.api_key, is_active: !p.is_active, project_id: p.project_id, location: p.location }),
+      body: JSON.stringify({ name: p.name, base_url: p.base_url, api_key: p.api_key, is_active: !p.is_active, project_id: p.project_id, location: p.location, gcp_label_team: p.gcp_label_team, gcp_label_app: p.gcp_label_app, gcp_label_env: p.gcp_label_env }),
     })
     loadProviders()
   }
@@ -1100,7 +1103,7 @@ export default function SettingsPage() {
                 >
                   <tab.icon size={17} className={`${isActive ? 'text-white' : 'text-gray-500 group-hover:text-gray-700 dark:text-gray-300'} max-md:size-[14px]`} />
                   <span className="text-sm md:text-sm font-semibold max-md:text-xs">{tab.label}</span>
-                  <span className={`hidden md:block text-[10px] leading-tight mt-0.5 ${isActive ? 'text-blue-100/90 dark:text-blue-200' : 'text-gray-500 group-hover:text-gray-500 dark:group-hover:text-gray-300'}`}>{tab.desc}</span>
+                  <span className={`hidden md:block text-[11px] leading-tight mt-0.5 ${isActive ? 'text-blue-100/90 dark:text-blue-200' : 'text-gray-500 group-hover:text-gray-500 dark:group-hover:text-gray-300'}`}>{tab.desc}</span>
                 </button>
               )
             })}
@@ -1134,7 +1137,7 @@ export default function SettingsPage() {
             <p className="text-gray-600 text-xs mb-4">添加 AI 模型供应商以启用智能整理功能</p>
             <div className="flex flex-wrap justify-center gap-2">
               {providerPresets.map((p) => (
-                <button key={p.name} onClick={() => { setForm({ ...form, name: p.name, base_url: p.base_url, project_id: (p as any).project_id || '', location: (p as any).location || '' }); setShowForm(true) }}
+                <button key={p.name} onClick={() => { setForm({ ...form, name: p.name, base_url: p.base_url, project_id: (p as any).project_id || '', location: (p as any).location || '', gcp_label_team: '', gcp_label_app: '', gcp_label_env: '' }); setShowForm(true) }}
                   className="px-3 py-2 rounded-lg bg-bg-hover border border-border text-xs text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:border-[#3B82F6]/50 transition-all">+ {p.name}</button>
               ))}
             </div>
@@ -1165,10 +1168,10 @@ export default function SettingsPage() {
                             {p.is_active ? '已启用' : '已停用'}
                           </button>
                           {p.user_id == null && !canManageShared && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-500/10 text-gray-500 shrink-0">共享</span>
+                            <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-gray-500/10 text-gray-500 shrink-0">共享</span>
                           )}
                           {p.user_id != null && !canManageShared && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 shrink-0">我的</span>
+                            <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 shrink-0">我的</span>
                           )}
                         </div>
                         <div className="flex items-center gap-4 text-xs text-gray-500 flex-wrap">
@@ -1214,7 +1217,7 @@ export default function SettingsPage() {
                               <span className="text-[11px] text-gray-700 dark:text-gray-300 font-mono truncate flex-1 min-w-0">{m.model_name}</span>
                               {/* 能力内联说明（单一来源、不再 chip 化） */}
                               {allLabels.length > 0 && (
-                                <span className="hidden md:inline text-[10px] text-gray-500 dark:text-gray-400 shrink-0 truncate max-w-[180px]" title={allLabels.join(' · ')}>
+                                <span className="hidden md:inline text-[11px] text-gray-500 dark:text-gray-400 shrink-0 truncate max-w-[180px]" title={allLabels.join(' · ')}>
                                   · {allLabels.join(' · ')}
                                 </span>
                               )}
@@ -1228,7 +1231,7 @@ export default function SettingsPage() {
                               {/* 测试按钮 */}
                               {canEditProvider(p) && (
                                 <button onClick={(e) => { e.stopPropagation(); testModel(p.id, m.id) }} disabled={testingModelId === m.id}
-                                  className="opacity-0 group-hover:opacity-100 px-1.5 py-px rounded text-[10px] text-gray-500 hover:text-[#10B981] shrink-0"
+                                  className="opacity-0 group-hover:opacity-100 px-1.5 py-px rounded text-[11px] text-gray-500 hover:text-[#10B981] shrink-0"
                                   title="测试连通性">
                                   {testingModelId === m.id ? <Loader2 size={10} className="animate-spin" /> : '测试'}
                                 </button>
@@ -1282,9 +1285,9 @@ export default function SettingsPage() {
                             </div>
                             {/* 类型选择器 */}
                             <div className="flex items-center gap-2">
-                              <span className="text-[10px] text-gray-500 shrink-0">添加类型:</span>
+                              <span className="text-[11px] text-gray-500 shrink-0">添加类型:</span>
                               <select value={addModelType} onChange={(e) => setAddModelType(e.target.value)}
-                                className="flex-1 px-2 py-1 rounded bg-bg-input border border-border text-[10px] text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6]">
+                                className="flex-1 px-2 py-1 rounded bg-bg-input border border-border text-[11px] text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6]">
                                 <option value="auto">自动推断</option>
                                 {MODEL_TYPE_OPTIONS.map((opt) => (
                                   <option key={opt.key} value={opt.key}>{opt.label}</option>
@@ -1308,7 +1311,7 @@ export default function SettingsPage() {
                                   <span className="text-[11px] text-[#3B82F6] font-medium shrink-0">+</span>
                                   <span className="font-mono text-[11px] truncate flex-1 min-w-0">{m.id}</span>
                                   {addModelType !== 'auto' && (
-                                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full shrink-0 ${TYPE_COLORS[addModelType] || TYPE_COLORS.chat}`}>
+                                    <span className={`text-[11px] px-1.5 py-0.5 rounded-full shrink-0 ${TYPE_COLORS[addModelType] || TYPE_COLORS.chat}`}>
                                       {TYPE_LABEL[addModelType] || addModelType}
                                     </span>
                                   )}
@@ -1366,9 +1369,9 @@ export default function SettingsPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 mb-0.5">
                         {p.is_system ? (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 shrink-0">系统</span>
+                          <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 shrink-0">系统</span>
                         ) : (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 shrink-0">个人</span>
+                          <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 shrink-0">个人</span>
                         )}
                         <h4 className="text-sm font-medium text-gray-900 dark:text-white truncate">{p.name}</h4>
                       </div>
@@ -1392,7 +1395,7 @@ export default function SettingsPage() {
                   {params.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-2 pt-2 border-t border-border/40">
                       {params.map((pa, i) => (
-                        <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-bg-input text-gray-400 font-mono">{pa}</span>
+                        <span key={i} className="text-[11px] px-1.5 py-0.5 rounded bg-bg-input text-gray-400 font-mono">{pa}</span>
                       ))}
                     </div>
                   )}
@@ -1443,7 +1446,7 @@ export default function SettingsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="text-xs font-semibold text-gray-900 dark:text-white">{group.label}</span>
-                        <span className="text-[10px] text-gray-500 truncate">{group.desc}</span>
+                        <span className="text-[11px] text-gray-500 truncate">{group.desc}</span>
                       </div>
                     </div>
                     {/* 整体完成度指示 */}
@@ -1534,7 +1537,7 @@ export default function SettingsPage() {
                           {cfg?.model_name && canManageShared && (
                             <button onClick={() => setOverrideModal({ open: true, taskType: tk, taskLabel: isMultimodal ? `${group.label}/${rt.label}` : `${group.label}` })}
                               title={hasOverride ? '已配置覆盖参数，点击修改' : '为此任务配置参数覆盖'}
-                              className={`ml-auto flex items-center gap-1 px-1.5 py-1 rounded text-[10px] border shrink-0 transition-colors ${hasOverride ? 'text-[#F59E0B] border-[#F59E0B]/60 bg-[#F59E0B]/10' : 'text-gray-500 hover:text-amber-300 border-border bg-bg-hover'}`}>
+                              className={`ml-auto flex items-center gap-1 px-1.5 py-1 rounded text-[11px] border shrink-0 transition-colors ${hasOverride ? 'text-[#F59E0B] border-[#F59E0B]/60 bg-[#F59E0B]/10' : 'text-gray-500 hover:text-amber-300 border-border bg-bg-hover'}`}>
                               <Sliders size={10} />
                               {hasOverride && <span className="w-1 h-1 rounded-full bg-[#F59E0B] shrink-0" />}
                             </button>
@@ -1558,7 +1561,7 @@ export default function SettingsPage() {
           <div className="flex items-center gap-2 mb-3">
             <Globe size={15} className="text-emerald-400" />
             <span className="text-sm font-medium text-gray-900 dark:text-white">Tavily Search</span>
-            <a href="https://tavily.com" target="_blank" rel="noopener noreferrer" className="text-[10px] text-gray-500 hover:text-[#3B82F6] ml-auto">获取 API Key →</a>
+            <a href="https://tavily.com" target="_blank" rel="noopener noreferrer" className="text-[11px] text-gray-500 hover:text-[#3B82F6] ml-auto">获取 API Key →</a>
           </div>
           <div className="flex items-center gap-2">
             <input
@@ -1586,7 +1589,7 @@ export default function SettingsPage() {
       {/* AI 提示词配置 */}
       <div className="mb-10">
         <h3 className="text-base font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2"><Edit3 size={18} className="text-[#8B5CF6]" /> AI 提示词配置</h3>
-        <p className="text-xs text-gray-500 mb-4 dark:text-gray-400">自定义 AI 任务的提示词，影响输出风格和内容结构。使用 <code className="px-1.5 py-0.5 rounded bg-bg-input text-[10px] text-[#8B5CF6]">{'{变量名}'}</code> 表示动态占位。结构化抽取、图像理解、通用对话、ASR / 嵌入等任务的提示词由系统固定，不开放自定义。</p>
+        <p className="text-xs text-gray-500 mb-4 dark:text-gray-400">自定义 AI 任务的提示词，影响输出风格和内容结构。使用 <code className="px-1.5 py-0.5 rounded bg-bg-input text-[11px] text-[#8B5CF6]">{'{变量名}'}</code> 表示动态占位。结构化抽取、图像理解、通用对话、ASR / 嵌入等任务的提示词由系统固定，不开放自定义。</p>
         {isAdmin && <p className="text-xs text-indigo-500 mb-3">管理员提示：你可以编辑全局默认提示词，新用户将自动继承。普通用户可自行覆盖为个人提示词。</p>}
         {Object.keys(aiPrompts).length === 0 ? (
           <div className="p-6 rounded-xl bg-bg-card border border-dashed border-border text-center">
@@ -1613,10 +1616,10 @@ export default function SettingsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className="text-sm font-medium text-gray-900 dark:text-white max-md:text-xs">{prompt.label}</span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${sourceColor}`}>{sourceLabel}</span>
+                        <span className={`text-[11px] px-1.5 py-0.5 rounded-full ${sourceColor}`}>{sourceLabel}</span>
                       </div>
                       <p className="text-xs text-gray-500 mb-1 max-md:hidden">{prompt.desc}</p>
-                      <p className="text-[10px] text-gray-600">变量: {prompt.variables?.join(', ') || '无'}</p>
+                      <p className="text-[11px] text-gray-600">变量: {prompt.variables?.join(', ') || '无'}</p>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button
@@ -1676,7 +1679,7 @@ export default function SettingsPage() {
                         <div className="flex items-center gap-2 mb-2">
                           <Sparkles size={13} className="text-[#A78BFA]" />
                           <span className="text-xs font-medium text-[#A78BFA]">AI 帮你写提示词</span>
-                          <span className="text-[10px] text-gray-500">描述需求，AI 自动生成规范提示词</span>
+                          <span className="text-[11px] text-gray-500">描述需求，AI 自动生成规范提示词</span>
                         </div>
                         <textarea
                           value={aiReq}
@@ -1685,7 +1688,7 @@ export default function SettingsPage() {
                           className="w-full h-16 p-2.5 rounded-lg bg-bg-input border border-border text-xs text-gray-700 dark:text-gray-300 outline-none focus:border-[#8B5CF6] resize-none leading-relaxed placeholder-gray-600"
                         />
                         <div className="flex items-center justify-between mt-2">
-                          <span className="text-[10px] text-gray-600">{aiReq.length} 字</span>
+                          <span className="text-[11px] text-gray-600">{aiReq.length} 字</span>
                           <button
                             onClick={() => generatePrompt(taskType)}
                             disabled={aiGenerating || !aiReq.trim()}
@@ -1785,7 +1788,7 @@ export default function SettingsPage() {
                     }}
                   />
                   <p className="text-[11px] text-gray-400">推荐 200×200 px 方形图片</p>
-                  <p className="text-[10px] text-gray-600 mt-0.5">PNG、JPEG、GIF、WebP、SVG、ICO，最大 2MB</p>
+                  <p className="text-[11px] text-gray-600 mt-0.5">PNG、JPEG、GIF、WebP、SVG、ICO，最大 2MB</p>
                   {brandLogoFile && (
                     <button onClick={() => { setBrandLogoFile(null); setBrandLogoPreview('') }}
                       className="text-[11px] text-red-400 hover:text-red-300 mt-1">移除</button>
@@ -1803,7 +1806,7 @@ export default function SettingsPage() {
                 placeholder="WorkTrack"
                 maxLength={60}
               />
-              <p className="text-[10px] text-gray-600 mt-1.5">将在侧边栏顶部和浏览器标签页显示</p>
+              <p className="text-[11px] text-gray-600 mt-1.5">将在侧边栏顶部和浏览器标签页显示</p>
             </div>
           </div>
           {/* 保存 */}
@@ -1920,7 +1923,7 @@ export default function SettingsPage() {
           <div className="mb-4">
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs text-gray-400">服务地址</label>
-              <span className="text-[10px] text-gray-600">
+              <span className="text-[11px] text-gray-600">
                 {mcpConfig.public_url ? '已自定义' : '自动检测：' + window.location.origin}
               </span>
             </div>
@@ -1979,7 +1982,7 @@ export default function SettingsPage() {
                 保存
               </button>
             </div>
-            <p className="text-[10px] text-gray-600 mt-1.5">
+            <p className="text-[11px] text-gray-600 mt-1.5">
               默认自动检测当前访问地址。如需外部智能体通过公网域名访问，请填写真实地址（如 https://worktrack.example.com）
             </p>
           </div>
@@ -2072,7 +2075,7 @@ export default function SettingsPage() {
     }
   }
 }`}</pre>
-                  <p className="text-[10px] text-gray-600 mt-1">保存到 claude_desktop_config.json，重启 Claude Desktop</p>
+                  <p className="text-[11px] text-gray-600 mt-1">保存到 claude_desktop_config.json，重启 Claude Desktop</p>
                 </div>
                 {/* Cursor / Cline */}
                 <div>
@@ -2102,8 +2105,8 @@ export default function SettingsPage() {
                       { cat: '全局', tools: 'global_search / get_overview' },
                     ].map(g => (
                       <div key={g.cat} className="px-2 py-1.5 rounded-lg bg-bg-input border border-border">
-                        <p className="text-[10px] text-[#8B5CF6] font-medium">{g.cat}</p>
-                        <p className="text-[9px] text-gray-500">{g.tools}</p>
+                        <p className="text-[11px] text-[#8B5CF6] font-medium">{g.cat}</p>
+                        <p className="text-[11px] text-gray-500">{g.tools}</p>
                       </div>
                     ))}
                   </div>
@@ -2153,7 +2156,7 @@ export default function SettingsPage() {
                       </div>
                       <div className="flex-1 text-left min-w-0">
                         <p className={`text-sm truncate ${isActive ? 'text-gray-900 dark:text-gray-100 font-medium' : 'text-gray-600 dark:text-gray-400'}`}>{label}</p>
-                        <p className={`text-[10px] ${isActive ? 'text-gray-500' : 'text-gray-400 dark:text-gray-500'}`}>{count} 个选项</p>
+                        <p className={`text-[11px] ${isActive ? 'text-gray-500' : 'text-gray-400 dark:text-gray-500'}`}>{count} 个选项</p>
                       </div>
                       {isActive && (
                         <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
@@ -2180,11 +2183,11 @@ export default function SettingsPage() {
                     )
                   })()}
                   <span className="text-sm font-medium text-gray-900 dark:text-white">{categoryLabels[selectedCategory]}</span>
-                  <span className="text-[10px] text-gray-400 dark:text-gray-500 bg-bg-input px-2 py-0.5 rounded-full">
+                  <span className="text-[11px] text-gray-400 dark:text-gray-500 bg-bg-input px-2 py-0.5 rounded-full">
                     {fieldOptions.filter((o) => o.category === selectedCategory).length} 项
                   </span>
                 </div>
-                <span className="text-[10px] text-gray-400 dark:text-gray-500">每行一个，空行自动忽略</span>
+                <span className="text-[11px] text-gray-400 dark:text-gray-500">每行一个，空行自动忽略</span>
               </div>
               <div className="p-4">
                 <textarea
@@ -2203,7 +2206,7 @@ export default function SettingsPage() {
                   {optionsSaving && <Loader2 size={14} className="animate-spin" />}
                   <Save size={14} />{optionsSaving ? '保存中…' : '保存选项'}
                 </button>
-                <span className="text-[10px] text-gray-400 dark:text-gray-500">修改后即刻生效</span>
+                <span className="text-[11px] text-gray-400 dark:text-gray-500">修改后即刻生效</span>
               </div>
             </div>
           </div>
@@ -2276,7 +2279,7 @@ export default function SettingsPage() {
                     disabled
                     className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-500 opacity-60 cursor-not-allowed"
                   />
-                  <p className="text-[10px] text-gray-600 mt-1">用户名不可修改</p>
+                  <p className="text-[11px] text-gray-600 mt-1">用户名不可修改</p>
                 </div>
                 <div>
                   <label className="block text-xs text-gray-400 mb-1.5">昵称</label>
@@ -2442,7 +2445,7 @@ export default function SettingsPage() {
                   {passwordSaving && <Loader2 size={14} className="animate-spin" />}
                   <Key size={14} />{passwordSaving ? '修改中...' : '修改密码'}
                 </button>
-                <p className="text-[10px] text-gray-600">修改密码后所有设备上的登录状态将失效，需要重新登录。</p>
+                <p className="text-[11px] text-gray-600">修改密码后所有设备上的登录状态将失效，需要重新登录。</p>
               </div>
             </div>
           </div>
@@ -2490,7 +2493,7 @@ export default function SettingsPage() {
                   <p className="text-xs text-gray-500 mb-3">选择预置供应商自动填充，或手动填写下方信息</p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 mb-5">
                     {providerPresets.map((p) => (
-                      <button key={p.name} onClick={() => setForm({ ...form, name: p.name, base_url: p.base_url, project_id: (p as any).project_id || '', location: (p as any).location || '' })}
+                      <button key={p.name} onClick={() => setForm({ ...form, name: p.name, base_url: p.base_url, project_id: (p as any).project_id || '', location: (p as any).location || '', gcp_label_team: '', gcp_label_app: '', gcp_label_env: '' })}
                         className="px-2 py-2 rounded-lg bg-bg-input border border-border text-xs text-gray-400 hover:text-white hover:border-[#3B82F6]/50 hover:bg-bg-hover transition-all truncate">
                         {p.name}
                       </button>
@@ -2498,7 +2501,7 @@ export default function SettingsPage() {
                   </div>
                   <div className="flex items-center gap-3 mb-4">
                     <div className="flex-1 h-px bg-border" />
-                    <span className="text-[10px] text-gray-600 shrink-0">或手动填写</span>
+                    <span className="text-[11px] text-gray-600 shrink-0">或手动填写</span>
                     <div className="flex-1 h-px bg-border" />
                   </div>
                 </>
@@ -2520,7 +2523,27 @@ export default function SettingsPage() {
                       <label className="block text-xs text-gray-400 mb-1.5">GCP 区域</label>
                       <input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })}
                         className="w-full px-3 py-2.5 rounded-lg bg-bg-input border border-border text-sm text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6] transition-colors font-mono" placeholder="us-central1" />
-                      <p className="text-[10px] text-gray-500 mt-1">默认 us-central1，可选如 asia-east1、europe-west4 等</p>
+                      <p className="text-[11px] text-gray-500 mt-1">默认 us-central1，可选如 asia-east1、europe-west4 等</p>
+                    </div>
+                    <div className="pt-1 border-t border-border">
+                      <p className="text-[11px] text-gray-400 mb-2">GCP 账单标签（可选，用于在 GCP 费用报表中过滤此供应商的消耗）</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="block text-[11px] text-gray-400 mb-1">team</label>
+                          <input value={form.gcp_label_team} onChange={(e) => setForm({ ...form, gcp_label_team: e.target.value })}
+                            className="w-full px-2 py-1.5 rounded-lg bg-bg-input border border-border text-xs text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6] transition-colors font-mono" placeholder="如 platform" />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-gray-400 mb-1">app</label>
+                          <input value={form.gcp_label_app} onChange={(e) => setForm({ ...form, gcp_label_app: e.target.value })}
+                            className="w-full px-2 py-1.5 rounded-lg bg-bg-input border border-border text-xs text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6] transition-colors font-mono" placeholder="如 worktrack" />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-gray-400 mb-1">environment</label>
+                          <input value={form.gcp_label_env} onChange={(e) => setForm({ ...form, gcp_label_env: e.target.value })}
+                            className="w-full px-2 py-1.5 rounded-lg bg-bg-input border border-border text-xs text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6] transition-colors font-mono" placeholder="如 production" />
+                        </div>
+                      </div>
                     </div>
                   </>
                 )}
@@ -2534,7 +2557,7 @@ export default function SettingsPage() {
                   <input value={form.api_key} onChange={(e) => setForm({ ...form, api_key: e.target.value })} type="password"
                     className="w-full px-3 py-2.5 rounded-lg bg-bg-input border border-border text-sm text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6] transition-colors font-mono" placeholder={form.name === 'Vertex AI' ? '粘贴服务账号 JSON...' : 'sk-...'} />
                   {form.name === 'Vertex AI' && (
-                    <p className="text-[10px] text-gray-500 mt-1">请粘贴 GCP 服务账号的完整 JSON 密钥内容</p>
+                    <p className="text-[11px] text-gray-500 mt-1">请粘贴 GCP 服务账号的完整 JSON 密钥内容</p>
                   )}
                 </div>
               </div>
@@ -2624,7 +2647,7 @@ export default function SettingsPage() {
                 </div>
               </div>
               {presetForm.temperature !== '' && presetForm.top_p !== '' && (
-                <p className="text-[10px] text-amber-400">建议 Temperature 和 Top P 只设其一，同时设置效果不可预期</p>
+                <p className="text-[11px] text-amber-400">建议 Temperature 和 Top P 只设其一，同时设置效果不可预期</p>
               )}
               <div className="grid grid-cols-2 gap-3">
                 <div>

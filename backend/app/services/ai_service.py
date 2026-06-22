@@ -20,6 +20,28 @@ from app.utils.time import utc_now
 logger = logging.getLogger("worktrack")
 
 
+# ---- GCP Billing Labels 支持 ----
+
+def _normalize_label_value(value: str) -> str:
+    """将任意字符串转为合法的 GCP label value（小写字母/数字/下划线/短横线，最长63字符）"""
+    if not value:
+        return ""
+    value = value.strip().lower()
+    value = _re_module.sub(r"[^a-z0-9_-]", "_", value)
+    value = _re_module.sub(r"_+", "_", value)
+    return value[:63]
+
+
+def _build_vertex_labels(provider: "ModelProvider", feature: str = "general") -> dict:
+    """构建 Vertex AI 请求的 billing labels，从供应商配置读取，feature 按调用场景传入"""
+    return {
+        "team": _normalize_label_value(provider.gcp_label_team or ""),
+        "app":  _normalize_label_value(provider.gcp_label_app or ""),
+        "feature": _normalize_label_value(feature),
+        "environment": _normalize_label_value(provider.gcp_label_env or ""),
+    }
+
+
 # ---- Vertex AI 认证支持 ----
 
 def _is_vertex_ai(provider: ModelProvider) -> bool:
@@ -175,7 +197,7 @@ class _VertexCompletions:
         return contents, system_instruction
 
     @staticmethod
-    def _build_genai_config(temperature=0.7, max_tokens=None, response_format=None, extra_body=None):
+    def _build_genai_config(temperature=0.7, max_tokens=None, response_format=None, extra_body=None, labels=None):
         from google.genai import types
 
         config_kwargs = {}
@@ -193,6 +215,10 @@ class _VertexCompletions:
         if extra_body and extra_body.get("enable_search"):
             tools_list = [types.Tool(google_search=types.GoogleSearch())]
             config_kwargs["tools"] = tools_list
+
+        # GCP Billing Labels（仅 Vertex AI 生效，用于账单归因）
+        if labels:
+            config_kwargs["labels"] = labels
 
         if not config_kwargs:
             return None
@@ -255,12 +281,17 @@ class _VertexCompletions:
         # 转换消息格式
         contents, system_instruction = self._genai_to_openai_messages(messages)
 
+        # 构建 GCP Billing Labels：feature 由调用方通过 extra_body["gcp_feature"] 传入
+        feature = (extra_body or {}).get("gcp_feature", "general")
+        labels = _build_vertex_labels(self._client._provider, feature)
+
         # 构建配置
         config = self._build_genai_config(
             temperature=temperature,
             max_tokens=max_tokens,
             response_format=response_format,
             extra_body=extra_body,
+            labels=labels,
         ) or types.GenerateContentConfig()
 
         if system_instruction:
@@ -283,6 +314,14 @@ class _VertexCompletions:
             config=config,
         )
 
+        # 提取 token 用量（usage_metadata）
+        um = getattr(response, 'usage_metadata', None)
+        usage = _FakeUsage(
+            prompt_tokens=getattr(um, 'prompt_token_count', 0) or 0,
+            completion_tokens=getattr(um, 'candidates_token_count', 0) or 0,
+            cache_read_tokens=getattr(um, 'cached_content_token_count', 0) or 0,
+        ) if um else None
+
         # 提取文本或函数调用
         if response.function_calls:
             tool_calls = self._genai_func_call_to_openai(response.function_calls)
@@ -290,11 +329,13 @@ class _VertexCompletions:
                 choices=[_FakeChoice(
                     message=_FakeMessage(content=None, tool_calls=tool_calls),
                 )],
+                usage=usage,
             )
 
         text = response.text or ""
         return _FakeResponse(
             choices=[_FakeChoice(message=_FakeMessage(content=text))],
+            usage=usage,
         )
 
 
@@ -361,7 +402,14 @@ class _AnthropicClient:
             temperature=temperature,
         )
         text = "".join([block.text for block in response.content if block.type == "text"])
-        return _FakeResponse(choices=[_FakeChoice(message=_FakeMessage(content=text))])
+        au = getattr(response, 'usage', None)
+        usage = _FakeUsage(
+            prompt_tokens=getattr(au, 'input_tokens', 0) or 0,
+            completion_tokens=getattr(au, 'output_tokens', 0) or 0,
+            cache_read_tokens=getattr(au, 'cache_read_input_tokens', 0) or 0,
+            cache_write_tokens=getattr(au, 'cache_creation_input_tokens', 0) or 0,
+        ) if au else None
+        return _FakeResponse(choices=[_FakeChoice(message=_FakeMessage(content=text))], usage=usage)
 
     def _stream_wrapper(self, model, messages, system_prompt, max_tokens, temperature):
         from anthropic.types import MessageStreamEvent
@@ -432,7 +480,13 @@ class _GeminiClient:
             config=config,
         )
         text = response.text or ""
-        return _FakeResponse(choices=[_FakeChoice(message=_FakeMessage(content=text))])
+        um = getattr(response, 'usage_metadata', None)
+        usage = _FakeUsage(
+            prompt_tokens=getattr(um, 'prompt_token_count', 0) or 0,
+            completion_tokens=getattr(um, 'candidates_token_count', 0) or 0,
+            cache_read_tokens=getattr(um, 'cached_content_token_count', 0) or 0,
+        ) if um else None
+        return _FakeResponse(choices=[_FakeChoice(message=_FakeMessage(content=text))], usage=usage)
 
     def _stream_wrapper(self, model, contents, config):
         stream_response = self._client.models.generate_content_stream(
@@ -458,9 +512,60 @@ class _FakeFunctionCall:
         self.arguments = arguments
 
 
+class _FakeUsage:
+    """统一的 token 用量对象，供各 SDK 包装器填写后交给 _record_usage_silent 读取"""
+    def __init__(self, prompt_tokens=0, completion_tokens=0,
+                 cache_read_tokens=0, cache_write_tokens=0, total_tokens=0):
+        self.prompt_tokens = prompt_tokens
+        self.completion_tokens = completion_tokens
+        self.cache_read_tokens = cache_read_tokens
+        self.cache_write_tokens = cache_write_tokens
+        self.total_tokens = total_tokens or (prompt_tokens + completion_tokens)
+
+
 class _FakeResponse:
-    def __init__(self, choices):
+    def __init__(self, choices, usage=None):
         self.choices = choices
+        self.usage = usage  # _FakeUsage | None
+
+
+def _record_usage_silent(db, response, user_id: int, provider_id, model_name: str, task_type: str = "chat"):
+    """记录一次 LLM 调用的 token 消耗；任何异常都静默忽略，绝不影响主流程"""
+    try:
+        from app.models.model_usage_log import ModelUsageLog
+        usage = getattr(response, 'usage', None)
+        if usage is None:
+            return
+
+        input_t = getattr(usage, 'prompt_tokens', 0) or 0
+        output_t = getattr(usage, 'completion_tokens', 0) or 0
+        cache_r = getattr(usage, 'cache_read_tokens', 0) or 0
+        cache_w = getattr(usage, 'cache_write_tokens', 0) or 0
+        total_t = getattr(usage, 'total_tokens', 0) or getattr(usage, 'prompt_tokens', 0) + getattr(usage, 'completion_tokens', 0)
+
+        # OpenAI standard: prompt_tokens_details.cached_tokens
+        if cache_r == 0:
+            details = getattr(usage, 'prompt_tokens_details', None)
+            if details:
+                cache_r = getattr(details, 'cached_tokens', 0) or 0
+
+        if input_t == 0 and output_t == 0:
+            return  # 没有有效数据，跳过
+
+        log = ModelUsageLog(
+            user_id=user_id or None,
+            provider_id=provider_id,
+            model_name=model_name,
+            task_type=task_type,
+            input_tokens=input_t,
+            output_tokens=output_t,
+            cache_read_tokens=cache_r,
+            cache_write_tokens=cache_w,
+            total_tokens=total_t or (input_t + output_t),
+        )
+        db.add(log)
+    except Exception:
+        pass
 
 
 
@@ -697,6 +802,7 @@ def summarize_daily_report(content: str, db: Session, user_id: int = 0) -> str:
         ],
         **params,
     )
+    _record_usage_silent(db, response, user_id, getattr(provider, 'id', None), model, "chat")
     return _extract_message_text(response.choices[0].message)
 
 
@@ -728,6 +834,7 @@ def extract_meeting_minutes(content: str, db: Session, user_id: int = 0) -> dict
         ],
         **params,
     )
+    _record_usage_silent(db, response, user_id, getattr(provider, 'id', None), model, "chat")
     raw_text = _extract_message_text(response.choices[0].message) or "{}"
     try:
         result = json.loads(raw_text)
@@ -794,6 +901,7 @@ def generate_project_analysis(project_id: int, db: Session, user_id: int = 0) ->
         ],
         temperature=0.5,
     )
+    _record_usage_silent(db, response, user_id, getattr(provider, 'id', None), model, "chat")
     return _extract_message_text(response.choices[0].message)
 
 
@@ -806,24 +914,88 @@ def ai_chat(messages: list[dict], db: Session, user_id: int = 0) -> str:
         messages=messages,
         temperature=0.7,
     )
+    _record_usage_silent(db, response, user_id, getattr(provider, 'id', None), model, "chat")
     return _extract_message_text(response.choices[0].message)
 
 
 def transcribe_audio(audio_path: str, db: Session, user_id: int = 0) -> str:
-    """将音频文件转写为文字（使用 ASR 模型）"""
+    """将音频文件转写为文字（使用 ASR 模型）
+
+    - Vertex AI / Gemini 供应商：用 genai SDK 的 generate_content 传音频 Part 转写（Gemini 原生支持音频理解）
+    - OpenAI 兼容供应商：用 client.audio.transcriptions.create（Whisper 接口）
+    """
+    import os
+    import mimetypes
     base_url, api_key, model, provider = _get_active_provider(db, "speech_to_text", user_id)
+
+    # Vertex AI / Gemini：genai SDK 原生音频转写
+    if provider and (_is_vertex_ai(provider) or _is_gemini(provider)):
+        return _transcribe_with_genai(audio_path, model, provider)
+
+    # OpenAI 兼容：Whisper 接口
     client = _get_client(base_url, api_key, provider)
+    # 根据文件扩展名推断 MIME，默认 audio/webm
+    ext = os.path.splitext(audio_path)[1].lower().lstrip(".")
+    mime_map = {
+        "webm": "audio/webm", "wav": "audio/wav", "mp3": "audio/mpeg",
+        "m4a": "audio/mp4", "ogg": "audio/ogg", "flac": "audio/flac",
+        "aac": "audio/aac", "aiff": "audio/aiff",
+    }
+    mime_type = mime_map.get(ext) or mimetypes.guess_type(audio_path)[0] or "audio/webm"
+    filename = f"audio.{ext or 'webm'}"
     with open(audio_path, "rb") as f:
         resp = client.audio.transcriptions.create(
             model=model,
-            file=("audio.webm", f, "audio/webm"),
+            file=(filename, f, mime_type),
         )
     return resp.text or ""
 
 
+def _transcribe_with_genai(audio_path: str, model: str, provider: ModelProvider) -> str:
+    """用 Google genai SDK（Vertex AI 或 Gemini API）做音频转写
+
+    Gemini 原生支持音频输入，通过 generate_content 传音频 Part + 转写指令即可。
+    """
+    import os
+    from google import genai
+    from google.genai import types
+
+    ext = os.path.splitext(audio_path)[1].lower().lstrip(".")
+    mime_map = {
+        "webm": "audio/webm", "wav": "audio/wav", "mp3": "audio/mpeg",
+        "m4a": "audio/mp4", "ogg": "audio/ogg", "flac": "audio/flac",
+        "aac": "audio/aac", "aiff": "audio/aiff",
+    }
+    mime_type = mime_map.get(ext) or "audio/webm"
+
+    with open(audio_path, "rb") as f:
+        audio_bytes = f.read()
+
+    # 构建 genai client（Vertex AI 走服务账号，Gemini API 走 api_key）
+    if _is_vertex_ai(provider):
+        credentials = _get_vertex_credentials(provider)
+        client = genai.Client(
+            vertexai=True,
+            project=provider.project_id,
+            location=provider.location or "global",
+            credentials=credentials,
+        )
+    else:
+        client = genai.Client(api_key=provider.api_key)
+
+    response = client.models.generate_content(
+        model=model,
+        contents=[
+            types.Part.from_bytes(data=audio_bytes, mime_type=mime_type),
+            "请将这段音频精确转写为文字。只输出转写出的文字内容，不要添加任何说明、标注或发言人标签。",
+        ],
+    )
+    return response.text or ""
+
+
 def organize_transcript(raw_text: str, db: Session, user_id: int = 0) -> str:
     """AI 整理转写文字，生成结构化会议纪要"""
-    base_url, api_key, model, provider = _get_active_provider(db, "chat", user_id)
+    base_url, api_key, model, provider, task_cfg, pm = _get_active_provider_full(db, "chat", user_id)
     client = _get_client(base_url, api_key, provider)
     system_prompt, template = _get_prompt("meeting_organize", db, user_id)
     user_prompt = _fill_template(template, content=raw_text)
@@ -838,6 +1010,7 @@ def organize_transcript(raw_text: str, db: Session, user_id: int = 0) -> str:
             func_defaults={"temperature": 0.3},  # 业务软默认：会议整理要稳定
         ),
     )
+    _record_usage_silent(db, response, user_id, getattr(provider, 'id', None), model, "chat")
     return _extract_message_text(response.choices[0].message)
 
 
@@ -1294,6 +1467,7 @@ def fetch_company_info(company_name: str, db: Session, user_id: int = 0, progres
         ],
         **params,
     )
+    _record_usage_silent(db, response, user_id, getattr(provider, 'id', None), model, "chat")
     text = _extract_message_text(response.choices[0].message)
     # 兜底：如果 LLM 没回 ai_initiatives 字段，从 ai_context 提取要点
     fallback_ai = _format_ai_fallback(locals().get('ai_context'))
@@ -1476,6 +1650,7 @@ def _supplement_company_info(company_name: str, result: dict, missing: list[str]
         ],
         **params,
     )
+    _record_usage_silent(db, resp, user_id, getattr(provider, 'id', None), model, "chat")
     new_text = _extract_message_text(resp.choices[0].message)
     try:
         new_result = json.loads(new_text)
@@ -1744,5 +1919,6 @@ def refresh_company_news(company_name: str, db: Session, user_id: int = 0) -> st
         ],
         **params,
     )
+    _record_usage_silent(db, response, user_id, getattr(provider, 'id', None), model, "chat")
     text = _extract_message_text(response.choices[0].message)
     return text.strip()

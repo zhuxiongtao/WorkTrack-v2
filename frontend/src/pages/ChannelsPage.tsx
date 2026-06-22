@@ -434,9 +434,9 @@ export default function ChannelsPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-sm font-semibold text-white">{c.name}</span>
-                            {c.code && <span className="text-[10px] text-gray-500 font-mono">#{c.code}</span>}
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: kindC.bg, color: kindC.text }}>{c.kind}</span>
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: statusC.bg, color: statusC.text }}>{c.status}</span>
+                            {c.code && <span className="text-[11px] text-gray-500 font-mono">#{c.code}</span>}
+                            <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: kindC.bg, color: kindC.text }}>{c.kind}</span>
+                            <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: statusC.bg, color: statusC.text }}>{c.status}</span>
                           </div>
                           <div className="mt-1.5 text-[11px] text-gray-500 flex items-center gap-3 flex-wrap">
                             <span className="inline-flex items-center gap-1">
@@ -572,7 +572,7 @@ function ChannelDetailPanel({
             {familyPrices.map(p => (
               <div key={p.id} className="flex items-center justify-between text-[11px] py-1 px-2 rounded-lg bg-black/20">
                 <span className="text-gray-300 font-medium truncate max-w-[110px]">{p.name}</span>
-                <div className="flex gap-3 text-[10px] tabular-nums shrink-0">
+                <div className="flex gap-3 text-[11px] tabular-nums shrink-0">
                   {p.input_price != null && (
                     <span className="text-emerald-400">
                       输入 {fmtUSD(p.input_price * channel.discount_rate)}/1M
@@ -587,7 +587,7 @@ function ChannelDetailPanel({
               </div>
             ))}
           </div>
-          <p className="mt-1.5 text-[10px] text-gray-600">官网价 × 折扣率，仅作成本估算参考</p>
+          <p className="mt-1.5 text-[11px] text-gray-600">官网价 × 折扣率，仅作成本估算参考</p>
         </div>
       )}
 
@@ -746,13 +746,13 @@ function PriceRefTab({ prices, channels, loading }: {
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-bold text-white">{prov}</span>
-                  <span className="text-[10px] text-gray-600 px-2 py-0.5 rounded-full bg-white/5">{models.length} 个模型</span>
+                  <span className="text-[11px] text-gray-600 px-2 py-0.5 rounded-full bg-white/5">{models.length} 个模型</span>
                 </div>
                 {linkedChannels.length > 0 && (
-                  <span className="text-[10px] text-gray-500 flex items-center gap-1 flex-wrap">
+                  <span className="text-[11px] text-gray-500 flex items-center gap-1 flex-wrap">
                     <Network size={10} />{linkedChannels.length} 条通道关联：
                     {linkedChannels.map(c => (
-                      <span key={c.id} className="px-1.5 py-0.5 rounded-md text-[9px] font-semibold bg-cyan-500/10 text-cyan-300">
+                      <span key={c.id} className="px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-cyan-500/10 text-cyan-300">
                         {c.name} {(c.discount_rate * 100).toFixed(0)}%折
                       </span>
                     ))}
@@ -764,7 +764,7 @@ function PriceRefTab({ prices, channels, loading }: {
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
-                      <tr className="text-left text-[10px] text-gray-500 uppercase tracking-wider bg-white/[0.02]">
+                      <tr className="text-left text-[11px] text-gray-500 uppercase tracking-wider bg-white/[0.02]">
                         <th className="px-4 py-2.5 font-semibold">模型</th>
                         <th className="px-4 py-2.5 font-semibold text-right">输入 $/1M</th>
                         <th className="px-4 py-2.5 font-semibold text-right">输出 $/1M</th>
@@ -773,7 +773,7 @@ function PriceRefTab({ prices, channels, loading }: {
                         {linkedChannels.map(c => (
                           <th key={c.id} className="px-4 py-2.5 font-semibold text-right text-cyan-400">
                             {c.name}<br />
-                            <span className="text-[9px] font-normal text-gray-500">×{(c.discount_rate * 100).toFixed(0)}%</span>
+                            <span className="text-[11px] font-normal text-gray-500">×{(c.discount_rate * 100).toFixed(0)}%</span>
                           </th>
                         ))}
                       </tr>
@@ -783,7 +783,7 @@ function PriceRefTab({ prices, channels, loading }: {
                         <tr key={m.id} className={`border-t ${i % 2 === 0 ? 'bg-white/[0.01]' : ''}`} style={{ borderColor: '#ffffff08' }}>
                           <td className="px-4 py-2.5">
                             <div className="font-semibold text-white">{m.name}</div>
-                            {m.version_id && <div className="text-[10px] text-gray-600 font-mono">{m.version_id}</div>}
+                            {m.version_id && <div className="text-[11px] text-gray-600 font-mono">{m.version_id}</div>}
                           </td>
                           <td className="px-4 py-2.5 text-right tabular-nums text-emerald-400 font-semibold">{fmtUSD(m.input_price)}</td>
                           <td className="px-4 py-2.5 text-right tabular-nums text-orange-400 font-semibold">{fmtUSD(m.output_price)}</td>
@@ -791,8 +791,8 @@ function PriceRefTab({ prices, channels, loading }: {
                           <td className="px-4 py-2.5 text-right tabular-nums text-violet-400">{m.cache_write_price != null ? fmtUSD(m.cache_write_price) : '—'}</td>
                           {linkedChannels.map(c => (
                             <td key={c.id} className="px-4 py-2.5 text-right tabular-nums">
-                              {m.input_price != null && <div className="text-emerald-300/80 text-[10px]">↑ {fmtUSD(m.input_price * c.discount_rate)}</div>}
-                              {m.output_price != null && <div className="text-orange-300/80 text-[10px]">↓ {fmtUSD(m.output_price * c.discount_rate)}</div>}
+                              {m.input_price != null && <div className="text-emerald-300/80 text-[11px]">↑ {fmtUSD(m.input_price * c.discount_rate)}</div>}
+                              {m.output_price != null && <div className="text-orange-300/80 text-[11px]">↓ {fmtUSD(m.output_price * c.discount_rate)}</div>}
                             </td>
                           ))}
                         </tr>
@@ -883,12 +883,12 @@ function SummaryView({
           <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1">
             <Cpu size={12} />通道明细
           </div>
-          <span className="text-[10px] text-gray-600">共 {summaries.length} 条</span>
+          <span className="text-[11px] text-gray-600">共 {summaries.length} 条</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="text-left text-[10px] text-gray-500 uppercase tracking-wider">
+              <tr className="text-left text-[11px] text-gray-500 uppercase tracking-wider">
                 <th className="px-3 py-2 font-semibold">通道</th>
                 <th className="px-3 py-2 font-semibold">供应商</th>
                 <th className="px-3 py-2 font-semibold">类型</th>
@@ -907,7 +907,7 @@ function SummaryView({
                     <td className="px-3 py-2 text-white font-semibold">{s.name}</td>
                     <td className="px-3 py-2 text-gray-400">{s.supplier_name}</td>
                     <td className="px-3 py-2">
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: kindC.bg, color: kindC.text }}>{s.kind}</span>
+                      <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: kindC.bg, color: kindC.text }}>{s.kind}</span>
                     </td>
                     <td className="px-3 py-2 text-gray-400">{s.model_type || '—'}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-blue-300">{(s.discount_rate * 100).toFixed(0)}%</td>
@@ -938,9 +938,9 @@ function StatBox({ label, value, sub, tone }: { label: string; value: string; su
   const textCls = colors[tone].split(' ').pop()!
   return (
     <div className={`rounded-lg p-2.5 bg-gradient-to-br ${colors[tone]} border`}>
-      <div className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</div>
+      <div className="text-[11px] text-gray-500 uppercase tracking-wider">{label}</div>
       <div className={`mt-0.5 text-base font-bold tabular-nums ${textCls}`}>{value}</div>
-      {sub && <div className="text-[10px] text-gray-600 mt-0.5">{sub}</div>}
+      {sub && <div className="text-[11px] text-gray-600 mt-0.5">{sub}</div>}
     </div>
   )
 }
@@ -951,7 +951,7 @@ function SlaBox({ label, value, tone }: { label: string; value: string; tone: 'g
   }
   return (
     <div className="rounded-md p-2 bg-black/20">
-      <div className="text-[10px] text-gray-500">{label}</div>
+      <div className="text-[11px] text-gray-500">{label}</div>
       <div className={`mt-0.5 text-sm font-bold tabular-nums ${colors[tone]}`}>{value}</div>
     </div>
   )
@@ -981,7 +981,7 @@ function BigStat({ label, value, tone, icon: Icon }: { label: string; value: str
     <div className={`relative overflow-hidden rounded-xl p-4 bg-gradient-to-br ${colors[tone]} border`}>
       <div className="flex items-center gap-2 mb-2">
         <Icon size={14} className={textColor[tone]} />
-        <span className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</span>
+        <span className="text-[11px] text-gray-500 uppercase tracking-wider">{label}</span>
       </div>
       <div className={`text-2xl font-bold tabular-nums ${textColor[tone]}`}>{value}</div>
     </div>

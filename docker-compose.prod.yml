@@ -1,0 +1,25 @@
+services:
+  worktrack:
+    image: zxt815/worktrack-v2:latest
+    ports:
+      - "80:80"
+    environment:
+      - DB_HOST=pgsql
+      - DB_PORT=5432
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME:-worktrack}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      - AUTO_CREATE_ADMIN=false
+    volumes:
+      - /data/worktrack/uploads:/app/uploads
+      - /data/worktrack/data:/app/data
+    networks:
+      - pg_network
+    restart: unless-stopped
+
+networks:
+  pg_network:
+    external: true
+    name: 1panel-network

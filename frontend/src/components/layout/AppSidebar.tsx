@@ -108,14 +108,14 @@ function AppSidebar({ sidebarOpen, onCloseSidebar, brandLogo, brandTitle, isInsi
                   AI 智能助手
                 </span>
                 <span
-                  className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-white/25 backdrop-blur-sm"
+                  className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-white/25 backdrop-blur-sm"
                   style={{ color: '#ffffff' }}
                 >
                   NEW
                 </span>
               </div>
               <p
-                className="text-[10px] mt-0.5 truncate"
+                className="text-[11px] mt-0.5 truncate"
                 style={{ color: 'rgba(255,255,255,0.95)' }}
               >
                 搜索 · 总结 · 分析 · 联网
@@ -135,7 +135,7 @@ function AppSidebar({ sidebarOpen, onCloseSidebar, brandLogo, brandTitle, isInsi
               <div key={cat.id}>
                 {/* 分类头 */}
                 <div className="px-2 py-1.5">
-                  <span className="text-[9.5px] font-bold tracking-widest uppercase text-gray-500 dark:text-gray-500">
+                  <span className="text-[12px] font-bold tracking-widest uppercase text-gray-500 dark:text-gray-500">
                     {cat.title}
                   </span>
                 </div>
@@ -147,7 +147,7 @@ function AppSidebar({ sidebarOpen, onCloseSidebar, brandLogo, brandTitle, isInsi
                         to={it.to}
                         onClick={() => onCloseSidebar()}
                         className={({ isActive }) =>
-                          `relative group flex items-center gap-2.5 pl-3 pr-2 py-1.5 rounded-lg text-[12.5px] transition-all ${
+                          `relative group flex items-center gap-2.5 pl-3 pr-2 py-2 rounded-lg text-[13px] transition-all ${
                             isActive
                               ? 'bg-bg-hover font-semibold text-gray-900 dark:text-white'
                               : 'text-gray-400 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-bg-hover-secondary/50'
@@ -161,10 +161,10 @@ function AppSidebar({ sidebarOpen, onCloseSidebar, brandLogo, brandTitle, isInsi
                               className={`absolute left-0 w-0.5 h-4 rounded-r-full transition-all ${isActive ? 'opacity-100' : 'opacity-0'}`}
                               style={{ background: 'var(--accent-blue)' }}
                             />
-                            <SidebarIcon icon={it.icon} isActive={isActive} size={15} />
+                            <SidebarIcon icon={it.icon} isActive={isActive} size={16} />
                             <span className="flex-1 truncate">{it.label}</span>
                             {it.adminOnly && (
-                              <span className="text-[8px] font-bold px-1 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 ring-1 ring-amber-500/20">ADMIN</span>
+                              <span className="text-[11px] font-bold px-1 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 ring-1 ring-amber-500/20">ADMIN</span>
                             )}
                           </>
                         )}
@@ -182,18 +182,18 @@ function AppSidebar({ sidebarOpen, onCloseSidebar, brandLogo, brandTitle, isInsi
         {isAdmin && (
           <button
             onClick={() => { navigate('/admin'); onCloseSidebar() }}
-            className="w-full flex items-center gap-2 px-3 py-1.5 mb-2.5 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 hover:border-purple-500/35 text-purple-300/80 hover:text-purple-200 transition-all text-[11.5px] font-medium"
+            className="w-full flex items-center gap-2 px-3 py-1.5 mb-2.5 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 hover:border-purple-500/35 text-purple-300/80 hover:text-purple-200 transition-all text-xs font-medium"
             title="进入系统管理后台"
           >
             <Settings size={12} />
             <span className="flex-1 text-left">管理后台</span>
-            <span className="text-[9px] opacity-60">→</span>
+            <span className="text-[11px] opacity-60">→</span>
           </button>
         )}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className={`w-1.5 h-1.5 rounded-full ${backendStatus === 'online' ? 'bg-[#10B981] animate-pulse' : backendStatus === 'checking' ? 'bg-yellow-400 animate-pulse' : 'bg-red-500'}`} />
-            <span className="text-[10px] text-gray-500">
+            <span className="text-[11px] text-gray-500">
               {backendStatus === 'online' ? '服务运行中' : backendStatus === 'checking' ? '检查中...' : '服务离线'}
             </span>
           </div>
@@ -216,13 +216,13 @@ function AppSidebar({ sidebarOpen, onCloseSidebar, brandLogo, brandTitle, isInsi
             {user?.avatar ? (
               <img src={user.avatar} alt="头像" className="w-6 h-6 rounded-full object-cover shrink-0" />
             ) : (
-              <div className="w-6 h-6 rounded-full bg-accent-blue/20 flex items-center justify-center text-[10px] text-accent-blue font-medium shrink-0">
+              <div className="w-6 h-6 rounded-full bg-accent-blue/20 flex items-center justify-center text-[11px] text-accent-blue font-medium shrink-0">
                 {(user?.name || user?.username || '?')[0].toUpperCase()}
               </div>
             )}
             <div className="min-w-0">
               <p className="text-xs text-gray-300 truncate">{user?.name || user?.username}</p>
-              <p className="text-[9px] text-accent-blue/70">
+              <p className="text-[11px] text-accent-blue/70">
                 {isAdmin ? '管理员' : user?.roles?.includes('dept_leader') ? '部门负责人' : user?.roles?.includes('boss') ? '老板' : ''}
               </p>
             </div>

@@ -124,7 +124,7 @@ export function UserRolesModal({ isOpen, user, onClose }: UserRolesModalProps) {
                   <div className="flex items-center gap-1.5 mb-2.5">
                     <Building2 size={12} className="text-gray-500" />
                     <span className="text-[11px] font-bold tracking-wider text-gray-500 dark:text-gray-400 uppercase">来自部门</span>
-                    <span className="text-[10px] text-gray-400 dark:text-gray-500 ml-auto">只读</span>
+                    <span className="text-[11px] text-gray-400 dark:text-gray-500 ml-auto">只读</span>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {allRoles.filter(r => departmentRoleIds.has(r.id)).map(r => (
@@ -141,7 +141,7 @@ export function UserRolesModal({ isOpen, user, onClose }: UserRolesModalProps) {
                 <div className="flex items-center gap-1.5 mb-2.5 px-1">
                   <User size={12} className="text-accent-blue" />
                   <span className="text-[11px] font-bold tracking-wider text-gray-700 dark:text-gray-300 uppercase">直接分配</span>
-                  <span className="text-[10px] text-gray-500 dark:text-gray-500 ml-auto">
+                  <span className="text-[11px] text-gray-500 dark:text-gray-500 ml-auto">
                     已选 <span className="text-accent-blue font-bold tabular-nums">{draft.size}</span> / {allRoles.length}
                   </span>
                 </div>
@@ -168,14 +168,14 @@ export function UserRolesModal({ isOpen, user, onClose }: UserRolesModalProps) {
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className={`text-xs font-bold ${checked ? 'text-accent-blue' : 'text-gray-800 dark:text-gray-200'}`}>{r.name}</span>
                             {r.is_system && (
-                              <span className="text-[9px] font-bold px-1 py-0.2 rounded bg-gray-100 dark:bg-bg-hover text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-border/20">系统</span>
+                              <span className="text-[11px] font-bold px-1 py-0.2 rounded bg-gray-100 dark:bg-bg-hover text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-border/20">系统</span>
                             )}
                             {isDept && checked && (
-                              <span className="text-[9px] font-bold px-1 py-0.2 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/15">与部门重复</span>
+                              <span className="text-[11px] font-bold px-1 py-0.2 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/15">与部门重复</span>
                             )}
                           </div>
                           {r.description && (
-                            <p className="text-[10px] text-gray-500 dark:text-gray-500 mt-0.5 line-clamp-2 leading-relaxed">{r.description}</p>
+                            <p className="text-[11px] text-gray-500 dark:text-gray-500 mt-0.5 line-clamp-2 leading-relaxed">{r.description}</p>
                           )}
                         </div>
                       </label>

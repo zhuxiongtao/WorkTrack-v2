@@ -142,7 +142,7 @@ export default function SearchableSelect({
                     }`}
                   >
                     {multiple && (
-                      <span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 text-[10px] transition-colors ${
+                      <span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 text-[11px] transition-colors ${
                         selected ? 'bg-accent-blue border-accent-blue text-white' : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-transparent'
                       }`}>
                         {selected && <Check size={10} />}

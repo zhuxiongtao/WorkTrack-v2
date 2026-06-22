@@ -106,7 +106,7 @@ export function DepartmentRoleModal({ isOpen, departmentId, departmentName, onCl
               {/* 系统预设角色 */}
               {systemRoles.length > 0 && (
                 <div>
-                  <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2.5">系统预设角色</p>
+                  <p className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2.5">系统预设角色</p>
                   <div className="space-y-1.5">
                     {systemRoles.map(role => (
                       <RoleCheckbox
@@ -123,7 +123,7 @@ export function DepartmentRoleModal({ isOpen, departmentId, departmentName, onCl
               {/* 自定义角色 */}
               {customRoles.length > 0 && (
                 <div>
-                  <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2.5">自定义角色</p>
+                  <p className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2.5">自定义角色</p>
                   <div className="space-y-1.5">
                     {customRoles.map(role => (
                       <RoleCheckbox
@@ -181,7 +181,7 @@ function RoleCheckbox({ role, checked, onToggle }: { role: RoleData; checked: bo
           {role.name}
         </span>
         {role.description && (
-          <span className="text-[10px] text-gray-400 dark:text-gray-500 block truncate">{role.description}</span>
+          <span className="text-[11px] text-gray-400 dark:text-gray-500 block truncate">{role.description}</span>
         )}
       </div>
       {checked && (

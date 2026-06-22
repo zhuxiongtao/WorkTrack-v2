@@ -153,6 +153,10 @@ function AppContent() {
       {!authLoading && user && (
         <>
       {/* ── 管理后台：/admin/* ── */}
+      {/* 系统管理员只允许访问 /admin，强制跳转 */}
+      {user.is_admin && !location.pathname.startsWith('/admin') && (
+        <Navigate to="/admin" replace />
+      )}
       {location.pathname.startsWith('/admin') ? (
         <AdminLayout brandLogo={brandLogo} brandTitle={brandTitle} />
       ) : (

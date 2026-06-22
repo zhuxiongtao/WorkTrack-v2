@@ -202,7 +202,7 @@ function CollabDeptMembers({ deptId, departmentTree, deptUsers, onAdd, permissio
               onClick={() => onAdd('user', u.id)}
               className="w-full flex items-center gap-3 px-3 py-2 text-xs hover:bg-accent-blue/5 dark:hover:bg-accent-blue/10 transition-colors cursor-pointer group"
             >
-              <div className={`w-7 h-7 rounded-full bg-gradient-to-br flex items-center justify-center text-[10px] font-bold border shrink-0 ${getAvatarColor(u.name || u.username)}`}>
+              <div className={`w-7 h-7 rounded-full bg-gradient-to-br flex items-center justify-center text-[11px] font-bold border shrink-0 ${getAvatarColor(u.name || u.username)}`}>
                 {(u.name || u.username)[0].toUpperCase()}
               </div>
               <div className="flex-1 min-w-0 text-left">
@@ -277,7 +277,7 @@ function CollabSearchResults({ search, allUsers, departmentTree, onAdd }: {
               onClick={() => onAdd('user', u.id)}
               className="w-full flex items-center gap-3 px-3 py-2 text-xs hover:bg-accent-blue/5 dark:hover:bg-accent-blue/10 transition-colors cursor-pointer group"
             >
-              <div className={`w-7 h-7 rounded-full bg-gradient-to-br flex items-center justify-center text-[10px] font-bold border shrink-0 ${getAvatarColor(u.name || u.username)}`}>
+              <div className={`w-7 h-7 rounded-full bg-gradient-to-br flex items-center justify-center text-[11px] font-bold border shrink-0 ${getAvatarColor(u.name || u.username)}`}>
                 {(u.name || u.username)[0].toUpperCase()}
               </div>
               <div className="flex-1 min-w-0 text-left">
@@ -1188,14 +1188,14 @@ export default function WikiPage() {
                     <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-b from-transparent to-black/10 pointer-events-none" />
                     {/* 身份徽章（顶左，毛玻璃） */}
                     <div className="absolute top-2.5 left-2.5 z-10">
-                      <span title={roleBadge.title} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border backdrop-blur-md tracking-wide shadow-sm ${roleBadge.cls}`}>
+                      <span title={roleBadge.title} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border backdrop-blur-md tracking-wide shadow-sm ${roleBadge.cls}`}>
                         {roleBadge.icon}{roleBadge.text}
                       </span>
                     </div>
                     {/* 所有者小标识（顶右，默认显示） */}
                     {space.is_owner !== false ? (
                       <div className="absolute top-2.5 right-2.5 z-10 transition-all duration-300 group-hover:opacity-0 group-hover:scale-75 group-hover:translate-x-2">
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-white/25 text-white border border-white/40 backdrop-blur-md shadow-sm">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-bold bg-white/25 text-white border border-white/40 backdrop-blur-md shadow-sm">
                           <Crown size={8} strokeWidth={2.5} /> 所有者
                         </span>
                       </div>
@@ -1212,18 +1212,18 @@ export default function WikiPage() {
                       {space.name}
                     </h3>
                     {space.description ? (
-                      <p className="text-[12px] line-clamp-2 text-gray-500 dark:text-gray-400 leading-relaxed min-h-[2.6em]">
+                      <p className="text-xs line-clamp-2 text-gray-500 dark:text-gray-400 leading-relaxed min-h-[2.6em]">
                         {space.description}
                       </p>
                     ) : (
-                      <p className="text-[12px] italic text-gray-300 dark:text-gray-600 leading-relaxed min-h-[2.6em] flex items-center">
+                      <p className="text-xs italic text-gray-300 dark:text-gray-600 leading-relaxed min-h-[2.6em] flex items-center">
                         暂无描述 — 点击卡片进入，开始你的第一个知识库
                       </p>
                     )}
                   </div>
 
                   {/* ===== 底部元数据条 ===== */}
-                  <div className="px-4 py-2 border-t border-gray-100 dark:border-white/5 flex items-center justify-between text-[10.5px] bg-gray-50/40 dark:bg-white/[0.015]">
+                  <div className="px-4 py-2 border-t border-gray-100 dark:border-white/5 flex items-center justify-between text-[11px] bg-gray-50/40 dark:bg-white/[0.015]">
                     <span className="flex items-center gap-1 text-gray-400 dark:text-gray-500 font-mono tabular-nums">
                       <Clock size={10} />
                       {new Date(space.updated_at).toLocaleDateString('zh-CN')}
@@ -1745,7 +1745,7 @@ export default function WikiPage() {
                           >
                             {inlineAiCopied ? <Check size={14} /> : <Copy size={14} />}
                             {/* 悬停提示气泡（使用任意值避免被 .text-white 强制覆盖） */}
-                            <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-900 dark:bg-gray-700 text-[#fff] whitespace-nowrap opacity-0 group-hover/copy:opacity-100 transition-opacity shadow-md z-10">
+                            <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-1.5 py-0.5 rounded text-[11px] font-medium bg-gray-900 dark:bg-gray-700 text-[#fff] whitespace-nowrap opacity-0 group-hover/copy:opacity-100 transition-opacity shadow-md z-10">
                               {inlineAiCopied ? '已复制' : '复制'}
                             </span>
                           </button>
@@ -1756,7 +1756,7 @@ export default function WikiPage() {
                             aria-label="放弃"
                           >
                             <X size={14} />
-                            <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-900 dark:bg-gray-700 text-[#fff] whitespace-nowrap opacity-0 group-hover/abort:opacity-100 transition-opacity shadow-md z-10">
+                            <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-1.5 py-0.5 rounded text-[11px] font-medium bg-gray-900 dark:bg-gray-700 text-[#fff] whitespace-nowrap opacity-0 group-hover/abort:opacity-100 transition-opacity shadow-md z-10">
                               放弃
                             </span>
                           </button>
@@ -1771,7 +1771,7 @@ export default function WikiPage() {
                             aria-label="插入下方"
                           >
                             <CornerDownLeft size={14} />
-                            <span className="pointer-events-none absolute bottom-full right-0 mb-1.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-900 dark:bg-gray-700 text-[#fff] whitespace-nowrap opacity-0 group-hover/insert:opacity-100 transition-opacity shadow-md z-10">
+                            <span className="pointer-events-none absolute bottom-full right-0 mb-1.5 px-1.5 py-0.5 rounded text-[11px] font-medium bg-gray-900 dark:bg-gray-700 text-[#fff] whitespace-nowrap opacity-0 group-hover/insert:opacity-100 transition-opacity shadow-md z-10">
                               插入下方
                             </span>
                           </button>
@@ -1782,7 +1782,7 @@ export default function WikiPage() {
                             aria-label="覆盖替换"
                           >
                             <RefreshCw size={14} />
-                            <span className="pointer-events-none absolute bottom-full right-0 mb-1.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-900 dark:bg-gray-700 text-[#fff] whitespace-nowrap opacity-0 group-hover/replace:opacity-100 transition-opacity shadow-md z-10">
+                            <span className="pointer-events-none absolute bottom-full right-0 mb-1.5 px-1.5 py-0.5 rounded text-[11px] font-medium bg-gray-900 dark:bg-gray-700 text-[#fff] whitespace-nowrap opacity-0 group-hover/replace:opacity-100 transition-opacity shadow-md z-10">
                               覆盖替换
                             </span>
                           </button>
@@ -1816,7 +1816,7 @@ export default function WikiPage() {
                         <>
                           <div className="fixed inset-0 z-[99]" onClick={() => setShowTranslatePicker(false)} />
                           <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 z-[100] w-44 max-md:w-40 rounded-xl bg-white/95 dark:bg-gray-900/95 border border-gray-200 dark:border-gray-700 shadow-2xl backdrop-blur-xl overflow-hidden animate-scaleIn p-1.5">
-                            <div className="px-2 py-1 text-[9px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            <div className="px-2 py-1 text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                               选择目标语言
                             </div>
                             {TRANSLATE_LANGS.map(lang => (
@@ -2400,7 +2400,7 @@ export default function WikiPage() {
                                 <Users size={14} className="text-emerald-500" />
                               </div>
                             ) : (
-                              <div className={`w-8 h-8 rounded-full bg-gradient-to-br flex items-center justify-center text-[10px] font-bold border shrink-0 ${getAvatarColor(displayName)}`}>
+                              <div className={`w-8 h-8 rounded-full bg-gradient-to-br flex items-center justify-center text-[11px] font-bold border shrink-0 ${getAvatarColor(displayName)}`}>
                                 {displayName[0].toUpperCase()}
                               </div>
                             )}

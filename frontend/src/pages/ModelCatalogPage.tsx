@@ -88,7 +88,10 @@ export default function ModelCatalogPage() {
       const r = await fetchWithAuth('/api/v1/models/refresh', { method: 'POST' })
       if (r?.ok) {
         const d = await r.json()
-        showToast('ok', `刷新成功: 新增 ${d.inserted}, 更新 ${d.updated}, 耗时 ${d.duration_ms}ms`)
+        const tip = d.translated > 0
+          ? `刷新成功: 新增 ${d.inserted}, 更新 ${d.updated}, 自动翻译 ${d.translated}, 耗时 ${d.duration_ms}ms`
+          : `刷新成功: 新增 ${d.inserted}, 更新 ${d.updated}, 耗时 ${d.duration_ms}ms`
+        showToast('ok', tip)
         await loadData()
       } else {
         const err = await r?.json().catch(() => ({ detail: '未知错误' }))
@@ -368,7 +371,7 @@ export default function ModelCatalogPage() {
                                 className="px-1.5 py-0.5 text-xs font-mono rounded bg-bg-input border border-border outline-none w-48"
                               />
                             ) : (
-                              <code className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-bg-input text-gray-500">
+                              <code className="px-1.5 py-0.5 text-[11px] font-mono rounded bg-bg-input text-gray-500">
                                 {item.version_id}
                               </code>
                             )
@@ -376,7 +379,7 @@ export default function ModelCatalogPage() {
                           <StatusBadge variant={item.is_active ? 'success' : 'neutral'}>
                             {item.is_active ? '已激活' : '待审校'}
                           </StatusBadge>
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                          <span className={`text-[11px] px-1.5 py-0.5 rounded ${
                             item.region === 'domestic'
                               ? 'bg-rose-500/15 text-rose-500'
                               : 'bg-cyan-500/15 text-cyan-500'
@@ -384,12 +387,12 @@ export default function ModelCatalogPage() {
                             {item.region === 'domestic' ? '国内' : '国际'}
                           </span>
                           {item.modality && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-500">
+                            <span className="text-[11px] px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-500">
                               {item.modality}
                             </span>
                           )}
                           {item.confidence != null && (
-                            <span className="text-[10px] text-gray-500">
+                            <span className="text-[11px] text-gray-500">
                               置信度 {(item.confidence * 100).toFixed(0)}%
                             </span>
                           )}
@@ -445,7 +448,7 @@ export default function ModelCatalogPage() {
                               { key: 'cache_write_price' as const, label: '缓存写 $/1M' },
                             ].map(({ key, label }) => (
                               <div key={key}>
-                                <div className="text-[10px] text-gray-500 mb-0.5">{label}</div>
+                                <div className="text-[11px] text-gray-500 mb-0.5">{label}</div>
                                 <input
                                   type="number"
                                   step="0.01"
@@ -482,7 +485,7 @@ export default function ModelCatalogPage() {
                             href={item.source_url}
                             target="_blank"
                             rel="noreferrer"
-                            className="mt-1 inline-flex items-center gap-0.5 text-[10px] text-accent-blue hover:underline"
+                            className="mt-1 inline-flex items-center gap-0.5 text-[11px] text-accent-blue hover:underline"
                           >
                             <ExternalLink size={10} />来源
                           </a>

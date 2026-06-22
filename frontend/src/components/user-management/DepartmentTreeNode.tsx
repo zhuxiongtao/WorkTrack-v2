@@ -95,14 +95,14 @@ export function DepartmentTreeNodeComponent({
         <div className="flex-1 min-w-0">
           <span className="truncate font-medium block">{node.name}</span>
           {node.manager_name && (
-            <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-0.5 mt-0.5">
+            <span className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-0.5 mt-0.5">
               <UserCog size={9} />
               <span className="truncate">{node.manager_name}</span>
             </span>
           )}
         </div>
 
-        <span className="shrink-0 inline-flex items-center gap-0.5 text-[10px] text-gray-400 dark:text-gray-500 group-hover:hidden">
+        <span className="shrink-0 inline-flex items-center gap-0.5 text-[11px] text-gray-400 dark:text-gray-500 group-hover:hidden">
           <Users size={10} /> {node.user_count}
         </span>
 

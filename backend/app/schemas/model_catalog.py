@@ -74,5 +74,6 @@ class ModelRefreshTriggerResult(BaseModel):
     inserted: int = 0
     updated: int = 0
     skipped: int = 0
+    translated: int = 0
     duration_ms: int = 0
     error: Optional[str] = None

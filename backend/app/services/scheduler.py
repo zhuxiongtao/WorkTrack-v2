@@ -154,7 +154,8 @@ def _execute_ai_news_fetch():
         if result.get("success"):
             write_log("info", "task",
                       f"AI 资讯自动抓取: 新增 {result.get('inserted',0)}, "
-                      f"更新 {result.get('updated',0)}, 共 {result.get('total',0)} 条",
+                      f"跳过 {result.get('skipped',0)}, 清理 {result.get('deleted',0)}, "
+                      f"共 {result.get('total',0)} 条",
                       db=None)
         else:
             write_log("error", "task",

@@ -190,9 +190,9 @@ function FlowCard({
           <div className="flex items-center gap-2 mb-1">
             <span className="text-sm font-bold text-white">{flow.name}</span>
             {flow.is_system && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-semibold">系统预置</span>
+              <span className="text-[11px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-semibold">系统预置</span>
             )}
-            <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${flow.is_active ? 'bg-emerald-500/15 text-emerald-400' : 'bg-gray-500/15 text-gray-400'}`}>
+            <span className={`text-[11px] px-1.5 py-0.5 rounded font-semibold ${flow.is_active ? 'bg-emerald-500/15 text-emerald-400' : 'bg-gray-500/15 text-gray-400'}`}>
               {flow.is_active ? '启用' : '已停用'}
             </span>
           </div>
@@ -492,7 +492,7 @@ function NodeEditor({
       style={{ borderColor: tc.text + '30' }}>
       {/* 序号 + 排序 */}
       <div className="flex flex-col items-center gap-1 shrink-0 pt-0.5">
-        <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
+        <div className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold"
           style={{ background: tc.bg, color: tc.text }}>
           {index + 1}
         </div>

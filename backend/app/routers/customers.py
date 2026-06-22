@@ -35,6 +35,16 @@ def _can_access_customer(customer: Customer, current_user: User, db: Session) ->
     return check_data_access(customer.user_id, current_user, db)
 
 
+@router.get("/selector")
+def customer_selector(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    """下拉选择器用——仅返回 {id, name}，任何登录用户可访问，不需要 customer:read 权限"""
+    rows = db.exec(select(Customer.id, Customer.name).order_by(Customer.name)).all()
+    return [{"id": r[0], "name": r[1]} for r in rows]
+
+
 @router.get("", response_model=list[CustomerOut])
 def list_customers(
     user_id: Optional[int] = Query(None),

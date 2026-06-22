@@ -367,13 +367,13 @@ export default function ReportsPage() {
                                 <div className="p-3 flex-1 flex flex-col">
                                   <div className="flex items-center justify-between mb-1.5 shrink-0">
                                     <div className="flex items-center gap-1.5">
-                                      <span className="text-[10px] font-medium text-gray-500 tracking-wide">
+                                      <span className="text-[11px] font-medium text-gray-500 tracking-wide">
                                         {d.getMonth() + 1}/{d.getDate()} · {WEEKDAY_NAMES[d.getDay()]}
                                       </span>
                                       {r.status === 'draft' ? (
-                                        <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/10 text-amber-500 font-bold border border-amber-500/15">草稿</span>
+                                        <span className="text-[11px] px-1 py-0.2 rounded bg-amber-500/10 text-amber-500 font-bold border border-amber-500/15">草稿</span>
                                       ) : (
-                                        <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/10 text-emerald-500 font-bold border border-emerald-500/15">已提交</span>
+                                        <span className="text-[11px] px-1 py-0.2 rounded bg-emerald-500/10 text-emerald-500 font-bold border border-emerald-500/15">已提交</span>
                                       )}
                                     </div>
                                   </div>
@@ -397,16 +397,16 @@ export default function ReportsPage() {
                               >
                                 <div className="flex flex-col items-center justify-center w-11 shrink-0 leading-none">
                                   <span className="text-base font-bold text-gray-300 tabular-nums">{d.getDate()}</span>
-                                  <span className="text-[9px] text-gray-500 mt-0.5">{WEEKDAY_NAMES[d.getDay()]}</span>
+                                  <span className="text-[11px] text-gray-500 mt-0.5">{WEEKDAY_NAMES[d.getDay()]}</span>
                                 </div>
                                 <span className="w-px self-stretch bg-border/60 shrink-0" />
                                 <p className="flex-1 min-w-0 text-xs leading-relaxed line-clamp-1 text-gray-400 dark:text-gray-300">
                                   {r.snippet || r.title || '点击查看详情'}
                                 </p>
                                 {r.status === 'draft' ? (
-                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 font-bold border border-amber-500/15 shrink-0">草稿</span>
+                                  <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 font-bold border border-amber-500/15 shrink-0">草稿</span>
                                 ) : (
-                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 font-bold border border-emerald-500/15 shrink-0">已提交</span>
+                                  <span className="text-[11px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 font-bold border border-emerald-500/15 shrink-0">已提交</span>
                                 )}
                                 <ChevronRight size={14} className="text-gray-600 group-hover/row:text-gray-400 shrink-0 transition-colors" />
                               </button>

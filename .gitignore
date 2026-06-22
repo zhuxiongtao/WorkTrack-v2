@@ -21,6 +21,8 @@ backend/uploads/
 # IDE
 .vscode/
 .idea/
+.claude/
+.trae/
 *.swp
 *.swo
 *~

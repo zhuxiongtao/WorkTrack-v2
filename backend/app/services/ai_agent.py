@@ -1113,6 +1113,9 @@ def run_agent_chat(user_message: str, history: list[dict], db: Session, user: Us
             write_log("error", "ai", f"AI API调用失败: {str(e)[:150]}", details=str(e), db=db)
             return f"AI API 调用失败: {str(e)[:200]}"
 
+        from app.services.ai_service import _record_usage_silent
+        _record_usage_silent(db, response, user.id, getattr(provider, 'id', None), model, "chat")
+
         choice = response.choices[0]
 
         if choice.message.tool_calls:

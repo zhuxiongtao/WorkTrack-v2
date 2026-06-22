@@ -91,7 +91,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 function fmtAmt(v: number | null | undefined, currency = 'CNY') {
   if (v == null) return '—'
   const m = CURRENCY_META[currency] || CURRENCY_META.CNY
-  return `${m.symbol}${v.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+  return `${m.symbol}${v.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} 万`
 }
 
 function marginColor(v: number | null) {
@@ -456,11 +456,11 @@ export default function ProjectCostPage() {
                           <div className="flex items-center gap-1.5">
                             <span className="w-2 h-2 rounded-full" style={{ background: color }} />
                             <span className="text-xs text-gray-300 font-medium">{cat.category}</span>
-                            <span className="text-[10px] text-gray-600">{cat.count}笔</span>
+                            <span className="text-[11px] text-gray-600">{cat.count}笔</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-bold text-white tabular-nums">{fmtAmt(cat.amount)}</span>
-                            <span className="text-[10px] text-gray-500 tabular-nums">{pct.toFixed(1)}%</span>
+                            <span className="text-[11px] text-gray-500 tabular-nums">{pct.toFixed(1)}%</span>
                           </div>
                         </div>
                         <div className="h-1.5 rounded-full bg-bg-hover overflow-hidden">
@@ -491,7 +491,7 @@ export default function ProjectCostPage() {
                         <span className="text-[11px] text-gray-500 w-16 tabular-nums shrink-0">{m.month}</span>
                         <div className="flex-1 h-5 rounded-md bg-bg-hover overflow-hidden relative">
                           <div className="h-full rounded-md transition-all" style={{ width: `${Math.max(3, pct)}%`, background: 'linear-gradient(90deg, #F59E0B, #FBBF24)' }} />
-                          <span className="absolute right-2 top-0.5 text-[10px] font-bold text-white tabular-nums">{fmtAmt(m.amount)}</span>
+                          <span className="absolute right-2 top-0.5 text-[11px] font-bold text-white tabular-nums">{fmtAmt(m.amount)}</span>
                         </div>
                       </div>
                     )
@@ -512,7 +512,7 @@ export default function ProjectCostPage() {
                 <div className="space-y-2">
                   {overview.by_sales.slice(0, 6).map(s => (
                     <div key={s.sales_person} className="flex items-center gap-3 p-2 rounded-lg bg-white/5 hover:bg-white/8 transition-colors">
-                      <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-400 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
+                      <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-400 flex items-center justify-center text-[11px] font-bold text-white shrink-0">
                         {s.sales_person.slice(0, 1)}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -522,7 +522,7 @@ export default function ProjectCostPage() {
                             {s.gross_margin != null ? `${s.gross_margin}%` : '—'}
                           </span>
                         </div>
-                        <div className="flex items-center gap-2 text-[10px] text-gray-500 mt-0.5">
+                        <div className="flex items-center gap-2 text-[11px] text-gray-500 mt-0.5">
                           <span>{s.project_count}个项目</span>
                           <span>成交 {fmtAmt(s.total_deal)}</span>
                         </div>
@@ -547,7 +547,7 @@ export default function ProjectCostPage() {
                   </div>
                   <div>
                     <h4 className="text-sm font-bold text-white">高毛利率 TOP5</h4>
-                    <p className="text-[10px] text-gray-500">利润率最高的项目</p>
+                    <p className="text-[11px] text-gray-500">利润率最高的项目</p>
                   </div>
                 </div>
               </div>
@@ -569,7 +569,7 @@ export default function ProjectCostPage() {
                   </div>
                   <div>
                     <h4 className="text-sm font-bold text-white">低毛利率 TOP5</h4>
-                    <p className="text-[10px] text-gray-500">需要关注成本的项目</p>
+                    <p className="text-[11px] text-gray-500">需要关注成本的项目</p>
                   </div>
                 </div>
               </div>
@@ -593,7 +593,7 @@ export default function ProjectCostPage() {
               <div className="flex items-center gap-2 mb-2">
                 <IconBox icon={Briefcase} size="sm" tone="blue" variant="soft" />
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">项目列表</span>
-                <span className="text-[10px] text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded-full ml-auto">{filteredProjects.length}</span>
+                <span className="text-[11px] text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded-full ml-auto">{filteredProjects.length}</span>
               </div>
               <input
                 type="text"
@@ -624,7 +624,7 @@ export default function ProjectCostPage() {
                       <span className={`text-xs font-bold tabular-nums ${marginColor(p.gross_margin)}`}>
                         {p.gross_margin != null ? `${p.gross_margin}%` : '—'}
                       </span>
-                      <span className="text-[10px] text-gray-500 tabular-nums">{fmtAmt(p.deal_amount, p.currency)}</span>
+                      <span className="text-[11px] text-gray-500 tabular-nums">{fmtAmt(p.deal_amount, p.currency)}</span>
                     </div>
                   </div>
                 </button>
@@ -655,7 +655,7 @@ export default function ProjectCostPage() {
                         <span>· {selectedProject.currency}</span>
                         {selectedProject.sales_person && <span>· 销售 {selectedProject.sales_person}</span>}
                         {selectedProject.status && (
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${marginBg(selectedProject.gross_margin)} ${marginColor(selectedProject.gross_margin)}`}>
+                          <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${marginBg(selectedProject.gross_margin)} ${marginColor(selectedProject.gross_margin)}`}>
                             {selectedProject.status}
                           </span>
                         )}
@@ -666,7 +666,7 @@ export default function ProjectCostPage() {
                     <div className={`text-2xl font-black tabular-nums ${marginColor(selectedProject.gross_margin)}`}>
                       {selectedProject.gross_margin != null ? `${selectedProject.gross_margin}%` : '—'}
                     </div>
-                    <div className="text-[10px] text-gray-500">毛利率</div>
+                    <div className="text-[11px] text-gray-500">毛利率</div>
                   </div>
                 </div>
 
@@ -694,7 +694,7 @@ export default function ProjectCostPage() {
                         }}
                       />
                     </div>
-                    <div className="flex items-center justify-between mt-1.5 text-[10px] text-gray-600">
+                    <div className="flex items-center justify-between mt-1.5 text-[11px] text-gray-600">
                       <span>0%</span>
                       <span className={marginColor(10)}>10% 警戒线</span>
                       <span className={marginColor(30)}>30% 健康</span>
@@ -709,12 +709,12 @@ export default function ProjectCostPage() {
                     <div className="flex items-center gap-2">
                       <IconBox icon={Activity} size="sm" tone="orange" variant="soft" />
                       <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">成本明细</span>
-                      <span className="text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-full">{selectedProject.cost_items.length}笔</span>
+                      <span className="text-[11px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-full">{selectedProject.cost_items.length}笔</span>
                     </div>
                     {hasPermission('project:edit') && (
                       <button
                         onClick={() => { setAddForm(f => ({ ...f, project_id: selectedProject.project_id })); setShowAdd(true) }}
-                        className="flex items-center gap-1 text-[10px] text-emerald-400 hover:text-emerald-300 transition-colors"
+                        className="flex items-center gap-1 text-[11px] text-emerald-400 hover:text-emerald-300 transition-colors"
                       ><Plus size={10} />新增</button>
                     )}
                   </div>
@@ -737,7 +737,7 @@ export default function ProjectCostPage() {
                           {selectedProject.cost_items.map(item => (
                             <tr key={item.id} className="border-t border-border/20 hover:bg-bg-hover/20 transition-colors">
                               <td className="py-2.5 px-3">
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ background: `${CATEGORY_COLORS[item.category] || '#6B7280'}15`, color: CATEGORY_COLORS[item.category] || '#6B7280' }}>
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium" style={{ background: `${CATEGORY_COLORS[item.category] || '#6B7280'}15`, color: CATEGORY_COLORS[item.category] || '#6B7280' }}>
                                   <span className="w-1.5 h-1.5 rounded-full" style={{ background: CATEGORY_COLORS[item.category] || '#6B7280' }} />
                                   {item.category}
                                 </span>
@@ -816,8 +816,8 @@ export default function ProjectCostPage() {
                         <div className="flex items-center gap-2.5">
                           <IconBox icon={Building2} size="sm" tone="blue" variant="soft" />
                           <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">供应商成本分布</h4>
-                          <span className="text-[10px] text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded-full">{cur}</span>
-                          <span className="text-[10px] text-gray-600">{rows.length}家供应商</span>
+                          <span className="text-[11px] text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded-full">{cur}</span>
+                          <span className="text-[11px] text-gray-600">{rows.length}家供应商</span>
                         </div>
                         <div className="text-xs text-gray-500">合计 <span className="text-amber-400 font-bold tabular-nums">{fmtAmt(total, cur)}</span></div>
                       </div>
@@ -838,11 +838,11 @@ export default function ProjectCostPage() {
                                   <div className="flex items-center justify-between gap-2">
                                     <div className="flex items-center gap-1.5 min-w-0">
                                       <span className="text-sm font-medium text-white truncate">{row.supplier_name}</span>
-                                      {row.supplier_code && <span className="text-[10px] text-gray-600 shrink-0">{row.supplier_code}</span>}
+                                      {row.supplier_code && <span className="text-[11px] text-gray-600 shrink-0">{row.supplier_code}</span>}
                                     </div>
                                     <div className="text-right shrink-0">
                                       <span className="text-sm font-bold text-amber-400 tabular-nums">{fmtAmt(row.total_cost, cur)}</span>
-                                      <span className="text-[10px] text-gray-500 ml-2">{pct.toFixed(1)}%</span>
+                                      <span className="text-[11px] text-gray-500 ml-2">{pct.toFixed(1)}%</span>
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2 mt-1.5">
@@ -855,7 +855,7 @@ export default function ProjectCostPage() {
                                         }}
                                       />
                                     </div>
-                                    <span className="text-[10px] text-gray-500 shrink-0">{row.cost_count}笔 · {row.project_count}个项目</span>
+                                    <span className="text-[11px] text-gray-500 shrink-0">{row.cost_count}笔 · {row.project_count}个项目</span>
                                   </div>
                                 </div>
                               </div>
@@ -919,7 +919,7 @@ export default function ProjectCostPage() {
                 </div>
               </div>
               <div>
-                <label className="text-[11px] text-gray-500 mb-1 block">金额 *</label>
+                <label className="text-[11px] text-gray-500 mb-1 block">金额（万元）*</label>
                 <input
                   type="number" min="0" step="0.01"
                   value={addForm.amount}
@@ -1008,7 +1008,7 @@ export default function ProjectCostPage() {
                 </div>
               </div>
               <div>
-                <label className="text-[11px] text-gray-500 mb-1 block">金额</label>
+                <label className="text-[11px] text-gray-500 mb-1 block">金额（万元）</label>
                 <input
                   type="number" min="0" step="0.01"
                   value={editForm.amount}
@@ -1095,7 +1095,7 @@ function MetricBox({ label, value, tone }: { label: string; value: string; tone:
   const t = TONE_MAP[tone] || TONE_MAP.blue
   return (
     <div className="rounded-xl p-3" style={{ background: t.bg, border: `1px solid ${t.border}` }}>
-      <div className="text-[10px] text-gray-500 mb-0.5">{label}</div>
+      <div className="text-[11px] text-gray-500 mb-0.5">{label}</div>
       <div className="text-sm font-bold tabular-nums" style={{ color: t.text }}>{value}</div>
     </div>
   )
@@ -1106,7 +1106,7 @@ function ProjectRankRow({ summary, onClick }: { summary: ProjectSummary; onClick
     <button onClick={onClick} className="w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-bg-hover/40 transition-colors group">
       <div className="flex-1 min-w-0">
         <div className="text-xs font-medium text-gray-300 truncate group-hover:text-white transition-colors">{summary.project_name}</div>
-        <div className="text-[10px] text-gray-600 mt-0.5">
+        <div className="text-[11px] text-gray-600 mt-0.5">
           {summary.customer_name} · {fmtAmt(summary.deal_amount, summary.currency)}
           {summary.sales_person && <span className="ml-1">· {summary.sales_person}</span>}
         </div>

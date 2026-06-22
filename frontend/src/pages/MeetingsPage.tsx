@@ -624,7 +624,10 @@ export default function MeetingsPage() {
     try {
       const res = await fetch(`/api/v1/meetings/${id}/transcribe-and-organize`, { method: 'POST' })
       const data = await res.json()
-      if (data.success) { loadMeetings() }
+      if (data.success) {
+        loadMeetings()
+        showToast('录音转纪要完成：已生成纪要和结构化摘要', 'success')
+      }
       else { showToast('转写+整理失败: ' + (data.message || '未知错误'), 'error') }
     } catch { showToast('转写请求失败', 'error') }
     finally { setOrganizingId(null) }
@@ -723,8 +726,8 @@ export default function MeetingsPage() {
                 {m.is_shared && (
                   <div className="flex items-center gap-1.5 mb-2">
                     <Share2 size={10} className="text-[#8B5CF6]" />
-                    <span className="text-[10px] text-[#8B5CF6] font-medium">{m.owner_name} 分享</span>
-                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${
+                    <span className="text-[11px] text-[#8B5CF6] font-medium">{m.owner_name} 分享</span>
+                    <span className={`text-[11px] px-1.5 py-0.5 rounded-full border ${
                       m.shared_permission === 'editor' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
                       'bg-gray-500/10 text-gray-400 border-gray-500/20'
                     }`}>
@@ -737,7 +740,7 @@ export default function MeetingsPage() {
                   <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
                     {m.audio_url && <Mic size={12} className="text-red-400" />}
                     {linkedC && (
-                      <span className="text-[10px] text-gray-500 bg-bg-input px-1.5 py-0.5 rounded">{linkedC.name}</span>
+                      <span className="text-[11px] text-gray-500 bg-bg-input px-1.5 py-0.5 rounded">{linkedC.name}</span>
                     )}
                     {m.project_id && linkedP && (
                       <div className="relative"
@@ -755,7 +758,7 @@ export default function MeetingsPage() {
                             <div className="flex items-center gap-2">
                               <Building2 size={11} className="text-blue-400" />
                               <span className="text-xs font-medium text-white">{linkedP.name}</span>
-                              <span className={`text-[9px] px-1 py-0.5 rounded-full border ${statusColors[linkedP.status] || ''}`}>{linkedP.status}</span>
+                              <span className={`text-[11px] px-1 py-0.5 rounded-full border ${statusColors[linkedP.status] || ''}`}>{linkedP.status}</span>
                               <ExternalLink size={10} className="text-gray-500" />
                             </div>
                           </div>
@@ -774,7 +777,7 @@ export default function MeetingsPage() {
                 </div>
                 <div className="flex items-center justify-between px-4 py-2.5 border-t border-border/50">
                   <span className="text-[11px] text-gray-400">{new Date(m.meeting_date).toLocaleDateString('zh-CN')}</span>
-                  <span className="text-[10px] text-gray-600">{m.content_md ? m.content_md.length : 0} 字</span>
+                  <span className="text-[11px] text-gray-600">{m.content_md ? m.content_md.length : 0} 字</span>
                 </div>
               </button>
             )
@@ -811,7 +814,7 @@ export default function MeetingsPage() {
                       className="inline-flex items-center gap-1 text-[11px] text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-md border border-blue-500/20 hover:bg-blue-500/20 hover:text-blue-300 transition-colors"
                     >
                       <Building2 size={10} />{linkedProject.name}
-                      <span className={`text-[9px] px-1 py-0 rounded-full border ${statusColors[linkedProject.status] || ''}`}>{linkedProject.status}</span>
+                      <span className={`text-[11px] px-1 py-0 rounded-full border ${statusColors[linkedProject.status] || ''}`}>{linkedProject.status}</span>
                       <ExternalLink size={9} className="text-blue-500/50" />
                     </button>
                   )}
@@ -840,7 +843,7 @@ export default function MeetingsPage() {
                 <div className="p-4 md:p-5 rounded-xl bg-gradient-to-br from-[#8B5CF6]/10 to-[#8B5CF6]/5 border border-[#8B5CF6]/25">
                   <h4 className="text-xs font-bold text-[#A78BFA] mb-3 flex items-center gap-1.5">
                     <Sparkles size={12} />AI 会议整理总结
-                    <span className="text-[10px] text-gray-500 font-normal ml-1">· 基于系统设置的提示词生成</span>
+                    <span className="text-[11px] text-gray-500 font-normal ml-1">· 基于系统设置的提示词生成</span>
                   </h4>
                   <div className="text-sm text-gray-300 leading-relaxed prose prose-invert prose-sm max-w-none">
                     <MarkdownRenderer content={modalMeeting.ai_summary} />
@@ -889,7 +892,7 @@ export default function MeetingsPage() {
                   <p className="text-xs text-gray-500 mb-2 flex items-center gap-2">
                     <Mic size={12} className="text-red-400" />录音回放
                     {modalMeeting.audio_url && !audioBlobUrl && (
-                      <span className="text-[10px] text-gray-500 animate-pulse">加载中…</span>
+                      <span className="text-[11px] text-gray-500 animate-pulse">加载中…</span>
                     )}
                   </p>
                   {audioBlobUrl ? (
@@ -924,15 +927,16 @@ export default function MeetingsPage() {
                     </button>
                     <button onClick={() => handleTranscribeAndOrganize(modalMeeting.id)} disabled={organizingId === modalMeeting.id || transcribingId === modalMeeting.id}
                       className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-[#10B981]/10 text-[#10B981] hover:bg-[#10B981]/20 disabled:opacity-50 transition-colors border border-[#10B981]/30">
-                      {organizingId === modalMeeting.id ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}转文字+AI整理
+                      {organizingId === modalMeeting.id ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}录音转纪要
                     </button>
                   </>
                 )}
                 <button onClick={() => handleAiExtract(modalMeeting.id)} disabled={aiLoading === modalMeeting.id}
+                  title="对已有会议内容提取结构化摘要（决议/待办/结论）"
                   className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-[#8B5CF6]/10 text-[#A78BFA] hover:bg-[#8B5CF6]/20 disabled:opacity-50 transition-colors border border-[#8B5CF6]/30">
-                  {aiLoading === modalMeeting.id ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}AI 会议整理
+                  {aiLoading === modalMeeting.id ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}提取结构化摘要
                 </button>
-                <p className="text-[10px] text-gray-600 ml-auto">提示词可在【系统设置 → AI 提示词】中调整</p>
+                <p className="text-[11px] text-gray-600 ml-auto">提示词可在【系统设置 → AI 提示词】中调整</p>
               </div>
 
               {/* 评论区 */}
@@ -950,7 +954,7 @@ export default function MeetingsPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
                           <span className="text-xs font-medium text-gray-300">{c.user_name || '未知用户'}</span>
-                          <span className="text-[10px] text-gray-600">{c.created_at ? new Date(c.created_at).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}</span>
+                          <span className="text-[11px] text-gray-600">{c.created_at ? new Date(c.created_at).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}</span>
                         </div>
                         <p className="text-xs text-gray-400 leading-relaxed">{c.content}</p>
                       </div>
@@ -1019,11 +1023,11 @@ export default function MeetingsPage() {
                   {sharePermissions.map((p: any) => (
                     <div key={p.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-bg-input border border-border">
                       <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-bg-hover flex items-center justify-center text-[10px] text-gray-400 font-medium">
+                        <div className="w-6 h-6 rounded-full bg-bg-hover flex items-center justify-center text-[11px] text-gray-400 font-medium">
                           {p.user_name ? p.user_name.charAt(0).toUpperCase() : '?'}
                         </div>
                         <span className="text-xs text-gray-300">{p.user_name || '未知用户'}</span>
-                        <span className="text-[10px] text-gray-500 bg-bg-hover px-1.5 py-0.5 rounded">
+                        <span className="text-[11px] text-gray-500 bg-bg-hover px-1.5 py-0.5 rounded">
                           {p.permission === 'viewer' ? '只读' : '可编辑'}
                         </span>
                       </div>
@@ -1156,7 +1160,7 @@ export default function MeetingsPage() {
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-400 font-semibold">会议内容</span>
-                      <span className="text-[10px] text-gray-600">{form.content_md ? `${form.content_md.replace(/<[^>]*>/g, '').length} 字` : '0 字'}</span>
+                      <span className="text-[11px] text-gray-600">{form.content_md ? `${form.content_md.replace(/<[^>]*>/g, '').length} 字` : '0 字'}</span>
                     </div>
                     {!editingId && !recording && !recordedBlob && (
                       <div className="flex items-center gap-1.5">
@@ -1203,7 +1207,7 @@ export default function MeetingsPage() {
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs text-gray-400 font-semibold">附件（图片、文档等）</span>
-                    <span className="text-[10px] text-gray-600">支持拖拽、点击或粘贴上传</span>
+                    <span className="text-[11px] text-gray-600">支持拖拽、点击或粘贴上传</span>
                   </div>
                   <FileUpload filesJson={form.files_json} onChange={(v) => setForm({ ...form, files_json: v })} />
                 </div>

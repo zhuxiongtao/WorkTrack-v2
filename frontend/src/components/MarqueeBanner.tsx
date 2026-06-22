@@ -58,16 +58,16 @@ function NewsRow({ n, onClick }: { n: NewsItem; onClick: () => void }) {
       className="group flex items-center gap-2 px-3 h-[22px] hover:bg-cyan-50 dark:hover:bg-cyan-500/5 transition-colors cursor-pointer border-b border-gray-200 dark:border-border/5 last:border-b-0"
       title={n.title}
     >
-      <span className={`shrink-0 text-[9px] px-1.5 py-px rounded border font-bold leading-[14px] ${cs.cls}`}>
+      <span className={`shrink-0 text-[11px] px-1.5 py-px rounded border font-bold leading-[14px] ${cs.cls}`}>
         {cs.label}
       </span>
       <span className="flex-1 min-w-0 truncate text-[11px] text-gray-800 group-hover:text-cyan-700 dark:text-gray-300 dark:group-hover:text-cyan-300 transition-colors">
         {n.title}
       </span>
-      <span className="text-[9px] text-gray-500 dark:text-gray-600 shrink-0 hidden xl:inline-block max-w-[120px] truncate">
+      <span className="text-[11px] text-gray-500 dark:text-gray-600 shrink-0 hidden xl:inline-block max-w-[120px] truncate">
         {n.source.replace(/[（(].*?[)）]/g, '').replace(/^X[:：]\s*/i, '').slice(0, 12)}
       </span>
-      <span className="text-[9px] text-gray-500 dark:text-gray-600 shrink-0 tabular-nums">
+      <span className="text-[11px] text-gray-500 dark:text-gray-600 shrink-0 tabular-nums">
         {formatTimeAgo(n.pub_date)}
       </span>
     </a>
@@ -162,7 +162,7 @@ export function MarqueeBanner({ fetchWithAuth }: MarqueeBannerProps) {
     return (
       <div className="hidden lg:flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.03] border border-white/5">
         <Loader2 size={12} className="animate-spin text-gray-500" />
-        <span className="text-[10px] text-gray-500">加载信息流...</span>
+        <span className="text-[11px] text-gray-500">加载信息流...</span>
       </div>
     )
   }
@@ -176,7 +176,7 @@ export function MarqueeBanner({ fetchWithAuth }: MarqueeBannerProps) {
           <div className="flex items-center gap-1.5 min-w-0">
             <Newspaper size={11} className="text-cyan-600 dark:text-cyan-400 shrink-0" />
             <span className="text-[11px] font-bold text-cyan-700 dark:text-cyan-300 shrink-0">AI 资讯</span>
-            <span className="text-[9px] text-gray-500 dark:text-gray-600 truncate">· 来源 aihot.virxact.com</span>
+            <span className="text-[11px] text-gray-500 dark:text-gray-600 truncate">· 来源 aihot.virxact.com</span>
           </div>
           <button
             onClick={() => loadAll(true)}

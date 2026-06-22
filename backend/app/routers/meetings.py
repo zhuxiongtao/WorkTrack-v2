@@ -254,7 +254,7 @@ def transcribe_meeting_audio(meeting_id: int, current_user: User = Depends(requi
 
 @router.post("/{meeting_id}/transcribe-and-organize")
 def transcribe_and_organize(meeting_id: int, current_user: User = Depends(require_permission("meeting:edit")), db: Session = Depends(get_session)):
-    """转写并 AI 整理，自动填入会议纪要"""
+    """一键录音转纪要：转写 → AI 整理成纪要(content_md) → 提取结构化摘要(ai_summary)"""
     meeting = db.get(MeetingNote, meeting_id)
     if not meeting or meeting.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="会议不存在")
@@ -265,13 +265,56 @@ def transcribe_and_organize(meeting_id: int, current_user: User = Depends(requir
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="录音文件不存在，请重新上传")
     try:
+        # 1. 录音转写
         raw_text = transcribe_audio(filepath, db, current_user.id)
+        # 2. 整理成规范纪要 → content_md
         organized = organize_transcript(raw_text, db, current_user.id)
         meeting.content_md = organized
+        # 3. 提取结构化摘要 → ai_summary（决议/待办/结论）
+        ai_summary = None
+        try:
+            extracted = extract_meeting_minutes(organized, db, current_user.id)
+            raw_extracted = extracted.pop("_raw_text", "") if isinstance(extracted, dict) else ""
+            fallback = extracted.pop("fallback", "") if isinstance(extracted, dict) else ""
+            summary = raw_extracted or fallback
+            if summary and summary != "{}":
+                # JSON 转 Markdown 展示
+                try:
+                    data = json.loads(summary)
+                    if isinstance(data, dict):
+                        lines = []
+                        for key, value in data.items():
+                            lines.append(f"## {key}")
+                            if isinstance(value, list):
+                                for item in value:
+                                    if isinstance(item, dict):
+                                        parts = [f"{k}: {v}" for k, v in item.items()]
+                                        lines.append(f"- {', '.join(parts)}")
+                                    else:
+                                        lines.append(f"- {item}")
+                            elif isinstance(value, str):
+                                lines.append(value)
+                            lines.append("")
+                        summary = "\n".join(lines)
+                except json.JSONDecodeError:
+                    pass
+                ai_summary = summary.strip()
+                meeting.ai_summary = ai_summary
+        except Exception as extract_err:
+            # 摘要提取失败不影响主流程，纪要已写入 content_md
+            import logging
+            logging.getLogger("worktrack").warning("会议结构化摘要提取失败(不影响纪要): %s", extract_err)
+        meeting.updated_at = utc_now()
         db.add(meeting)
         db.commit()
         db.refresh(meeting)
-        return {"success": True, "raw_text": raw_text, "organized": organized, "meeting_id": meeting_id}
+        return {
+            "success": True,
+            "raw_text": raw_text,
+            "organized": organized,
+            "ai_summary": ai_summary,
+            "meeting_id": meeting_id,
+        }
     except Exception as e:
         return {"success": False, "message": f"转写或整理失败: {str(e)[:200]}"}
 

@@ -298,7 +298,7 @@ export default function ReconcilePage() {
               {periods.length === 0 ? <option value={period}>{period}</option> : periods.map(p => <option key={p} value={p}>{p}</option>)}
             </select>
             {currentSummary && (
-              <span className="inline-flex items-center px-2 py-1 text-[10px] font-bold rounded-md"
+              <span className="inline-flex items-center px-2 py-1 text-[11px] font-bold rounded-md"
                 style={{ background: (SUMMARY_STATUS_COLORS[currentSummary.status] || SUMMARY_STATUS_COLORS['草稿']).bg, color: (SUMMARY_STATUS_COLORS[currentSummary.status] || SUMMARY_STATUS_COLORS['草稿']).text }}>
                 {currentSummary.status}
               </span>
@@ -589,10 +589,10 @@ function BigStat({ label, value, tone, icon: Icon, sub }: { label: string; value
     <div className={`relative overflow-hidden rounded-xl p-4 bg-gradient-to-br ${colors[tone]} border`}>
       <div className="flex items-center gap-2 mb-2">
         <Icon size={14} className={textColor[tone]} />
-        <span className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</span>
+        <span className="text-[11px] text-gray-500 uppercase tracking-wider">{label}</span>
       </div>
       <div className={`text-2xl font-bold tabular-nums ${textColor[tone]}`}>{value}</div>
-      {sub && <div className="mt-1 text-[10px] text-gray-500">{sub}</div>}
+      {sub && <div className="mt-1 text-[11px] text-gray-500">{sub}</div>}
     </div>
   )
 }
@@ -635,7 +635,7 @@ function MiniList({ title, icon: Icon, count, total, tone, children }: { title: 
         <div className="flex items-center gap-1.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
           <Icon size={12} />{title}
         </div>
-        <span className="text-[10px] text-gray-600">{count} 条</span>
+        <span className="text-[11px] text-gray-600">{count} 条</span>
       </div>
       <div className={`text-base font-bold tabular-nums ${textColor} mb-2`}>${fmt(total)}</div>
       <div className="max-h-32 overflow-y-auto">
@@ -670,7 +670,7 @@ function SalesView({
       <div className="flex items-center justify-between">
         <div className="text-xs text-gray-500">
           {period} 销售对账 <span className="text-emerald-400 font-bold ml-2">${fmt(total)}</span> · {records.length} 条
-          {readOnly && <span className="ml-2 text-[10px] text-amber-400">（已复核/锁定，只读）</span>}
+          {readOnly && <span className="ml-2 text-[11px] text-amber-400">（已复核/锁定，只读）</span>}
         </div>
         {!readOnly && (
           <button onClick={onAdd}
@@ -686,7 +686,7 @@ function SalesView({
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-left text-[10px] text-gray-500 uppercase tracking-wider">
+                <tr className="text-left text-[11px] text-gray-500 uppercase tracking-wider">
                   <th className="px-3 py-2 font-semibold">项目</th>
                   <th className="px-3 py-2 font-semibold">客户</th>
                   <th className="px-3 py-2 font-semibold text-right">调用量</th>
@@ -709,7 +709,7 @@ function SalesView({
                       <td className="px-3 py-2 text-right tabular-nums text-blue-300">${fmt(r.final_price)}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-emerald-300 font-bold">${fmt(r.amount_due)}</td>
                       <td className="px-3 py-2">
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: c.bg, color: c.text }}>{r.invoice_status}</span>
+                        <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: c.bg, color: c.text }}>{r.invoice_status}</span>
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-orange-300">${fmt(r.diff_amount)}</td>
                       {!readOnly && (
@@ -759,7 +759,7 @@ function SupplyView({
       <div className="flex items-center justify-between">
         <div className="text-xs text-gray-500">
           {period} 供应对账 <span className="text-rose-400 font-bold ml-2">${fmt(total)}</span> · {records.length} 条
-          {readOnly && <span className="ml-2 text-[10px] text-amber-400">（已复核/锁定，只读）</span>}
+          {readOnly && <span className="ml-2 text-[11px] text-amber-400">（已复核/锁定，只读）</span>}
         </div>
         {!readOnly && (
           <button onClick={onAdd}
@@ -775,7 +775,7 @@ function SupplyView({
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-left text-[10px] text-gray-500 uppercase tracking-wider">
+                <tr className="text-left text-[11px] text-gray-500 uppercase tracking-wider">
                   <th className="px-3 py-2 font-semibold">通道</th>
                   <th className="px-3 py-2 font-semibold">供应商</th>
                   <th className="px-3 py-2 font-semibold text-right">调用量</th>
@@ -799,7 +799,7 @@ function SupplyView({
                       <td className="px-3 py-2 text-right tabular-nums text-blue-300">${fmt(r.cost_price)}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-rose-300 font-bold">${fmt(r.amount_payable)}</td>
                       <td className="px-3 py-2">
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: bs.bg, color: bs.text }}>{r.bill_status}</span>
+                        <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: bs.bg, color: bs.text }}>{r.bill_status}</span>
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-orange-300">${fmt(r.diff_amount)}</td>
                       {!readOnly && (
@@ -840,7 +840,7 @@ function SummaryListView({ records }: { records: SummaryRecord[] }) {
                   <IconBox icon={Calendar} size="sm" tone="purple" />
                   <span className="text-sm font-bold text-white">{r.period}</span>
                 </div>
-                <span className="text-[10px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: c.bg, color: c.text }}>{r.status}</span>
+                <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: c.bg, color: c.text }}>{r.status}</span>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <SummaryItem label="总收入" value={`$${fmt(r.total_revenue)}`} tone="green" />
@@ -864,7 +864,7 @@ function SummaryItem({ label, value, tone }: { label: string; value: string; ton
   }
   return (
     <div className="rounded-lg p-2 bg-black/20">
-      <div className="text-[10px] text-gray-500">{label}</div>
+      <div className="text-[11px] text-gray-500">{label}</div>
       <div className={`mt-0.5 text-sm font-bold tabular-nums ${colors[tone]}`}>{value}</div>
     </div>
   )
@@ -896,7 +896,7 @@ function DiffView({
       <div className="flex items-center justify-between">
         <div className="text-xs text-gray-500">
           {period} 差异记录 · {records.length} 条
-          {readOnly && <span className="ml-2 text-[10px] text-amber-400">（已复核/锁定，只读）</span>}
+          {readOnly && <span className="ml-2 text-[11px] text-amber-400">（已复核/锁定，只读）</span>}
         </div>
         {!readOnly && (
           <button onClick={onAdd}
@@ -912,7 +912,7 @@ function DiffView({
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-left text-[10px] text-gray-500 uppercase tracking-wider">
+                <tr className="text-left text-[11px] text-gray-500 uppercase tracking-wider">
                   <th className="px-3 py-2 font-semibold">类型</th>
                   <th className="px-3 py-2 font-semibold">关联项目/通道</th>
                   <th className="px-3 py-2 font-semibold text-right">销售/供应</th>
@@ -938,7 +938,7 @@ function DiffView({
                       <td className="px-3 py-2 text-right tabular-nums text-orange-300">{r.diff_pct != null ? `${r.diff_pct.toFixed(1)}%` : '—'}</td>
                       <td className="px-3 py-2 text-gray-500 max-w-[200px] truncate" title={r.reason || ''}>{r.reason || '—'}</td>
                       <td className="px-3 py-2">
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: c.bg, color: c.text }}>{r.status}</span>
+                        <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: c.bg, color: c.text }}>{r.status}</span>
                       </td>
                       {!readOnly && (
                         <td className="px-3 py-2">
@@ -1463,25 +1463,25 @@ function TokenUploadCard({ sourceType, period, uploads, locked, onUploaded, onDe
             <div className="flex items-center gap-1.5 min-w-0">
               <FileSpreadsheet size={13} className="shrink-0 text-gray-400" />
               <span className="text-xs font-medium text-gray-200 truncate">{u.filename}</span>
-              {u.source_name && <span className="text-[10px] px-1.5 py-0.5 rounded bg-bg-input text-gray-400">{u.source_name}</span>}
+              {u.source_name && <span className="text-[11px] px-1.5 py-0.5 rounded bg-bg-input text-gray-400">{u.source_name}</span>}
             </div>
             <div className="flex items-center gap-1 shrink-0">
               <button onClick={() => loadRows(u.id)} className="p-1 rounded hover:bg-bg-hover text-gray-400 hover:text-gray-200"><Eye size={11} /></button>
               {!locked && <button onClick={() => deleteUpload(u.id)} className="p-1 rounded hover:bg-rose-500/15 text-rose-500"><Trash2 size={11} /></button>}
             </div>
           </div>
-          <div className="text-[10px] text-gray-500 flex gap-3">
+          <div className="text-[11px] text-gray-500 flex gap-3">
             <span>{u.row_count} 个模型</span>
             <span>{new Date(u.created_at).toLocaleString('zh-CN', { hour12: false })}</span>
             {u.status === 'error' && <span className="text-rose-400">解析失败</span>}
           </div>
-          {u.parse_error && <div className="text-[10px] text-rose-400 bg-rose-500/10 rounded p-1.5">{u.parse_error}</div>}
+          {u.parse_error && <div className="text-[11px] text-rose-400 bg-rose-500/10 rounded p-1.5">{u.parse_error}</div>}
           {showRows === u.id && (
             <div className="mt-2 rounded-lg overflow-auto max-h-48 border border-border">
               {loadingRows ? (
                 <div className="py-4 text-center text-xs text-gray-500"><Loader2 size={14} className="animate-spin inline mr-1" />加载中…</div>
               ) : (
-                <table className="w-full text-[10px]">
+                <table className="w-full text-[11px]">
                   <thead className="bg-bg-input sticky top-0">
                     <tr>{['模型ID', '输入', '输出', '总计', '金额'].map(h => <th key={h} className="px-2 py-1 text-left text-gray-400 font-medium">{h}</th>)}</tr>
                   </thead>
@@ -1540,25 +1540,25 @@ function TokenItemRow({ item, locked, onReviewed }: { item: TReconcileItem; lock
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-mono text-xs font-semibold text-gray-200">{item.model_id}</span>
-            {item.model_name && item.model_name !== item.model_id && <span className="text-[10px] text-gray-500">{item.model_name}</span>}
+            {item.model_name && item.model_name !== item.model_id && <span className="text-[11px] text-gray-500">{item.model_name}</span>}
             {hasDiff ? (
-              <span className="flex items-center gap-0.5 text-[10px] text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded"><AlertTriangle size={9} />差异</span>
+              <span className="flex items-center gap-0.5 text-[11px] text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded"><AlertTriangle size={9} />差异</span>
             ) : (
-              <span className="text-[10px] text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded">✓ 一致</span>
+              <span className="text-[11px] text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded">✓ 一致</span>
             )}
           </div>
         </div>
         <div className="hidden md:flex items-center gap-6 text-xs">
           <div className="text-center min-w-[70px]">
-            <div className="text-[10px] text-emerald-400 mb-0.5">MaaS</div>
+            <div className="text-[11px] text-emerald-400 mb-0.5">MaaS</div>
             <div className="font-semibold text-gray-200">{fmtT(item.maas_total_tokens)}</div>
           </div>
           {item.supplier_total_tokens != null && (
             <div className="text-center min-w-[70px]">
-              <div className="text-[10px] text-blue-400 mb-0.5">供应商</div>
+              <div className="text-[11px] text-blue-400 mb-0.5">供应商</div>
               <div className={`font-semibold ${item.has_supplier_diff ? 'text-rose-400' : 'text-gray-200'}`}>{fmtT(item.supplier_total_tokens)}</div>
               {item.supplier_diff_pct != null && (
-                <div className={`text-[10px] ${item.has_supplier_diff ? 'text-rose-400' : 'text-gray-500'}`}>
+                <div className={`text-[11px] ${item.has_supplier_diff ? 'text-rose-400' : 'text-gray-500'}`}>
                   {item.supplier_diff_tokens! > 0 ? '+' : ''}{fmtT(item.supplier_diff_tokens)} ({item.supplier_diff_pct.toFixed(2)}%)
                 </div>
               )}
@@ -1566,17 +1566,17 @@ function TokenItemRow({ item, locked, onReviewed }: { item: TReconcileItem; lock
           )}
           {item.customer_total_tokens != null && (
             <div className="text-center min-w-[70px]">
-              <div className="text-[10px] text-yellow-400 mb-0.5">客户</div>
+              <div className="text-[11px] text-yellow-400 mb-0.5">客户</div>
               <div className={`font-semibold ${item.has_customer_diff ? 'text-rose-400' : 'text-gray-200'}`}>{fmtT(item.customer_total_tokens)}</div>
               {item.customer_diff_pct != null && (
-                <div className={`text-[10px] ${item.has_customer_diff ? 'text-rose-400' : 'text-gray-500'}`}>
+                <div className={`text-[11px] ${item.has_customer_diff ? 'text-rose-400' : 'text-gray-500'}`}>
                   {item.customer_diff_tokens! > 0 ? '+' : ''}{fmtT(item.customer_diff_tokens)} ({item.customer_diff_pct.toFixed(2)}%)
                 </div>
               )}
             </div>
           )}
         </div>
-        <div className={`text-[10px] font-semibold ${reviewColor} shrink-0`}>
+        <div className={`text-[11px] font-semibold ${reviewColor} shrink-0`}>
           {item.review_status === 'ok' ? '无差异' : item.review_status === 'confirmed' ? '已确认' : item.review_status === 'disputed' ? '有争议' : '待审核'}
         </div>
       </div>

@@ -191,7 +191,7 @@ export function DepartmentFormModal({ isOpen, editingDepartment, parentDepartmen
                 </option>
               ))}
             </select>
-            <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
+            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
               只能从本部门成员中选择负责人，负责人将自动获得本部门及所有子部门成员的日报、周报等数据查看权限
             </p>
           </div>

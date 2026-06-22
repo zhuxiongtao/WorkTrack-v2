@@ -190,7 +190,7 @@ function ToolStepsBubble({ steps }: { steps: ToolStep[] }) {
                 {s.status === 'running' ? (
                   <Loader2 size={11} className="animate-spin text-accent-blue shrink-0" />
                 ) : (
-                  <span className="text-green-500 text-[10px] shrink-0">✅</span>
+                  <span className="text-green-500 text-[11px] shrink-0">✅</span>
                 )}
                 <span className={s.status === 'running' ? 'text-gray-500 dark:text-gray-400' : 'text-gray-500 dark:text-gray-500'}>
                   {meta.emoji} {meta.label}
@@ -488,8 +488,8 @@ export default function AIPage() {
                     }`}
                   >
                     <div className="flex-1 min-w-0">
-                      <p className="text-[11.5px] text-gray-800 dark:text-gray-300 truncate">{c.title || '新对话'}</p>
-                      <p className="text-[10px] text-gray-500 mt-0.5">{formatDate(c.updated_at)} · {c.message_count} 条</p>
+                      <p className="text-xs text-gray-800 dark:text-gray-300 truncate">{c.title || '新对话'}</p>
+                      <p className="text-[11px] text-gray-500 mt-0.5">{formatDate(c.updated_at)} · {c.message_count} 条</p>
                     </div>
                     <button
                       onClick={(e) => { e.stopPropagation(); deleteConversation(c.id) }}
@@ -515,8 +515,8 @@ export default function AIPage() {
               return (
                 <div className="mx-3 mb-3 px-3 py-2.5 rounded-lg bg-bg-hover/60 border border-border/60">
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">存储用量</span>
-                    <span className={`text-[10px] font-medium tabular-nums ${nearLimit ? 'text-amber-500' : 'text-gray-500'}`}>
+                    <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">存储用量</span>
+                    <span className={`text-[11px] font-medium tabular-nums ${nearLimit ? 'text-amber-500' : 'text-gray-500'}`}>
                       {msgCount} / {maxMsgs} 条
                     </span>
                   </div>
@@ -526,7 +526,7 @@ export default function AIPage() {
                       style={{ width: `${pct}%` }}
                     />
                   </div>
-                  <p className="text-[10px] text-gray-500 leading-relaxed">
+                  <p className="text-[11px] text-gray-500 leading-relaxed">
                     {conversations.length} 个会话
                     {retentionDays > 0 && ` · 超 ${retentionDays} 天自动清理`}
                   </p>
@@ -556,7 +556,7 @@ export default function AIPage() {
             </div>
             <div className="min-w-0">
               <h2 className="text-[15px] font-bold text-gray-900 dark:text-white leading-tight">WorkTrack AI</h2>
-              <p className="text-[10px] text-gray-500 hidden sm:block">智能工作助手 · 日报 · 项目 · 客户 · 合同 · 审批</p>
+              <p className="text-[11px] text-gray-500 hidden sm:block">智能工作助手 · 日报 · 项目 · 客户 · 合同 · 审批</p>
             </div>
           </div>
           {activeModel.model_name
@@ -587,8 +587,8 @@ export default function AIPage() {
                     className={`group text-left p-3.5 rounded-xl border border-border bg-gradient-to-br ${card.gradientClass} ${card.hoverBorder} hover:shadow-sm transition-all`}
                   >
                     <span className="text-2xl block mb-2">{card.emoji}</span>
-                    <p className="text-[12.5px] font-semibold text-gray-800 dark:text-gray-200 leading-snug">{card.label}</p>
-                    <p className="text-[10.5px] text-gray-500 mt-0.5 leading-snug">{card.desc}</p>
+                    <p className="text-xs font-semibold text-gray-800 dark:text-gray-200 leading-snug">{card.label}</p>
+                    <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">{card.desc}</p>
                   </button>
                 ))}
               </div>
@@ -598,7 +598,7 @@ export default function AIPage() {
             messages.map((msg) => (
               <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 {msg.role === 'user' ? (
-                  <div className="max-w-[80%] px-4 py-2.5 rounded-2xl rounded-br-md text-[13.5px] bg-accent-blue text-white whitespace-pre-wrap">
+                  <div className="max-w-[80%] px-4 py-2.5 rounded-2xl rounded-br-md text-sm bg-accent-blue text-white whitespace-pre-wrap">
                     {msg.content}
                   </div>
                 ) : (
@@ -614,7 +614,7 @@ export default function AIPage() {
                         <span>正在生成回答…</span>
                       </div>
                     ) : msg.content ? (
-                      <div className={`px-4 py-3 rounded-2xl rounded-bl-md text-[13.5px] border markdown-body ${
+                      <div className={`px-4 py-3 rounded-2xl rounded-bl-md text-sm border markdown-body ${
                         msg.error
                           ? 'bg-red-500/8 border-red-500/20 text-red-600 dark:text-red-400'
                           : 'bg-bg-hover border-border text-gray-300'
@@ -662,7 +662,7 @@ export default function AIPage() {
               }}
               placeholder="输入消息… (Enter 发送，Shift+Enter 换行)"
               disabled={streaming}
-              className="flex-1 resize-none bg-transparent text-[13.5px] text-gray-800 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 outline-none leading-relaxed disabled:opacity-50"
+              className="flex-1 resize-none bg-transparent text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 outline-none leading-relaxed disabled:opacity-50"
               style={{ minHeight: '24px', maxHeight: '160px' }}
             />
             {streaming ? (
@@ -684,7 +684,7 @@ export default function AIPage() {
               </button>
             )}
           </div>
-          <p className="text-[10px] text-gray-500 text-center mt-2">
+          <p className="text-[11px] text-gray-500 text-center mt-2">
             AI 可能会犯错，重要决策请自行核实
           </p>
         </div>

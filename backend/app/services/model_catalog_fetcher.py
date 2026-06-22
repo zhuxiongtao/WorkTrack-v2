@@ -293,6 +293,166 @@ def _strip_code_fence(text: str) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  模型介绍中文化（LLM 批量翻译）
+# ─────────────────────────────────────────────────────────────────────────────
+
+_CJK_RE = re.compile(r"[\u4e00-\u9fff]")
+
+
+def _is_chinese(text: Optional[str]) -> bool:
+    """是否已包含中文字符（已翻译则跳过）"""
+    return bool(text and _CJK_RE.search(text))
+
+
+TRANSLATE_BATCH_SIZE = 40  # 每批翻译条数，平衡 token 与成功率
+
+TRANSLATE_PROMPT = """你是 AI 模型介绍翻译专家。请把下面每条英文模型介绍翻译成简体中文，保留模型名、厂商名、技术术语（如 MoE、context window、tokens、API）不翻译。
+
+输入是一个 JSON 数组，每项形如 {"id": <序号>, "text": "<英文介绍>"}。
+请输出同样结构的 JSON 数组，把每个 text 替换为中文翻译，id 保持不变。只输出 JSON 数组，不要任何解释或代码围栏。
+
+要求：
+- 翻译简洁流畅，一句话概括为主，不超过原文字数
+- 保留原意，不要添加额外信息
+- 如果原文已经是中文，原样返回
+- 去掉开头的 "XXX:" 前缀（模型名/厂商名），直接从介绍内容开始
+
+输入：
+{payload}
+"""
+
+
+def _call_translate_batch(client, model_name: str, batch: list[dict]) -> list[dict]:
+    """调用 LLM 翻译一批 description，返回 [{"id": n, "text": "中文"}]"""
+    from app.services.ai_service import _extract_message_text
+    payload = json.dumps(batch, ensure_ascii=False)
+    prompt = TRANSLATE_PROMPT.replace("{payload}", payload[:20000])
+    response = client.chat.completions.create(
+        model=model_name,
+        messages=[
+            {"role": "system", "content": "你是专业翻译，只输出 JSON 数组。"},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.2,
+        timeout=120,
+    )
+    content = _extract_message_text(response.choices[0].message)
+    return json.loads(_strip_code_fence(content))
+
+
+def _translate_items_descriptions(items: list[dict]) -> int:
+    """对 items 中非中文的 description 批量翻译（就地修改），返回翻译条数
+
+    用于采集流程：采集完成后、入库前调用。
+    失败不阻断流程，未翻译的保留原文。
+    """
+    extractor = _pick_extractor_provider()
+    if not extractor:
+        logger.info("LLM 翻译器未配置，跳过模型介绍中文化")
+        return 0
+    _, model_name, llm_client = extractor
+
+    # 收集需要翻译的 description
+    todo: list[dict] = []  # {"id": idx, "text": ...}
+    idx_map: dict[int, int] = {}  # batch id -> items 下标
+    for i, it in enumerate(items):
+        desc = (it.get("description") or "").strip()
+        if desc and not _is_chinese(desc):
+            batch_id = len(todo)
+            todo.append({"id": batch_id, "text": desc[:500]})
+            idx_map[batch_id] = i
+
+    if not todo:
+        return 0
+
+    total = len(todo)
+    logger.info("开始翻译模型介绍: 共 %d 条待翻译，分批 %d/批", total, TRANSLATE_BATCH_SIZE)
+    translated = 0
+    for start in range(0, total, TRANSLATE_BATCH_SIZE):
+        batch = todo[start:start + TRANSLATE_BATCH_SIZE]
+        try:
+            results = _call_translate_batch(llm_client, model_name, batch)
+            for r in results:
+                bid = r.get("id")
+                zh = (r.get("text") or "").strip()
+                if bid in idx_map and zh:
+                    items[idx_map[bid]]["description"] = zh
+                    translated += 1
+        except Exception as e:
+            logger.warning("翻译第 %d-%d 批失败（保留原文）: %s", start, start + len(batch), e)
+            continue
+
+    logger.info("模型介绍翻译完成: %d/%d 条已中文化", translated, total)
+    return translated
+
+
+def translate_existing_descriptions(only_english: bool = True) -> dict:
+    """对已入库的模型 description 批量翻译（管理员手动触发）
+
+    only_english=True: 只翻译非中文（英文）的 description
+    only_english=False: 翻译所有非空 description
+    返回 {"success": bool, "translated": int, "skipped": int, "error": str?}
+    """
+    import time as _time
+    t0 = _time.time()
+    try:
+        extractor = _pick_extractor_provider()
+        if not extractor:
+            return {"success": False, "error": "LLM 翻译器未配置，请先在系统设置配置 AI Provider",
+                    "translated": 0, "skipped": 0, "duration_ms": 0}
+        _, model_name, llm_client = extractor
+
+        with Session(engine) as db:
+            rows = db.exec(select(ModelCatalog)).all()
+            todo_rows = []
+            for r in rows:
+                desc = (r.description or "").strip()
+                if not desc:
+                    continue
+                if only_english and _is_chinese(desc):
+                    continue
+                todo_rows.append(r)
+
+            if not todo_rows:
+                return {"success": True, "translated": 0, "skipped": len(rows),
+                        "duration_ms": int((_time.time() - t0) * 1000),
+                        "message": "没有需要翻译的模型介绍"}
+
+            total = len(todo_rows)
+            logger.info("存量翻译: 共 %d 条待翻译", total)
+            translated = 0
+            # 分批翻译并逐批提交
+            for start in range(0, total, TRANSLATE_BATCH_SIZE):
+                batch_rows = todo_rows[start:start + TRANSLATE_BATCH_SIZE]
+                batch = [{"id": i, "text": (r.description or "")[:500]}
+                         for i, r in enumerate(batch_rows)]
+                try:
+                    results = _call_translate_batch(llm_client, model_name, batch)
+                    res_map = {r.get("id"): (r.get("text") or "").strip() for r in results}
+                    for i, row in enumerate(batch_rows):
+                        zh = res_map.get(i, "")
+                        if zh:
+                            row.description = zh
+                            row.updated_at = datetime.now(timezone.utc)
+                            db.add(row)
+                            translated += 1
+                    db.commit()
+                except Exception as e:
+                    logger.warning("存量翻译第 %d 批失败: %s", start // TRANSLATE_BATCH_SIZE, e)
+                    db.rollback()
+                    continue
+
+        duration_ms = int((_time.time() - t0) * 1000)
+        logger.info("存量翻译完成: %d/%d 条已中文化, 耗时 %dms", translated, total, duration_ms)
+        return {"success": True, "translated": translated, "skipped": len(rows) - translated,
+                "duration_ms": duration_ms}
+    except Exception as e:
+        logger.error("存量翻译失败: %s", e, exc_info=True)
+        return {"success": False, "error": str(e)[:300], "translated": 0, "skipped": 0,
+                "duration_ms": int((_time.time() - t0) * 1000)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  数据源 1：OpenRouter API
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -739,20 +899,30 @@ def refresh_model_catalog_sync() -> dict:
                 "duration_ms": int((time.time() - t0) * 1000),
             }
 
+        # 模型介绍中文化（采集后、入库前）；可用环境变量 MODEL_AUTO_TRANSLATE=false 关闭
+        auto_translate = os.getenv("MODEL_AUTO_TRANSLATE", "true").lower() != "false"
+        translated_count = 0
+        if auto_translate:
+            try:
+                translated_count = _translate_items_descriptions(all_items)
+            except Exception as e:
+                logger.warning("采集时自动翻译失败（不影响入库）: %s", e)
+
         with Session(engine) as db:
             inserted, updated = _upsert_models(all_items, db)
             deactivated = _deactivate_stale(db, days=90)
 
         duration_ms = int((time.time() - t0) * 1000)
         logger.info(
-            "模型目录刷新完成: 新增 %d, 更新 %d, 降级 %d, 耗时 %dms",
-            inserted, updated, deactivated, duration_ms,
+            "模型目录刷新完成: 新增 %d, 更新 %d, 降级 %d, 翻译 %d, 耗时 %dms",
+            inserted, updated, deactivated, translated_count, duration_ms,
         )
         return {
             "success": True,
             "inserted": inserted,
             "updated": updated,
             "deactivated": deactivated,
+            "translated": translated_count,
             "duration_ms": duration_ms,
         }
     except Exception as e:

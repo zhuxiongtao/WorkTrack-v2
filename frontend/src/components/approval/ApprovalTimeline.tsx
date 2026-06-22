@@ -133,9 +133,9 @@ export function ApprovalTimeline({ targetType, targetId, onChanged }: ApprovalTi
         <div className="flex items-center gap-2">
           <UserCheck size={13} className="text-gray-400" />
           <span className="text-[11px] font-semibold text-gray-300">审批进度</span>
-          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${instColor}`}>{instLabel}</span>
+          <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded border ${instColor}`}>{instLabel}</span>
         </div>
-        <span className="text-[10px] text-gray-500">
+        <span className="text-[11px] text-gray-500">
           {detail.submitted_by_name} 于 {fmtTime(detail.submitted_at)} 提交
         </span>
       </div>
@@ -163,23 +163,23 @@ export function ApprovalTimeline({ targetType, targetId, onChanged }: ApprovalTi
                       {node.name}
                     </span>
                     {node.is_current && (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20 font-bold">
+                      <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20 font-bold">
                         待审
                       </span>
                     )}
                     {(node.status === 'approved' || node.status === 'skipped') && node.decided_at && (
-                      <span className="text-[10px] text-gray-500">{fmtTime(node.decided_at)}</span>
+                      <span className="text-[11px] text-gray-500">{fmtTime(node.decided_at)}</span>
                     )}
                     {node.status === 'rejected' && node.decided_at && (
-                      <span className="text-[10px] text-gray-500">{fmtTime(node.decided_at)}</span>
+                      <span className="text-[11px] text-gray-500">{fmtTime(node.decided_at)}</span>
                     )}
                   </div>
                   <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                    <span className="text-[10px] text-gray-500">
+                    <span className="text-[11px] text-gray-500">
                       审批人：{node.approver_names.join('、') || '—'}
                     </span>
                     {node.decided_by_name && (
-                      <span className="text-[10px] text-gray-400">
+                      <span className="text-[11px] text-gray-400">
                         · 由 <span className="text-gray-300">{node.decided_by_name}</span> 操作
                       </span>
                     )}
@@ -192,7 +192,7 @@ export function ApprovalTimeline({ targetType, targetId, onChanged }: ApprovalTi
 
         {/* 完成时间 */}
         {detail.finished_at && (
-          <div className="mt-2.5 text-[10px] text-gray-500 pl-[22px]">
+          <div className="mt-2.5 text-[11px] text-gray-500 pl-[22px]">
             {instStatus === 'approved' ? '✓ 审批完成于 ' : instStatus === 'rejected' ? '✕ 驳回于 ' : ''}
             {fmtTime(detail.finished_at)}
           </div>
@@ -202,7 +202,7 @@ export function ApprovalTimeline({ targetType, targetId, onChanged }: ApprovalTi
       {/* 审批人操作区 */}
       {detail.can_act && instStatus === 'pending' && (
         <div className="border-t border-border/50 px-3.5 py-3 bg-amber-500/3">
-          <p className="text-[10px] text-amber-400 mb-2 font-semibold">轮到你审批了</p>
+          <p className="text-[11px] text-amber-400 mb-2 font-semibold">轮到你审批了</p>
           <textarea
             value={comment}
             onChange={(e) => setComment(e.target.value)}
@@ -237,7 +237,7 @@ export function ApprovalTimeline({ targetType, targetId, onChanged }: ApprovalTi
           <button
             onClick={cancel}
             disabled={acting}
-            className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg text-gray-400 hover:text-orange-300 hover:bg-orange-500/10 border border-border transition-colors"
+            className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-lg text-gray-400 hover:text-orange-300 hover:bg-orange-500/10 border border-border transition-colors"
           >
             <RotateCcw size={10} />撤回审批
           </button>
@@ -249,7 +249,7 @@ export function ApprovalTimeline({ targetType, targetId, onChanged }: ApprovalTi
         <div className="border-t border-border/50">
           <button
             onClick={() => setShowRecords(!showRecords)}
-            className="w-full flex items-center justify-between px-3.5 py-2 text-[10px] text-gray-500 hover:text-gray-300 transition-colors"
+            className="w-full flex items-center justify-between px-3.5 py-2 text-[11px] text-gray-500 hover:text-gray-300 transition-colors"
           >
             <span className="flex items-center gap-1.5">
               <Send size={10} />
@@ -265,13 +265,13 @@ export function ApprovalTimeline({ targetType, targetId, onChanged }: ApprovalTi
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-[11px] text-gray-300 font-medium">{r.approver_name}</span>
-                      <span className={`text-[10px] font-semibold ${ACTION_COLOR[r.action] || 'text-gray-400'}`}>
+                      <span className={`text-[11px] font-semibold ${ACTION_COLOR[r.action] || 'text-gray-400'}`}>
                         {ACTION_LABEL[r.action] || r.action}
                       </span>
-                      <span className="text-[10px] text-gray-500">{fmtTime(r.created_at)}</span>
+                      <span className="text-[11px] text-gray-500">{fmtTime(r.created_at)}</span>
                     </div>
                     {r.comment && (
-                      <p className="text-[10px] text-gray-400 mt-0.5 leading-relaxed">「{r.comment}」</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5 leading-relaxed">「{r.comment}」</p>
                     )}
                   </div>
                 </div>

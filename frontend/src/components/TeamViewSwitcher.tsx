@@ -109,7 +109,7 @@ export default function TeamViewSwitcher({
           >
             <span className="max-w-[140px] truncate">{summaryText}</span>
             {selectedUserIds.length > 0 && (
-              <span className="flex items-center justify-center w-4 h-4 rounded-full bg-[#3B82F6] text-white text-[10px] font-bold leading-none">
+              <span className="flex items-center justify-center w-4 h-4 rounded-full bg-[#3B82F6] text-white text-[11px] font-bold leading-none">
                 {selectedUserIds.length}
               </span>
             )}

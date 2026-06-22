@@ -59,7 +59,7 @@ function StatCard({ icon: Icon, label, value, sub, color = 'blue' }: { icon: typ
         <div>
           <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">{label}</p>
           <p className="text-lg font-bold text-gray-900 dark:text-gray-100">{value}</p>
-          {sub && <p className="text-[10px] text-gray-400 dark:text-gray-500">{sub}</p>}
+          {sub && <p className="text-[11px] text-gray-400 dark:text-gray-500">{sub}</p>}
         </div>
       </div>
     </div>
@@ -81,7 +81,7 @@ function ResourceBar({ label, percent, used, total, color = 'blue' }: { label: s
       <div className="h-2 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden">
         <div className={`h-full rounded-full ${barColors[color] || barColors.blue} transition-all`} style={{ width: `${Math.min(percent, 100)}%` }} />
       </div>
-      <p className="text-right text-[10px] text-gray-400">{percent.toFixed(1)}%</p>
+      <p className="text-right text-[11px] text-gray-400">{percent.toFixed(1)}%</p>
     </div>
   )
 }

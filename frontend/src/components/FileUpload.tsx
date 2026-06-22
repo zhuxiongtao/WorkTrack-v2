@@ -150,7 +150,7 @@ export default function FileUpload({ filesJson, onChange, disabled }: FileUpload
               >
                 {file.name}
               </a>
-              <span className="text-gray-600 text-[10px]">{formatSize(file.size)}</span>
+              <span className="text-gray-600 text-[11px]">{formatSize(file.size)}</span>
               {!disabled && (
                 <button
                   onClick={() => removeFile(idx)}

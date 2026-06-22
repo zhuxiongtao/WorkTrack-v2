@@ -232,9 +232,9 @@ export default function ContractsPage() {
   }, [contracts, showToast])
 
   useEffect(() => {
-    fetch('/api/v1/customers').then(r => r.json()).then(data => setCustomers(data || [])).catch(() => {})
-    fetch('/api/v1/projects').then(r => r.json()).then(data => setProjects(data || [])).catch(() => {})
-    fetch('/api/v1/contract-templates').then(r => r.json()).then(data => setTemplates(data || [])).catch(() => {})
+    fetch('/api/v1/customers/selector').then(r => r.ok ? r.json() : []).then(data => setCustomers(Array.isArray(data) ? data : [])).catch(() => {})
+    fetch('/api/v1/projects/selector').then(r => r.ok ? r.json() : []).then(data => setProjects(Array.isArray(data) ? data : [])).catch(() => {})
+    fetch('/api/v1/contract-templates').then(r => r.ok ? r.json() : []).then(data => setTemplates(Array.isArray(data) ? data : [])).catch(() => {})
   }, [])
 
   const handleDelete = async (id: number) => {
@@ -461,31 +461,31 @@ export default function ContractsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-medium text-white truncate">{c.title}</span>
-                      {c.contract_no && <span className="text-[10px] text-gray-500">#{c.contract_no}</span>}
+                      {c.contract_no && <span className="text-[11px] text-gray-500">#{c.contract_no}</span>}
                       {c.contract_type && (
-                        <span className={`text-[10px] px-1.5 py-px rounded border ${CONTRACT_TYPE_COLORS[c.contract_type] || CONTRACT_TYPE_COLORS['其他']}`}>
+                        <span className={`text-[11px] px-1.5 py-px rounded border ${CONTRACT_TYPE_COLORS[c.contract_type] || CONTRACT_TYPE_COLORS['其他']}`}>
                           {c.contract_type}
                         </span>
                       )}
                       {isSelfMade && (
-                        <span className="text-[10px] px-1.5 py-px rounded border bg-indigo-500/10 text-indigo-400 border-indigo-500/30">我方制作</span>
+                        <span className="text-[11px] px-1.5 py-px rounded border bg-indigo-500/10 text-indigo-400 border-indigo-500/30">我方制作</span>
                       )}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                      <span className="text-[10px] text-gray-500">{getCustomerName(c.customer_id)}</span>
-                      {c.contract_amount && <span className="text-[10px] text-gray-500">{formatAmount(c.contract_amount, c.currency)}</span>}
-                      {c.sign_date && <span className="text-[10px] text-gray-500">{c.sign_date}</span>}
+                      <span className="text-[11px] text-gray-500">{getCustomerName(c.customer_id)}</span>
+                      {c.contract_amount && <span className="text-[11px] text-gray-500">{formatAmount(c.contract_amount, c.currency)}</span>}
+                      {c.sign_date && <span className="text-[11px] text-gray-500">{c.sign_date}</span>}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full border ${STATUS_COLORS[c.status] || STATUS_COLORS['生效中']}`}>{c.status}</span>
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full border ${STATUS_COLORS[c.status] || STATUS_COLORS['生效中']}`}>{c.status}</span>
                     {hasSignedCopy && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full border bg-emerald-500/10 text-emerald-400 border-emerald-500/30 flex items-center gap-1">
+                      <span className="text-[11px] px-1.5 py-0.5 rounded-full border bg-emerald-500/10 text-emerald-400 border-emerald-500/30 flex items-center gap-1">
                         <CheckCircle2 size={9} />已归档
                       </span>
                     )}
                     {!isSelfMade && (
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full border flex items-center gap-1 ${PARSE_STATUS_COLORS[ps] || PARSE_STATUS_COLORS.pending}`}>
+                      <span className={`text-[11px] px-2 py-0.5 rounded-full border flex items-center gap-1 ${PARSE_STATUS_COLORS[ps] || PARSE_STATUS_COLORS.pending}`}>
                         {isParsing && <Loader2 size={9} className="animate-spin" />}
                         {PARSE_STATUS_LABELS[ps] || ps}
                       </span>
@@ -506,7 +506,7 @@ export default function ContractsPage() {
                         </div>
                         {hasPermission('contract:edit') && (
                           <button onClick={() => { setEditingContract(c); setShowForm(true) }}
-                            className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg bg-red-500/15 text-red-300 hover:bg-red-500/25 border border-red-500/30 shrink-0">
+                            className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-lg bg-red-500/15 text-red-300 hover:bg-red-500/25 border border-red-500/30 shrink-0">
                             <Pencil size={9} />修改重提
                           </button>
                         )}
@@ -521,7 +521,7 @@ export default function ContractsPage() {
                           <p className="text-xs text-red-300">解析失败</p>
                           <p className="text-[11px] text-red-400/80 mt-0.5 break-all">{c.parse_error}</p>
                         </div>
-                        <button onClick={() => handleReparse(c.id)} className="text-[10px] px-2 py-1 rounded bg-red-500/20 text-red-300 hover:bg-red-500/30 shrink-0">
+                        <button onClick={() => handleReparse(c.id)} className="text-[11px] px-2 py-1 rounded bg-red-500/20 text-red-300 hover:bg-red-500/30 shrink-0">
                           重新解析
                         </button>
                       </div>
@@ -529,10 +529,10 @@ export default function ContractsPage() {
 
                     {/* 关键日期 */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      <div><span className="text-[10px] text-gray-500">签订日期</span><p className="text-xs text-gray-200">{c.sign_date || '-'}</p></div>
-                      <div><span className="text-[10px] text-gray-500">开始日期</span><p className="text-xs text-gray-200">{c.start_date || '-'}</p></div>
-                      <div><span className="text-[10px] text-gray-500">截止日期</span><p className="text-xs text-gray-200">{c.end_date || '-'}</p></div>
-                      <div><span className="text-[10px] text-gray-500">合同金额</span><p className="text-xs text-gray-200">{c.contract_amount ? formatAmount(c.contract_amount, c.currency) : '-'}</p></div>
+                      <div><span className="text-[11px] text-gray-500">签订日期</span><p className="text-xs text-gray-200">{c.sign_date || '-'}</p></div>
+                      <div><span className="text-[11px] text-gray-500">开始日期</span><p className="text-xs text-gray-200">{c.start_date || '-'}</p></div>
+                      <div><span className="text-[11px] text-gray-500">截止日期</span><p className="text-xs text-gray-200">{c.end_date || '-'}</p></div>
+                      <div><span className="text-[11px] text-gray-500">合同金额</span><p className="text-xs text-gray-200">{c.contract_amount ? formatAmount(c.contract_amount, c.currency) : '-'}</p></div>
                     </div>
 
                     {/* 续约期限（外部合同 AI 解析出的） */}
@@ -540,13 +540,13 @@ export default function ContractsPage() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {c.effective_term && (
                           <div className="p-2.5 rounded-lg bg-blue-500/5 border border-blue-500/20">
-                            <span className="text-[10px] text-blue-400 flex items-center gap-1"><Calendar size={10} />合同期限</span>
+                            <span className="text-[11px] text-blue-400 flex items-center gap-1"><Calendar size={10} />合同期限</span>
                             <p className="text-xs text-gray-200 mt-1">{c.effective_term}</p>
                           </div>
                         )}
                         {c.auto_renew && (
                           <div className="p-2.5 rounded-lg bg-amber-500/5 border border-amber-500/20">
-                            <span className="text-[10px] text-amber-400 flex items-center gap-1"><RefreshCw size={10} />续约条款</span>
+                            <span className="text-[11px] text-amber-400 flex items-center gap-1"><RefreshCw size={10} />续约条款</span>
                             <p className="text-xs text-gray-200 mt-1">{c.auto_renew}</p>
                           </div>
                         )}
@@ -556,8 +556,8 @@ export default function ContractsPage() {
                     {/* 双方主体 */}
                     {(c.party_a || c.party_b) && (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {c.party_a && <div><span className="text-[10px] text-gray-500">甲方</span><p className="text-xs text-gray-200">{c.party_a}</p></div>}
-                        {c.party_b && <div><span className="text-[10px] text-gray-500">乙方</span><p className="text-xs text-gray-200">{c.party_b}</p></div>}
+                        {c.party_a && <div><span className="text-[11px] text-gray-500">甲方</span><p className="text-xs text-gray-200">{c.party_a}</p></div>}
+                        {c.party_b && <div><span className="text-[11px] text-gray-500">乙方</span><p className="text-xs text-gray-200">{c.party_b}</p></div>}
                       </div>
                     )}
 
@@ -567,7 +567,7 @@ export default function ContractsPage() {
                       if (!Array.isArray(nodes) || nodes.length === 0) return null
                       return (
                         <div className="p-2.5 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
-                          <span className="text-[10px] text-emerald-400 flex items-center gap-1 mb-1.5"><CreditCard size={10} />付款节点</span>
+                          <span className="text-[11px] text-emerald-400 flex items-center gap-1 mb-1.5"><CreditCard size={10} />付款节点</span>
                           <div className="space-y-1">
                             {nodes.map((n, idx) => (
                               <div key={idx} className="flex items-center gap-2 text-xs text-gray-200">
@@ -611,7 +611,7 @@ export default function ContractsPage() {
                     {/* AI 摘要 */}
                     {c.summary && (
                       <div className="p-3 rounded-lg bg-[#3B82F6]/5 border border-[#3B82F6]/20">
-                        <span className="text-[10px] text-[#3B82F6] flex items-center gap-1 mb-1"><Sparkles size={10} />AI 摘要</span>
+                        <span className="text-[11px] text-[#3B82F6] flex items-center gap-1 mb-1"><Sparkles size={10} />AI 摘要</span>
                         <p className="text-xs text-gray-200 leading-relaxed">{c.summary}</p>
                       </div>
                     )}
@@ -622,15 +622,15 @@ export default function ContractsPage() {
                         <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
                         <div className="flex-1 min-w-0">
                           <p className="text-xs text-emerald-300 font-medium">签章版已归档</p>
-                          <p className="text-[10px] text-gray-500 truncate">{c.signed_file_name}</p>
+                          <p className="text-[11px] text-gray-500 truncate">{c.signed_file_name}</p>
                         </div>
                         <button onClick={() => handleDownloadSigned(c.id, c.signed_file_name)}
-                          className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20 shrink-0">
+                          className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20 shrink-0">
                           <Download size={10} />下载归档
                         </button>
                         {hasPermission('contract:edit') && (
                           <button onClick={() => setSignedUploadId(c.id)}
-                            className="text-[10px] text-gray-500 hover:text-gray-300 shrink-0">重新上传</button>
+                            className="text-[11px] text-gray-500 hover:text-gray-300 shrink-0">重新上传</button>
                         )}
                       </div>
                     ) : canPrintOrSign && (
@@ -638,10 +638,10 @@ export default function ContractsPage() {
                         <p className="text-[11px] text-amber-400 font-medium mb-1.5 flex items-center gap-1.5">
                           <Stamp size={11} />待签章归档
                         </p>
-                        <p className="text-[10px] text-gray-500 mb-2">合同已通过审批，请打印盖章后上传签章版留底。</p>
+                        <p className="text-[11px] text-gray-500 mb-2">合同已通过审批，请打印盖章后上传签章版留底。</p>
                         {hasPermission('contract:edit') && (
                           <button onClick={() => setSignedUploadId(c.id)}
-                            className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 border border-amber-500/30">
+                            className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-lg bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 border border-amber-500/30">
                             <Upload size={10} />上传签章版
                           </button>
                         )}
@@ -654,11 +654,11 @@ export default function ContractsPage() {
                       {c.file_path && !isSelfMade && (
                         <>
                           <button onClick={() => handlePreview(c.id, c.file_name, c.file_type)}
-                            className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg bg-[#3B82F6]/10 text-[#3B82F6] hover:bg-[#3B82F6]/20 border border-[#3B82F6]/20">
+                            className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-lg bg-[#3B82F6]/10 text-[#3B82F6] hover:bg-[#3B82F6]/20 border border-[#3B82F6]/20">
                             <Eye size={10} />预览原件
                           </button>
                           <button onClick={() => handleDownload(c.id, c.file_name)}
-                            className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg bg-bg-input text-gray-300 hover:text-white border border-border">
+                            className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-lg bg-bg-input text-gray-300 hover:text-white border border-border">
                             <Download size={10} />下载原件
                           </button>
                         </>
@@ -666,37 +666,37 @@ export default function ContractsPage() {
                       {/* 打印合同（审批通过后才可打印） */}
                       {canPrintOrSign && ((isSelfMade && c.content_html) ? (
                         <button onClick={() => printContractHtml(c.content_html!, c.title)}
-                          className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 border border-indigo-500/20">
+                          className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 border border-indigo-500/20">
                           <Printer size={10} />打印合同
                         </button>
                       ) : c.file_path ? (
                         <button onClick={() => handleDownload(c.id, c.file_name)}
-                          className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 border border-indigo-500/20">
+                          className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 border border-indigo-500/20">
                           <Printer size={10} />下载打印
                         </button>
                       ) : null)}
                       {/* 编辑（自建合同且未审批中） */}
                       {hasPermission('contract:edit') && c.status !== '审批中' && (
                         <button onClick={() => { setEditingContract(c); setShowForm(true) }}
-                          className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-bg-hover border border-border">
+                          className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-bg-hover border border-border">
                           <Pencil size={10} />编辑
                         </button>
                       )}
                       {/* 提交审批 */}
                       {hasPermission('contract:edit') && c.status !== '审批中' && c.status !== '生效中' && (
                         <button onClick={() => handleSubmitApproval(c.id)}
-                          className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/20">
+                          className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/20">
                           <FileSignature size={10} />提交审批
                         </button>
                       )}
                       {c.status === '审批中' && (
                         <>
-                          <span className="flex items-center gap-1 text-[10px] px-2 py-1 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold">
+                          <span className="flex items-center gap-1 text-[11px] px-2 py-1 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold">
                             <GitBranch size={10} />审批中
                           </span>
                           {hasPermission('contract:edit') && (
                             <button onClick={() => handleRevokeApproval(c.id)}
-                              className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg bg-gray-500/10 text-gray-400 hover:text-red-300 hover:bg-red-500/10 border border-border hover:border-red-500/20 transition-colors">
+                              className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-lg bg-gray-500/10 text-gray-400 hover:text-red-300 hover:bg-red-500/10 border border-border hover:border-red-500/20 transition-colors">
                               <RotateCcw size={10} />撤回申请
                             </button>
                           )}
@@ -705,13 +705,13 @@ export default function ContractsPage() {
                       {/* 外部合同重解析 */}
                       {!isSelfMade && c.file_path && ps === 'failed' && (
                         <button onClick={() => handleReparse(c.id)}
-                          className="flex items-center gap-1 text-[10px] px-2 py-1 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/30">
+                          className="flex items-center gap-1 text-[11px] px-2 py-1 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/30">
                           <RefreshCw size={9} />重解析
                         </button>
                       )}
                       {hasPermission('contract:delete') && (
                         <button onClick={() => handleDelete(c.id)}
-                          className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-border ml-auto">
+                          className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-border ml-auto">
                           <Trash2 size={10} />删除
                         </button>
                       )}
@@ -761,10 +761,10 @@ export default function ContractsPage() {
                     {submitPreview.nodes.map((node: any, idx: number) => (
                       <div key={idx} className="flex items-center gap-2.5">
                         <div className="w-5 h-5 rounded-full bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0">
-                          <span className="text-[9px] font-bold text-amber-400">{idx + 1}</span>
+                          <span className="text-[11px] font-bold text-amber-400">{idx + 1}</span>
                         </div>
                         <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{node.name}</span>
-                        <span className="text-[10px] text-gray-500 ml-auto">
+                        <span className="text-[11px] text-gray-500 ml-auto">
                           {node.approver_type === 'role' ? `角色：${node.approver_value}` :
                            node.approver_type === 'leader' ? '直属上级' :
                            node.approver_type === 'dept_manager' ? '部门主管' : `指定用户`}
@@ -1038,7 +1038,7 @@ function ContractFormModal({ editing, customers, projects, templates, onClose, o
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-gray-100">从模板创建</h4>
-                  <p className="text-[12px] text-gray-400 mt-1 leading-relaxed">我方制作合同：选择模板 → 编辑内容 → 提交审批 → 打印盖章</p>
+                  <p className="text-xs text-gray-400 mt-1 leading-relaxed">我方制作合同：选择模板 → 编辑内容 → 提交审批 → 打印盖章</p>
                 </div>
               </button>
               <button
@@ -1050,7 +1050,7 @@ function ContractFormModal({ editing, customers, projects, templates, onClose, o
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-gray-100">上传外部合同</h4>
-                  <p className="text-[12px] text-gray-400 mt-1 leading-relaxed">对方发来的合同：上传文件 → AI 解析 → 审批 → 打印盖章归档</p>
+                  <p className="text-xs text-gray-400 mt-1 leading-relaxed">对方发来的合同：上传文件 → AI 解析 → 审批 → 打印盖章归档</p>
                 </div>
               </button>
             </div>
@@ -1075,7 +1075,7 @@ function ContractFormModal({ editing, customers, projects, templates, onClose, o
                       </div>
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-gray-100">{t.name}</p>
-                        {t.category && <p className="text-[10px] text-gray-500 mt-0.5">{t.category}</p>}
+                        {t.category && <p className="text-[11px] text-gray-500 mt-0.5">{t.category}</p>}
                         {t.description && <p className="text-[11px] text-gray-400 mt-1 leading-relaxed line-clamp-2">{t.description}</p>}
                       </div>
                     </button>
@@ -1109,21 +1109,21 @@ function ContractFormModal({ editing, customers, projects, templates, onClose, o
                       <summary className="flex items-center gap-2 px-5 py-2 cursor-pointer list-none hover:bg-bg-hover/30 transition-colors select-none">
                         <ChevronRight size={11} className="text-gray-500 group-open:rotate-90 transition-transform shrink-0" />
                         <span className="text-[11px] text-gray-400 font-medium">合同系统字段</span>
-                        <span className="text-[10px] text-gray-600">— 用于平台检索管理，不影响合同正文</span>
+                        <span className="text-[11px] text-gray-600">— 用于平台检索管理，不影响合同正文</span>
                         {form.title && (
-                          <span className="text-[10px] text-indigo-400 ml-2 flex items-center gap-1">
+                          <span className="text-[11px] text-indigo-400 ml-2 flex items-center gap-1">
                             <FileText size={9} />
                             {form.title}{!titleManuallyEdited.current && <span className="text-gray-600">（已从文档标题同步）</span>}
                           </span>
                         )}
                         {!form.customer_id && (
-                          <span className="ml-auto text-[10px] text-amber-400 flex items-center gap-1">
+                          <span className="ml-auto text-[11px] text-amber-400 flex items-center gap-1">
                             <AlertTriangle size={9} />关联客户未填写
                           </span>
                         )}
                         {!editing && selectedTemplate && (
                           <button onClick={(e) => { e.preventDefault(); setStep('template_pick') }}
-                            className="ml-auto text-[10px] text-gray-600 hover:text-gray-300 transition-colors">← 重选模板</button>
+                            className="ml-auto text-[11px] text-gray-600 hover:text-gray-300 transition-colors">← 重选模板</button>
                         )}
                       </summary>
                       <div className="px-5 py-4 space-y-4 overflow-y-auto" style={{ maxHeight: '300px' }}>
@@ -1316,7 +1316,7 @@ function FormField({
         </span>
       </label>
       {children}
-      {hint && <p className="text-[10px] text-gray-400 mt-1.5 leading-relaxed">{hint}</p>}
+      {hint && <p className="text-[11px] text-gray-400 mt-1.5 leading-relaxed">{hint}</p>}
     </div>
   )
 }
@@ -1324,7 +1324,7 @@ function FormField({
 function DateField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
     <div>
-      <label className="block text-[10px] text-gray-500 mb-1">{label}</label>
+      <label className="block text-[11px] text-gray-500 mb-1">{label}</label>
       <input type="date" value={value} onChange={e => onChange(e.target.value)} className="form-input text-xs" />
     </div>
   )

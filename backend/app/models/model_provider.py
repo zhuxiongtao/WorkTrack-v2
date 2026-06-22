@@ -19,6 +19,9 @@ class ModelProvider(SQLModel, table=True):
     # Vertex AI / GCP 专用字段
     project_id: Optional[str] = Field(default=None)  # GCP 项目 ID
     location: Optional[str] = Field(default=None)  # GCP 区域，如 us-central1
+    gcp_label_team: Optional[str] = Field(default=None)  # GCP 账单标签：team
+    gcp_label_app: Optional[str] = Field(default=None)   # GCP 账单标签：app
+    gcp_label_env: Optional[str] = Field(default=None)   # GCP 账单标签：environment
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     # 关联的模型列表
     models_rel: list["ProviderModel"] = Relationship(back_populates="provider", sa_relationship_kwargs={"cascade": "all, delete-orphan"})

@@ -296,13 +296,13 @@ export function UserFormModal({ isOpen, editingUser, onClose }: UserFormModalPro
                             />
                           ))}
                         </div>
-                        <span className={`text-[10px] font-bold ${pwdEval.tone === 'red' ? 'text-red-500' : pwdEval.tone === 'orange' ? 'text-orange-500' : pwdEval.tone === 'amber' ? 'text-amber-500' : 'text-emerald-500'}`}>
+                        <span className={`text-[11px] font-bold ${pwdEval.tone === 'red' ? 'text-red-500' : pwdEval.tone === 'orange' ? 'text-orange-500' : pwdEval.tone === 'amber' ? 'text-amber-500' : 'text-emerald-500'}`}>
                           {pwdEval.label}
                         </span>
                       </div>
                       <div className="grid grid-cols-2 gap-x-3 gap-y-1">
                         {pwdEval.checks.map((c, i) => (
-                          <div key={i} className={`flex items-center gap-1 text-[10px] ${c.pass ? 'text-emerald-500' : 'text-gray-400 dark:text-gray-600'}`}>
+                          <div key={i} className={`flex items-center gap-1 text-[11px] ${c.pass ? 'text-emerald-500' : 'text-gray-400 dark:text-gray-600'}`}>
                             {c.pass ? <Check size={9} strokeWidth={3} /> : <span className="w-[9px] h-[9px] rounded-full border border-gray-300 dark:border-gray-700" />}
                             <span>{c.label}</span>
                           </div>
@@ -322,7 +322,7 @@ export function UserFormModal({ isOpen, editingUser, onClose }: UserFormModalPro
                   placeholder="e.g. zhangsan@worktrack.com"
                 />
                 {form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()) && (
-                  <p className="text-[10px] text-red-500 mt-1 flex items-center gap-1"><AlertCircle size={10} /> 邮箱格式不正确</p>
+                  <p className="text-[11px] text-red-500 mt-1 flex items-center gap-1"><AlertCircle size={10} /> 邮箱格式不正确</p>
                 )}
               </FormField>
             </div>
@@ -397,12 +397,12 @@ export function UserFormModal({ isOpen, editingUser, onClose }: UserFormModalPro
                     <div className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
                       {form.name || form.username || '新成员'} <span className="text-gray-400 dark:text-gray-500 font-mono font-normal">@{form.username || '未命名'}</span>
                     </div>
-                    <div className="text-[10px] text-gray-500 dark:text-gray-500 truncate">
+                    <div className="text-[11px] text-gray-500 dark:text-gray-500 truncate">
                       {form.job_title || '未指定职位'} · {form.email || '未填写邮箱'}
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 text-[10px] text-gray-500 dark:text-gray-500 mt-3 pt-3 border-t border-blue-100 dark:border-accent-blue/10">
+                <div className="flex items-center gap-3 text-[11px] text-gray-500 dark:text-gray-500 mt-3 pt-3 border-t border-blue-100 dark:border-accent-blue/10">
                   <div className="flex items-center gap-1">
                     <Building2 size={10} />
                     <span>{departments.find(d => d.id === form.department_id)?.name || '未分配部门'}</span>
@@ -533,7 +533,7 @@ function FormField({
         </span>
       </label>
       {children}
-      {hint && <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1.5 leading-relaxed">{hint}</p>}
+      {hint && <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1.5 leading-relaxed">{hint}</p>}
     </div>
   )
 }
@@ -555,7 +555,7 @@ function PrivilegeToggle({
         </div>
         <div className="min-w-0">
           <span className="text-xs font-bold text-gray-800 dark:text-gray-200 block">{title}</span>
-          <p className="text-[10px] text-gray-500 dark:text-gray-500 mt-0.5 leading-relaxed">{desc}</p>
+          <p className="text-[11px] text-gray-500 dark:text-gray-500 mt-0.5 leading-relaxed">{desc}</p>
         </div>
       </div>
       <button

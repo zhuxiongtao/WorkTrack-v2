@@ -202,7 +202,7 @@ export default function ModelDetailDrawer({ providerId, providerName, modelId, m
                   )
                 })}
               </div>
-              <p className="text-[10px] text-gray-500 mt-1">
+              <p className="text-[11px] text-gray-500 mt-1">
                 已选 {(form.supported_task_types || []).length} 个 ·
                 例如 Gemini-3-flash 勾选「对话+图像理解」即可同时用于 chat 和 vision 任务
               </p>
@@ -235,14 +235,14 @@ export default function ModelDetailDrawer({ providerId, providerName, modelId, m
             <Section title="输出控制" icon={FileText} color="#10B981">
               <SelectField label="Response Format" value={form.default_response_format} options={RESPONSE_FORMATS} onChange={(v) => set('default_response_format', v)} onNull={() => setNull('default_response_format')} />
               <div>
-                <label className="block text-xs text-gray-400 mb-1.5">JSON Schema <span className="text-[10px] text-gray-500">（仅 json_schema 模式）</span></label>
+                <label className="block text-xs text-gray-400 mb-1.5">JSON Schema <span className="text-[11px] text-gray-500">（仅 json_schema 模式）</span></label>
                 <textarea value={jsonSchemaText} onChange={(e) => { setJsonSchemaText(e.target.value); validateJson(e.target.value, setJsonSchemaError) }}
                   rows={6} disabled={!canEdit}
                   className={`w-full px-3 py-2 rounded-lg bg-bg-input border text-xs font-mono text-gray-700 dark:text-gray-300 outline-none focus:border-[#10B981] resize-none ${jsonSchemaError ? 'border-red-500/50' : 'border-border'}`}
                   placeholder={'{\n  "type": "object",\n  "properties": {\n    "name": { "type": "string" },\n    "score": { "type": "number" }\n  }\n}'} />
-                {jsonSchemaError && <p className="text-[10px] text-red-400 mt-1">{jsonSchemaError}</p>}
+                {jsonSchemaError && <p className="text-[11px] text-red-400 mt-1">{jsonSchemaError}</p>}
                 <button onClick={() => { setJsonSchemaText(''); setJsonSchemaError('') }} disabled={!canEdit || !jsonSchemaText}
-                  className="text-[10px] text-gray-500 hover:text-gray-300 mt-1 disabled:opacity-40">清空</button>
+                  className="text-[11px] text-gray-500 hover:text-gray-300 mt-1 disabled:opacity-40">清空</button>
               </div>
             </Section>
 
@@ -265,12 +265,12 @@ export default function ModelDetailDrawer({ providerId, providerName, modelId, m
               <TextField label="Tags" hint="逗号分隔，如 chat, fast, cheap"
                 value={form.tags} onChange={(v) => set('tags', v)} onNull={() => setNull('tags')} />
               <div>
-                <label className="block text-xs text-gray-400 mb-1.5">Extra Params (厂商专属) <span className="text-[10px] text-gray-500">JSON 对象</span></label>
+                <label className="block text-xs text-gray-400 mb-1.5">Extra Params (厂商专属) <span className="text-[11px] text-gray-500">JSON 对象</span></label>
                 <textarea value={extraParamsText} onChange={(e) => { setExtraParamsText(e.target.value); validateJson(e.target.value, setExtraParamsError) }}
                   rows={4} disabled={!canEdit}
                   className={`w-full px-3 py-2 rounded-lg bg-bg-input border text-xs font-mono text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6] resize-none ${extraParamsError ? 'border-red-500/50' : 'border-border'}`}
                   placeholder='{"top_k": 50, "seed": 42, "repetition_penalty": 1.1}' />
-                {extraParamsError && <p className="text-[10px] text-red-400 mt-1">{extraParamsError}</p>}
+                {extraParamsError && <p className="text-[11px] text-red-400 mt-1">{extraParamsError}</p>}
               </div>
             </Section>
 
@@ -307,7 +307,7 @@ function Section({ title, icon: Icon, tone, hint, children }: { title: string; i
       <div className="flex items-center gap-2 mb-3">
         <IconBox icon={Icon} size="sm" tone={tone} variant="soft" />
         <h4 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h4>
-        {hint && <span className="text-[10px] text-gray-500">· {hint}</span>}
+        {hint && <span className="text-[11px] text-gray-500">· {hint}</span>}
       </div>
       <div className="space-y-3 pl-2 border-l border-border/40 ml-3">{children}</div>
     </div>
@@ -320,7 +320,7 @@ function NumberField({ label, hint, value, onChange, onNull, min, max, step }: {
       <div className="flex items-center justify-between mb-1.5">
         <label className="text-xs text-gray-400">{label}</label>
         <button onClick={onNull} disabled={value == null}
-          className="text-[10px] text-gray-500 hover:text-amber-400 disabled:opacity-30 flex items-center gap-0.5">
+          className="text-[11px] text-gray-500 hover:text-amber-400 disabled:opacity-30 flex items-center gap-0.5">
           <RotateCcw size={9} />继承
         </button>
       </div>
@@ -328,7 +328,7 @@ function NumberField({ label, hint, value, onChange, onNull, min, max, step }: {
         onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
         placeholder="未设置（继承默认）"
         className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-xs text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6] font-mono" />
-      {hint && <p className="text-[10px] text-gray-500 mt-1">{hint}</p>}
+      {hint && <p className="text-[11px] text-gray-500 mt-1">{hint}</p>}
     </div>
   )
 }
@@ -339,14 +339,14 @@ function TextField({ label, hint, value, onChange, onNull, placeholder }: { labe
       <div className="flex items-center justify-between mb-1.5">
         <label className="text-xs text-gray-400">{label}</label>
         <button onClick={onNull} disabled={!value}
-          className="text-[10px] text-gray-500 hover:text-amber-400 disabled:opacity-30 flex items-center gap-0.5">
+          className="text-[11px] text-gray-500 hover:text-amber-400 disabled:opacity-30 flex items-center gap-0.5">
           <RotateCcw size={9} />清空
         </button>
       </div>
       <input value={value || ''} onChange={(e) => onChange(e.target.value || null)}
         placeholder={placeholder || '未设置'}
         className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-xs text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6]" />
-      {hint && <p className="text-[10px] text-gray-500 mt-1">{hint}</p>}
+      {hint && <p className="text-[11px] text-gray-500 mt-1">{hint}</p>}
     </div>
   )
 }
@@ -357,7 +357,7 @@ function SelectField({ label, value, options, onChange, onNull }: { label: strin
       <div className="flex items-center justify-between mb-1.5">
         <label className="text-xs text-gray-400">{label}</label>
         <button onClick={onNull} disabled={!value}
-          className="text-[10px] text-gray-500 hover:text-amber-400 disabled:opacity-30 flex items-center gap-0.5">
+          className="text-[11px] text-gray-500 hover:text-amber-400 disabled:opacity-30 flex items-center gap-0.5">
           <RotateCcw size={9} />继承
         </button>
       </div>

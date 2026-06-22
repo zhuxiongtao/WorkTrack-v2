@@ -242,15 +242,15 @@ export default function WeeklyReportPage() {
                         <span className="text-sm font-medium text-white">
                           {formatWeekRange(week.week_start, week.week_end)}
                         </span>
-                        <span className="text-[10px] text-gray-600 bg-bg-hover px-1.5 py-0.5 rounded-full">
+                        <span className="text-[11px] text-gray-600 bg-bg-hover px-1.5 py-0.5 rounded-full">
                           {week.report_count} 篇日报
                         </span>
                         {week.weekly_summary_status === 'submitted' ? (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 font-bold border border-emerald-500/15">已提交</span>
+                          <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 font-bold border border-emerald-500/15">已提交</span>
                         ) : hasSummary ? (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500 font-bold border border-amber-500/15">草稿</span>
+                          <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500 font-bold border border-amber-500/15">草稿</span>
                         ) : (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-500/10 text-gray-400 font-medium border border-gray-500/15">待总结</span>
+                          <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-gray-500/10 text-gray-400 font-medium border border-gray-500/15">待总结</span>
                         )}
                       </div>
                     </div>
@@ -258,7 +258,7 @@ export default function WeeklyReportPage() {
                   {!hasSummary && (
                     <button
                       onClick={(e) => { e.stopPropagation(); startEditSummary(week.week_start, week.weekly_summary || '') }}
-                      className="flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-lg bg-bg-hover text-gray-400 hover:text-white hover:bg-border transition-colors border border-border flex-shrink-0"
+                      className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-lg bg-bg-hover text-gray-400 hover:text-white hover:bg-border transition-colors border border-border flex-shrink-0"
                     >
                       <Edit3 size={10} />写周报
                     </button>
@@ -266,7 +266,7 @@ export default function WeeklyReportPage() {
                   <button
                     onClick={(e) => { e.stopPropagation(); handleAiWeeklySummary(week.week_start, week.week_end) }}
                     disabled={isSummarizing}
-                    className="flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-lg bg-bg-hover text-gray-400 hover:text-[#8B5CF6] hover:bg-border transition-colors disabled:opacity-50 border border-border flex-shrink-0"
+                    className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-lg bg-bg-hover text-gray-400 hover:text-[#8B5CF6] hover:bg-border transition-colors disabled:opacity-50 border border-border flex-shrink-0"
                   >
                     {isSummarizing ? (
                       <Loader2 size={10} className="animate-spin" />
@@ -335,7 +335,7 @@ export default function WeeklyReportPage() {
                               </button>
                             )}
                             {week.weekly_summary_status === 'submitted' && (
-                              <span className="px-2 py-1 mr-2 rounded-lg bg-emerald-500/10 text-emerald-500 text-[10px] font-bold border border-emerald-500/15">已提交</span>
+                              <span className="px-2 py-1 mr-2 rounded-lg bg-emerald-500/10 text-emerald-500 text-[11px] font-bold border border-emerald-500/15">已提交</span>
                             )}
                           </div>
                           {expandedSummaries.has(week.week_start) && (

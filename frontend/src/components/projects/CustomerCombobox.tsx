@@ -106,7 +106,7 @@ export function CustomerCombobox({ value, onChange, options, placeholder, disabl
           </>
         )}
         {value && !isManual && (
-          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-accent-blue/10 text-accent-blue text-[10px] font-semibold shrink-0">
+          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-accent-blue/10 text-accent-blue text-[11px] font-semibold shrink-0">
             <Check size={9} /> 已选
           </span>
         )}
@@ -149,12 +149,12 @@ export function CustomerCombobox({ value, onChange, options, placeholder, disabl
                         value?.id === o.id ? 'bg-accent-blue/5' : ''
                       }`}
                     >
-                      <span className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500/20 to-indigo-500/20 text-blue-500 flex items-center justify-center text-[10px] font-bold shrink-0">
+                      <span className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500/20 to-indigo-500/20 text-blue-500 flex items-center justify-center text-[11px] font-bold shrink-0">
                         {o.name.slice(0, 1)}
                       </span>
                       <div className="flex-1 min-w-0">
                         <div className="font-semibold text-gray-800 dark:text-gray-200 truncate">{o.name}</div>
-                        {o.industry && <div className="text-[10px] text-gray-400 truncate">{o.industry}</div>}
+                        {o.industry && <div className="text-[11px] text-gray-400 truncate">{o.industry}</div>}
                       </div>
                       {value?.id === o.id && <Check size={12} className="text-accent-blue" />}
                     </button>
@@ -165,7 +165,7 @@ export function CustomerCombobox({ value, onChange, options, placeholder, disabl
           )}
           {isManual && (
             <div className="p-3 space-y-2">
-              <div className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">手动输入新客户（不会关联已有客户表）</div>
+              <div className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">手动输入新客户（不会关联已有客户表）</div>
               <input
                 type="text"
                 value={draftName}

@@ -210,7 +210,7 @@ export default function ShareDialog({ targetType, targetId, targetTitle, open, o
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-xs text-white truncate">{s.shared_to_name}</div>
-                      <div className="flex items-center gap-2 text-[10px] text-gray-500">
+                      <div className="flex items-center gap-2 text-[11px] text-gray-500">
                         <span className={s.permission === 'commenter' ? 'text-blue-400' : 'text-gray-400'}>
                           {s.permission === 'commenter' ? '可评论' : '只读'}
                         </span>

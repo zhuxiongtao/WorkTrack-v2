@@ -148,14 +148,14 @@ export default function LogViewerPage() {
                   className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-bg-hover-secondary/50 transition-colors text-left"
                 >
                   <span className={`w-1.5 h-1.5 rounded-full ${level.bg} ${level.color} flex-shrink-0`} />
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${level.bg} ${level.color} flex-shrink-0`}>
+                  <span className={`text-[11px] px-1.5 py-0.5 rounded ${level.bg} ${level.color} flex-shrink-0`}>
                     {log.level.toUpperCase()}
                   </span>
-                  <span className="text-[10px] text-gray-500 flex-shrink-0">
+                  <span className="text-[11px] text-gray-500 flex-shrink-0">
                     {CATEGORY_LABELS[log.category] || log.category}
                   </span>
                   <span className="flex-1 min-w-0 text-xs text-gray-300 truncate">{log.message}</span>
-                  <span className="text-[10px] text-gray-600 flex-shrink-0">{formatTime(log.created_at)}</span>
+                  <span className="text-[11px] text-gray-600 flex-shrink-0">{formatTime(log.created_at)}</span>
                   {log.details && (
                     isExpanded
                       ? <ChevronDown size={12} className="text-gray-500 flex-shrink-0" />

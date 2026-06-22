@@ -1,7 +1,7 @@
-"""AI 资讯抓取服务 —— 每 2 小时从 aihot.virxact.com 抓 RSS 落库到 news_cache 表"""
+"""AI 资讯抓取服务 —— 定时从 aihot.virxact.com 抓 RSS 落库到 news_cache 表"""
 import re
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional, Tuple
 from xml.etree import ElementTree as ET
 
@@ -187,41 +187,56 @@ def _fetch_rss_sync() -> list[dict]:
     return items
 
 
-def _upsert_items(items: list[dict]) -> Tuple[int, int]:
-    """把抓到的条目 upsert 到 news_cache 表，返回 (新增, 更新)"""
+NEWS_RETENTION_DAYS = 30  # 超过此天数的旧条目在每次抓取后自动清理
+
+
+def _insert_new_items(items: list[dict]) -> Tuple[int, int]:
+    """只插入 guid 不存在的新条目，已有的直接跳过。返回 (新增, 跳过)"""
     if not items:
         return 0, 0
-    inserted = updated = 0
+
+    guids = [it["guid"] for it in items]
     with Session(engine) as db:
-        for it in items:
-            existing = db.exec(
-                select(NewsCache).where(NewsCache.guid == it["guid"])
-            ).first()
-            if existing:
-                existing.title = it["title"]
-                existing.url = it["url"]
-                existing.source = it["source"]
-                existing.description = it["description"]
-                existing.category = it["category"]
-                existing.pub_date = it["pub_date"]
-                existing.fetched_at = datetime.now(timezone.utc)
-                db.add(existing)
-                updated += 1
-            else:
-                db.add(NewsCache(**it))
-                inserted += 1
-        db.commit()
-    return inserted, updated
+        existing_guids: set[str] = set(
+            db.exec(select(NewsCache.guid).where(NewsCache.guid.in_(guids))).all()
+        )
+        new_items = [it for it in items if it["guid"] not in existing_guids]
+        for it in new_items:
+            db.add(NewsCache(**it))
+        if new_items:
+            db.commit()
+    return len(new_items), len(existing_guids)
+
+
+def _cleanup_old_news(retention_days: int = NEWS_RETENTION_DAYS) -> int:
+    """删除 fetched_at 早于 retention_days 天的旧条目"""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    with Session(engine) as db:
+        old_items = db.exec(
+            select(NewsCache).where(NewsCache.fetched_at < cutoff)
+        ).all()
+        for item in old_items:
+            db.delete(item)
+        if old_items:
+            db.commit()
+    return len(old_items)
 
 
 def fetch_ai_news() -> dict:
     """抓取入口（被 scheduler 调用，也被 admin 手动触发接口用）"""
     try:
         items = _fetch_rss_sync()
-        inserted, updated = _upsert_items(items)
-        msg = f"AI 资讯抓取完成: 新增 {inserted}, 更新 {updated}, 共 {len(items)} 条"
+        inserted, skipped = _insert_new_items(items)
+        deleted = _cleanup_old_news()
+        msg = f"AI 资讯抓取完成: 新增 {inserted}, 跳过 {skipped}, 清理 {deleted} 条过期"
         logger.info(msg)
-        return {"success": True, "inserted": inserted, "updated": updated, "total": len(items)}
+        return {
+            "success": True,
+            "inserted": inserted,
+            "skipped": skipped,
+            "deleted": deleted,
+            "total": len(items),
+        }
     except Exception as e:
         logger.error("AI 资讯抓取失败: %s", e, exc_info=True)
         return {"success": False, "error": str(e)[:200]}

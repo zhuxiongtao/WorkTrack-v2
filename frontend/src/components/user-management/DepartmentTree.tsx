@@ -92,7 +92,7 @@ export function DepartmentTree({ selectedDepartmentId, onDepartmentSelect }: Dep
         <div className="flex items-center gap-2">
           <Building2 size={16} className="text-accent-blue" />
           <span className="text-sm font-bold text-gray-800 dark:text-gray-200">组织架构</span>
-          <span className="text-[10px] text-gray-400 dark:text-gray-500 ml-1" title="按住行首拖动图标可调整上级">可拖拽改父</span>
+          <span className="text-[11px] text-gray-400 dark:text-gray-500 ml-1" title="按住行首拖动图标可调整上级">可拖拽改父</span>
         </div>
         <button
           onClick={openCreateRoot}

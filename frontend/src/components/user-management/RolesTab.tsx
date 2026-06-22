@@ -81,14 +81,14 @@ export function RolesTab() {
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-sm truncate">{r.name}</span>
                   {r.is_system ? (
-                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-gray-100 dark:bg-bg-hover text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-border/20">系统内置</span>
+                    <span className="text-[11px] font-bold px-1.5 py-0.2 rounded bg-gray-100 dark:bg-bg-hover text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-border/20">系统内置</span>
                   ) : (
-                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-gray-50 dark:bg-bg-hover/30 text-gray-500 dark:text-gray-400 border border-gray-150 dark:border-border/10">自定义</span>
+                    <span className="text-[11px] font-bold px-1.5 py-0.2 rounded bg-gray-50 dark:bg-bg-hover/30 text-gray-500 dark:text-gray-400 border border-gray-150 dark:border-border/10">自定义</span>
                   )}
                 </div>
-                <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1.5 font-mono truncate">{r.code}</p>
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1.5 font-mono truncate">{r.code}</p>
                 <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-gray-100 dark:border-border/10">
-                  <span className="text-[10px] text-gray-400 dark:text-gray-500">{r.permission_codes.length} 项权限定义</span>
+                  <span className="text-[11px] text-gray-400 dark:text-gray-500">{r.permission_codes.length} 项权限定义</span>
                   <ChevronRight size={12} className={`text-gray-400 transition-transform ${selectedRoleId === r.id ? 'translate-x-0.5 text-accent-blue' : 'group-hover:translate-x-0.5'}`} />
                 </div>
               </button>

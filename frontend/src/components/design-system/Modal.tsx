@@ -242,7 +242,7 @@ export function Field({
         {required && <span className="text-rose-400 ml-0.5">*</span>}
         {hint && (
           <span
-            className="ml-1.5 text-[10px] font-normal"
+            className="ml-1.5 text-[11px] font-normal"
             style={{ color: 'var(--text-muted, #6B7280)' }}
           >
             {hint}

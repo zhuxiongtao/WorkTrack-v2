@@ -102,8 +102,8 @@ function AIInitiativeBlock({ text, evidence, compact = false }: { text: string; 
     <div className="rounded-lg bg-[#8B5CF6]/5 border border-[#8B5CF6]/25 p-3">
       <div className="flex items-center gap-1.5 mb-2">
         <Brain size={12} className="text-[#A78BFA]" />
-        <span className="text-[10px] text-[#A78BFA] font-medium">AI 领域动向</span>
-        <span className="text-[9px] text-gray-500 ml-1">
+        <span className="text-[11px] text-[#A78BFA] font-medium">AI 领域动向</span>
+        <span className="text-[11px] text-gray-500 ml-1">
           基于多源真实证据{evidence.length ? `（${evidence.length} 条来源）` : ''}
         </span>
       </div>
@@ -122,7 +122,7 @@ function AIInitiativeBlock({ text, evidence, compact = false }: { text: string; 
                     href={ev.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1 ml-1.5 text-[10px] text-[#A78BFA] hover:text-white hover:bg-[#8B5CF6]/30 px-1.5 py-0.5 rounded transition-colors align-baseline whitespace-nowrap"
+                    className="inline-flex items-center gap-1 ml-1.5 text-[11px] text-[#A78BFA] hover:text-white hover:bg-[#8B5CF6]/30 px-1.5 py-0.5 rounded transition-colors align-baseline whitespace-nowrap"
                     title={ev.title || ev.url}
                   >
                     <span className="truncate max-w-[120px]">{ev.domain || ev.url}</span>
@@ -155,7 +155,7 @@ function StageProgress({ current }: { current: StageKey | null }) {
           const active = i === idx
           return (
             <div key={s.key} className="flex items-center gap-1 flex-1">
-              <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] flex-1 justify-center
+              <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] flex-1 justify-center
                 ${done ? `${s.color} bg-[var(--stage-bg)]/10` :
                   active ? `${s.color} bg-[var(--stage-bg)]/15 ring-1 ring-current/30` :
                   'text-gray-600 bg-bg-hover/40'}`}
@@ -638,7 +638,7 @@ export default function CustomersPage() {
                 <Filter size={12} className="text-gray-500" />
                 <span className="text-[11px] text-gray-500">筛选</span>
                 {hasActiveFilter && (
-                  <button onClick={clearAllFilters} className="text-[10px] text-[#3B82F6] hover:underline ml-1">清除全部</button>
+                  <button onClick={clearAllFilters} className="text-[11px] text-[#3B82F6] hover:underline ml-1">清除全部</button>
                 )}
               </div>
 
@@ -646,7 +646,7 @@ export default function CustomersPage() {
               {industryGroups.length > 0 && (
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
-                    <span className="text-[10px] text-gray-600 mr-1 flex-shrink-0">行业</span>
+                    <span className="text-[11px] text-gray-600 mr-1 flex-shrink-0">行业</span>
                     {industryGroups.map((ig) => (
                       <button
                         key={ig.group}
@@ -670,7 +670,7 @@ export default function CustomersPage() {
                         }`}
                       >
                         {ig.group}
-                        <span className="text-[10px] opacity-60 ml-1">{ig.count}</span>
+                        <span className="text-[11px] opacity-60 ml-1">{ig.count}</span>
                       </button>
                     ))}
                   </div>
@@ -694,7 +694,7 @@ export default function CustomersPage() {
                           }`}
                         >
                           {ind.name}
-                          <span className="text-[9px] opacity-50 ml-1">{ind.count}</span>
+                          <span className="text-[11px] opacity-50 ml-1">{ind.count}</span>
                         </button>
                       ))}
                     </div>
@@ -705,7 +705,7 @@ export default function CustomersPage() {
               {/* 状态标签行 */}
               {statuses.length > 0 && (
                 <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
-                  <span className="text-[10px] text-gray-600 mr-1 flex-shrink-0">状态</span>
+                  <span className="text-[11px] text-gray-600 mr-1 flex-shrink-0">状态</span>
                   {statuses.map((st) => {
                     const cnt = statusCounts(st)
                     if (cnt === 0) return null
@@ -720,7 +720,7 @@ export default function CustomersPage() {
                         }`}
                       >
                         {st}
-                        <span className="text-[10px] opacity-60 ml-1">{cnt}</span>
+                        <span className="text-[11px] opacity-60 ml-1">{cnt}</span>
                       </button>
                     )
                   })}
@@ -744,7 +744,7 @@ export default function CustomersPage() {
                       <h4 className="text-sm font-bold text-white truncate">{c.name}</h4>
                       <p className="text-[11px] text-gray-500 mt-0.5">{c.industry || '未设置行业'}</p>
                     </div>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full border flex-shrink-0 ${statusColors[c.status] || statusColors['潜在']}`}>{c.status}</span>
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full border flex-shrink-0 ${statusColors[c.status] || statusColors['潜在']}`}>{c.status}</span>
                   </div>
                   {/* 关键信息 */}
                   <div className="space-y-1.5 text-[11px]">
@@ -836,7 +836,7 @@ export default function CustomersPage() {
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-xs text-gray-400 flex items-center gap-1.5"><Users size={12} />联系人</p>
                     <button onClick={() => { setContactForm({ name: '', phone: '', email: '', position: '', is_primary: false }); setEditingContactId(null); setShowAddContact(true) }}
-                      className="text-[10px] text-[#3B82F6] hover:text-blue-400 flex items-center gap-0.5"><Plus size={10} />添加</button>
+                      className="text-[11px] text-[#3B82F6] hover:text-blue-400 flex items-center gap-0.5"><Plus size={10} />添加</button>
                   </div>
                   {contacts.length === 0 ? (
                     <p className="text-xs text-gray-600">暂无联系人</p>
@@ -847,12 +847,12 @@ export default function CustomersPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5">
                               <span className="text-xs text-gray-200">{ct.name}</span>
-                              {ct.is_primary && <span className="text-[9px] px-1 rounded bg-[#3B82F6]/20 text-[#3B82F6]">主要</span>}
-                              {ct.position && <span className="text-[10px] text-gray-500">{ct.position}</span>}
+                              {ct.is_primary && <span className="text-[11px] px-1 rounded bg-[#3B82F6]/20 text-[#3B82F6]">主要</span>}
+                              {ct.position && <span className="text-[11px] text-gray-500">{ct.position}</span>}
                             </div>
                             <div className="flex items-center gap-2 mt-0.5">
-                              {ct.phone && <span className="text-[10px] text-gray-400">{ct.phone}</span>}
-                              {ct.email && <span className="text-[10px] text-gray-400">{ct.email}</span>}
+                              {ct.phone && <span className="text-[11px] text-gray-400">{ct.phone}</span>}
+                              {ct.email && <span className="text-[11px] text-gray-400">{ct.email}</span>}
                             </div>
                           </div>
                           <div className="flex items-center gap-1 opacity-0 group-hover/ct:opacity-100 transition-opacity">
@@ -880,16 +880,16 @@ export default function CustomersPage() {
                         <div className="flex items-center gap-3">
                           <input value={contactForm.position} onChange={(e) => setContactForm({ ...contactForm, position: e.target.value })}
                             placeholder="职位" className="flex-1 px-2 py-1.5 rounded bg-bg-card border border-border text-xs text-gray-200 outline-none focus:border-[#3B82F6]" />
-                          <label className="flex items-center gap-1 text-[10px] text-gray-400 cursor-pointer">
+                          <label className="flex items-center gap-1 text-[11px] text-gray-400 cursor-pointer">
                             <input type="checkbox" checked={contactForm.is_primary} onChange={(e) => setContactForm({ ...contactForm, is_primary: e.target.checked })}
                               className="w-3 h-3 rounded" />主要联系人
                           </label>
                         </div>
                         <div className="flex items-center gap-2">
                           <button onClick={() => saveContact(c.id)}
-                            className="px-3 py-1 rounded bg-[#3B82F6] text-[#fff] text-[10px] hover:bg-blue-600">保存</button>
+                            className="px-3 py-1 rounded bg-[#3B82F6] text-[#fff] text-[11px] hover:bg-blue-600">保存</button>
                           <button onClick={() => { setEditingContactId(null); setShowAddContact(false); setContactForm({ name: '', phone: '', email: '', position: '', is_primary: false }) }}
-                            className="px-3 py-1 rounded bg-bg-hover text-gray-400 text-[10px] hover:text-white">取消</button>
+                            className="px-3 py-1 rounded bg-bg-hover text-gray-400 text-[11px] hover:text-white">取消</button>
                         </div>
                       </div>
                     </div>
@@ -899,25 +899,25 @@ export default function CustomersPage() {
                   <div className="space-y-3">
                     {c.core_products && (
                       <div>
-                        <span className="text-[10px] text-gray-500 flex items-center gap-1 mb-1"><Building2 size={10} />核心产品</span>
+                        <span className="text-[11px] text-gray-500 flex items-center gap-1 mb-1"><Building2 size={10} />核心产品</span>
                         <p className="text-sm text-gray-300">{c.core_products}</p>
                       </div>
                     )}
                     {c.business_scope && (
                       <div>
-                        <span className="text-[10px] text-gray-500 flex items-center gap-1 mb-1"><Globe size={10} />主营业务</span>
+                        <span className="text-[11px] text-gray-500 flex items-center gap-1 mb-1"><Globe size={10} />主营业务</span>
                         <p className="text-sm text-gray-300">{c.business_scope}</p>
                       </div>
                     )}
                     {c.scale && (
                       <div>
-                        <span className="text-[10px] text-gray-500 flex items-center gap-1 mb-1"><Users size={10} />规模</span>
+                        <span className="text-[11px] text-gray-500 flex items-center gap-1 mb-1"><Users size={10} />规模</span>
                         <p className="text-sm text-gray-300">{c.scale}</p>
                       </div>
                     )}
                     {c.website && (
                       <div>
-                        <span className="text-[10px] text-gray-500 flex items-center gap-1 mb-1"><Globe size={10} />官网</span>
+                        <span className="text-[11px] text-gray-500 flex items-center gap-1 mb-1"><Globe size={10} />官网</span>
                         <a href={c.website.startsWith('http') ? c.website : `https://${c.website}`}
                           target="_blank" rel="noopener noreferrer"
                           className="text-sm text-[#8B5CF6] hover:underline break-all">{c.website}</a>
@@ -925,18 +925,18 @@ export default function CustomersPage() {
                     )}
                     {c.profile && (
                       <div>
-                        <span className="text-[10px] text-gray-500 flex items-center gap-1 mb-1"><FileText size={10} />公司简介</span>
+                        <span className="text-[11px] text-gray-500 flex items-center gap-1 mb-1"><FileText size={10} />公司简介</span>
                         <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{stripHtml(c.profile)}</p>
                       </div>
                     )}
                     {c.recent_news && (
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-[10px] text-gray-500 flex items-center gap-1"><TrendingUp size={10} />近期动向</span>
+                          <span className="text-[11px] text-gray-500 flex items-center gap-1"><TrendingUp size={10} />近期动向</span>
                           <button
                             onClick={(e) => { e.stopPropagation(); handleRefreshNews(c.id) }}
                             disabled={refreshingNewsId === c.id}
-                            className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 transition-colors disabled:opacity-50"
+                            className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 transition-colors disabled:opacity-50"
                           >
                             {refreshingNewsId === c.id ? <Loader2 size={9} className="animate-spin" /> : <RefreshCw size={9} />}
                             {refreshingNewsId === c.id ? '刷新中' : '刷新'}
@@ -1062,7 +1062,7 @@ export default function CustomersPage() {
                       <div className="flex items-start gap-2">
                         <Image size={13} className="text-gray-500 mt-0.5 shrink-0" />
                         <div>
-                          <span className="text-[10px] text-gray-500">Logo域名</span>
+                          <span className="text-[11px] text-gray-500">Logo域名</span>
                           <p className="text-xs text-gray-300">{companyInfo.logo_url}</p>
                         </div>
                       </div>
@@ -1071,7 +1071,7 @@ export default function CustomersPage() {
                       <div className="flex items-start gap-2">
                         <Globe size={13} className="text-gray-500 mt-0.5 shrink-0" />
                         <div>
-                          <span className="text-[10px] text-gray-500">行业</span>
+                          <span className="text-[11px] text-gray-500">行业</span>
                           <p className="text-xs text-gray-300">{companyInfo.industry}</p>
                         </div>
                       </div>
@@ -1080,7 +1080,7 @@ export default function CustomersPage() {
                       <div className="flex items-start gap-2">
                         <Building2 size={13} className="text-gray-500 mt-0.5 shrink-0" />
                         <div>
-                          <span className="text-[10px] text-gray-500">核心产品</span>
+                          <span className="text-[11px] text-gray-500">核心产品</span>
                           <p className="text-xs text-gray-300">{companyInfo.core_products}</p>
                         </div>
                       </div>
@@ -1089,7 +1089,7 @@ export default function CustomersPage() {
                       <div className="flex items-start gap-2">
                         <FileText size={13} className="text-gray-500 mt-0.5 shrink-0" />
                         <div>
-                          <span className="text-[10px] text-gray-500">主营业务</span>
+                          <span className="text-[11px] text-gray-500">主营业务</span>
                           <p className="text-xs text-gray-300">{companyInfo.business_scope}</p>
                         </div>
                       </div>
@@ -1098,7 +1098,7 @@ export default function CustomersPage() {
                       <div className="flex items-start gap-2">
                         <Users size={13} className="text-gray-500 mt-0.5 shrink-0" />
                         <div>
-                          <span className="text-[10px] text-gray-500">规模</span>
+                          <span className="text-[11px] text-gray-500">规模</span>
                           <p className="text-xs text-gray-300">{companyInfo.scale}</p>
                         </div>
                       </div>
@@ -1107,7 +1107,7 @@ export default function CustomersPage() {
                       <div className="flex items-start gap-2">
                         <FileText size={13} className="text-gray-500 mt-0.5 shrink-0" />
                         <div>
-                          <span className="text-[10px] text-gray-500">公司简介</span>
+                          <span className="text-[11px] text-gray-500">公司简介</span>
                           <p className="text-xs text-gray-300">{companyInfo.profile}</p>
                         </div>
                       </div>
@@ -1116,7 +1116,7 @@ export default function CustomersPage() {
                       <div className="flex items-start gap-2">
                         <TrendingUp size={13} className="text-gray-500 mt-0.5 shrink-0" />
                         <div>
-                          <span className="text-[10px] text-gray-500">近期动向</span>
+                          <span className="text-[11px] text-gray-500">近期动向</span>
                           <p className="text-xs text-gray-300">{companyInfo.recent_news}</p>
                         </div>
                       </div>
@@ -1207,7 +1207,7 @@ export default function CustomersPage() {
                         <button
                           type="button"
                           onClick={handleFetchCompanyInfo}
-                          className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md text-[#A78BFA] hover:text-white hover:bg-[#8B5CF6]/20 border border-[#8B5CF6]/30 transition-colors"
+                          className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md text-[#A78BFA] hover:text-white hover:bg-[#8B5CF6]/20 border border-[#8B5CF6]/30 transition-colors"
                           title="联网采集该公司在 AI 领域的真实动向"
                         >
                           <Sparkles size={10} />AI 采集

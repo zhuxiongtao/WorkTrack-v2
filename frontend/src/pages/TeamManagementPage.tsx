@@ -323,7 +323,7 @@ export default function TeamManagementPage() {
                     {selectedIds.map(id => {
                       const m = memberList.find(x => x.id === id)
                       return m ? (
-                        <span key={id} className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#8B5CF6]/10 text-[#A78BFA] text-[10px] border border-[#8B5CF6]/20">
+                        <span key={id} className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#8B5CF6]/10 text-[#A78BFA] text-[11px] border border-[#8B5CF6]/20">
                           {m.name || m.username}
                           <button onClick={() => toggleMember(id)} className="hover:text-white"><X size={9} /></button>
                         </span>
@@ -370,9 +370,9 @@ export default function TeamManagementPage() {
                                     {isExp ? <ChevronDown size={15} className="text-gray-500 shrink-0" /> : <ChevronRight size={15} className="text-gray-500 shrink-0" />}
                                     <Calendar size={14} className="text-gray-500 shrink-0" />
                                     <span className="text-sm font-medium text-white flex-1">{formatWeekRange(week.week_start, week.week_end)}</span>
-                                    <span className="text-[10px] text-gray-500 bg-bg-hover px-1.5 py-0.5 rounded-full shrink-0">{week.report_count} 篇</span>
+                                    <span className="text-[11px] text-gray-500 bg-bg-hover px-1.5 py-0.5 rounded-full shrink-0">{week.report_count} 篇</span>
                                     {week.member_names && week.member_names.length > 0 && (
-                                      <span className="text-[10px] text-gray-500 shrink-0">
+                                      <span className="text-[11px] text-gray-500 shrink-0">
                                         {week.member_names.slice(0, 3).join('、')}{week.member_names.length > 3 ? ' 等' : ''}
                                       </span>
                                     )}
@@ -391,11 +391,11 @@ export default function TeamManagementPage() {
                                             <FileText size={12} className="text-gray-600 shrink-0" />
                                             <div className="flex flex-col items-center w-10 shrink-0">
                                               <span className="text-sm font-bold text-gray-300">{d.getDate()}</span>
-                                              <span className="text-[9px] text-gray-500">{WEEKDAY_NAMES[d.getDay()]}</span>
+                                              <span className="text-[11px] text-gray-500">{WEEKDAY_NAMES[d.getDay()]}</span>
                                             </div>
                                             <span className="w-px self-stretch bg-border/60 shrink-0" />
                                             {r.user_name && (
-                                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#8B5CF6]/10 text-[#A78BFA] border border-[#8B5CF6]/15 shrink-0 font-medium">{r.user_name}</span>
+                                              <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-[#8B5CF6]/10 text-[#A78BFA] border border-[#8B5CF6]/15 shrink-0 font-medium">{r.user_name}</span>
                                             )}
                                             <p className="flex-1 min-w-0 text-xs text-gray-400 line-clamp-1 leading-relaxed">
                                               {r.snippet || r.title || '日报记录'}
@@ -480,13 +480,13 @@ export default function TeamManagementPage() {
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 flex-wrap">
                                       <span className="text-sm font-medium text-white">{formatWeekRange(week.week_start, week.week_end)}</span>
-                                      <span className="text-[10px] text-gray-500 bg-bg-hover px-1.5 py-0.5 rounded-full">{week.report_count} 篇日报</span>
+                                      <span className="text-[11px] text-gray-500 bg-bg-hover px-1.5 py-0.5 rounded-full">{week.report_count} 篇日报</span>
                                       {isSubmitted ? (
-                                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 font-bold border border-emerald-500/15">已提交</span>
+                                        <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 font-bold border border-emerald-500/15">已提交</span>
                                       ) : hasSummary ? (
-                                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500 font-bold border border-amber-500/15">草稿</span>
+                                        <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500 font-bold border border-amber-500/15">草稿</span>
                                       ) : (
-                                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-500/10 text-gray-400 border border-gray-500/15">待总结</span>
+                                        <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-gray-500/10 text-gray-400 border border-gray-500/15">待总结</span>
                                       )}
                                     </div>
                                   </div>
@@ -495,7 +495,7 @@ export default function TeamManagementPage() {
                                     {!isSubmitted && !hasSummary && (
                                       <button
                                         onClick={() => { setEditingSummary(week.week_start); setEditText(''); setEditInitial(''); setExpandedWeeklySummaries(prev => { const n = new Set(prev); n.add(week.week_start); return n }) }}
-                                        className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-bg-hover text-gray-400 hover:text-white border border-border transition-colors"
+                                        className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg bg-bg-hover text-gray-400 hover:text-white border border-border transition-colors"
                                       >
                                         <Edit3 size={10} />写周报
                                       </button>
@@ -504,7 +504,7 @@ export default function TeamManagementPage() {
                                       <button
                                         onClick={() => handleAiWeeklySummary(week.week_start, week.week_end)}
                                         disabled={isSummarizing}
-                                        className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-bg-hover text-gray-400 hover:text-[#8B5CF6] border border-border transition-colors disabled:opacity-50"
+                                        className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg bg-bg-hover text-gray-400 hover:text-[#8B5CF6] border border-border transition-colors disabled:opacity-50"
                                       >
                                         {isSummarizing ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />}
                                         AI 总结

@@ -42,7 +42,7 @@ export function StatusBadge({ variant, children, noIcon = false, className = '',
   return (
     <span
       title={title}
-      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium border ${style.bg} ${style.text} ${style.border} ${className}`}
+      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-medium border ${style.bg} ${style.text} ${style.border} ${className}`}
     >
       {!noIcon && <Icon size={10} style={{ color: style.iconColor }} />}
       {children}
