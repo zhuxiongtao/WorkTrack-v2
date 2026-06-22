@@ -24,3 +24,4 @@ class User(SQLModel, table=True):
     failed_login_attempts: int = Field(default=0)
     locked_until: Optional[datetime] = Field(default=None)
     token_version: int = Field(default=1)
+    must_change_password: bool = Field(default=False)  # 首次登录需强制修改密码（管理员新建账号时置 True）

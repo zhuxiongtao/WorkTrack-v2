@@ -8,7 +8,7 @@
 set -e
 
 DOCKER_USER="zxt815"
-IMAGE_NAME="${DOCKER_USER}/worktrack"
+IMAGE_NAME="${DOCKER_USER}/worktrack-v2"
 BUILDER="${BUILDER:-colima}"
 VERSION="${1:-latest}"
 LOAD_ONLY=false

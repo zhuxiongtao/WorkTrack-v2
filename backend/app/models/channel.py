@@ -6,7 +6,7 @@
 - 逆向号池
 - 官方聚合通道（Azure / Google）
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from sqlmodel import SQLModel, Field
 
@@ -44,5 +44,5 @@ class Channel(SQLModel, table=True):
     monthly_cost: float = 0.0        # 当月累计成本（冗余字段，便于查询）
 
     remarks: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

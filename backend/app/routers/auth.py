@@ -35,6 +35,7 @@ def _build_user_response(user: User, db: Session) -> dict:
         "email": user.email, "is_active": user.is_active, "avatar": user.avatar,
         "last_login_at": user.last_login_at.isoformat() if user.last_login_at else None,
         "can_manage_models": user.can_manage_models, "use_shared_models": user.use_shared_models,
+        "must_change_password": user.must_change_password,
         "permissions": perms,
     }
 
@@ -146,6 +147,8 @@ def change_password(req: ChangePasswordRequest, current_user: User = Depends(get
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="新密码不能与旧密码相同")
 
     current_user.password_hash = hash_password(req.new_password)
+    current_user.must_change_password = False  # 首登强制改密：改完即解除标志
+    db.add(current_user)
     bump_token_version(current_user, db)
 
     return {"message": "密码修改成功，请重新登录"}
@@ -196,6 +199,7 @@ def me(current_user: User = Depends(get_current_user), db: Session = Depends(get
         "use_shared_models": current_user.use_shared_models,
         "avatar": current_user.avatar,
         "last_login_at": current_user.last_login_at.isoformat() if current_user.last_login_at else None,
+        "must_change_password": current_user.must_change_password,
         "permissions": perms,
         "roles": role_codes,
     }

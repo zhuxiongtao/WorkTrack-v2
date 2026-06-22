@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { useAuth } from './contexts/AuthContext'
 import LoginPage from './pages/LoginPage'
+import ForcePasswordChange from './pages/ForcePasswordChange'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 import PublicWikiPage from './pages/PublicWikiPage'
@@ -150,7 +151,14 @@ function AppContent() {
         </div>
       )}
 
-      {!authLoading && user && (
+      {/* 首次登录强制改密：未改密前拦截整个应用 */}
+      {!authLoading && user && user.must_change_password && (
+        <div className="flex-1">
+          <ForcePasswordChange />
+        </div>
+      )}
+
+      {!authLoading && user && !user.must_change_password && (
         <>
       {/* ── 管理后台：/admin/* ── */}
       {/* 系统管理员只允许访问 /admin，强制跳转 */}

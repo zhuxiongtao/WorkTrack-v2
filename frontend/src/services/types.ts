@@ -31,7 +31,7 @@ export interface SimpleUser {
 
 export interface UserCreatePayload {
   username: string
-  password: string
+  password?: string  // 留空则后端自动生成初始密码
   name: string
   email: string
   is_admin: boolean

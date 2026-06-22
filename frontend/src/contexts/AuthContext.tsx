@@ -13,6 +13,7 @@ interface User {
   use_shared_models: boolean
   avatar: string | null
   last_login_at: string | null
+  must_change_password?: boolean
   permissions?: string[]
   roles?: string[]
 }

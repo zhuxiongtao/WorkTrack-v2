@@ -3,6 +3,7 @@
 import os
 import secrets
 import string
+import logging
 from typing import Optional, List
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Query
@@ -12,12 +13,16 @@ from sqlmodel import Session, select, func, or_
 from app.auth import (
     get_current_admin_user, get_current_user, hash_password, validate_password_strength,
     bump_token_version, require_permission, has_permission, invalidate_rbac_cache,
+    generate_initial_password,
 )
+from app.config import settings
 from app.database import get_session
 from app.models.user import User
 from app.models.rbac import Role, DepartmentRole
 from app.models.wiki import UserGroup
 from app.models.department import Department
+
+logger = logging.getLogger("worktrack.users")
 
 router = APIRouter(prefix="/api/v1/users", tags=["用户管理"])
 
@@ -54,8 +59,8 @@ def get_dept_member_ids(current_user: User, db: Session) -> Optional[List[int]]:
 
 # ===== 请求/响应模型 =====
 class UserCreate(BaseModel):
+    password: Optional[str] = None  # 留空则系统自动生成初始密码并邮件发送
     username: str
-    password: str
     name: str = ""
     email: str
     is_admin: bool = False
@@ -137,6 +142,7 @@ def _user_to_out(user: User) -> dict:
         "department_id": user.department_id,
         "job_title": user.job_title,
         "created_at": user.created_at.isoformat() if user.created_at else None,
+        "must_change_password": user.must_change_password,
     }
 
 
@@ -760,16 +766,21 @@ def set_user_roles(user_id: int, data: UserRolesUpdate, db: Session = Depends(ge
 @router.post("", status_code=201)
 def create_user(data: UserCreate, db: Session = Depends(get_session),
                 actor: User = Depends(require_permission("user:create"))):
-    """管理员创建新用户"""
+    """管理员创建新用户：默认自动生成初始密码、发送欢迎邮件、要求首登改密"""
     # 提权防护：只有当前已是 admin 的用户才能创建/把账号设为 is_admin=True
     if data.is_admin and not actor.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有系统管理员才能创建管理员账号")
     if not data.email or not data.email.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="邮箱为必填项")
-    # 密码强度校验
-    pwd_err = validate_password_strength(data.password)
-    if pwd_err:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=pwd_err)
+
+    # 初始密码：管理员留空则系统自动生成；填了则校验强度
+    if data.password and data.password.strip():
+        pwd_err = validate_password_strength(data.password)
+        if pwd_err:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=pwd_err)
+        initial_password = data.password
+    else:
+        initial_password = generate_initial_password()
 
     # 检查用户名是否已存在
     existing = db.exec(select(User).where(User.username == data.username)).first()
@@ -786,7 +797,7 @@ def create_user(data: UserCreate, db: Session = Depends(get_session),
 
     user = User(
         username=data.username,
-        password_hash=hash_password(data.password),
+        password_hash=hash_password(initial_password),
         name=data.name or data.username,
         email=data.email,
         is_admin=data.is_admin,
@@ -795,12 +806,32 @@ def create_user(data: UserCreate, db: Session = Depends(get_session),
         leader_id=resolved_leader_id,
         department_id=data.department_id,
         job_title=data.job_title,
+        must_change_password=True,  # 要求首次登录修改密码
     )
     db.add(user)
     db.flush()
     db.commit()
     db.refresh(user)
-    return _user_to_out_with_roles(user, db)
+
+    # 发送欢迎邮件（含用户名 + 初始密码）。邮件未配置/失败不阻断建号。
+    welcome_email_sent = False
+    try:
+        from app.services.email_service import is_email_configured, send_welcome_email
+        if is_email_configured():
+            login_url = (settings.cors_origins.split(",")[0] or "").strip()
+            welcome_email_sent = send_welcome_email(
+                to=user.email, username=user.username, password=initial_password,
+                name=user.name, login_url=login_url,
+            )
+    except Exception:
+        logger.warning("欢迎邮件发送异常 user=%s", user.username, exc_info=True)
+
+    result = _user_to_out_with_roles(user, db)
+    result["welcome_email_sent"] = welcome_email_sent
+    # 邮件未发出时，把初始密码返回给管理员，便于线下转交（已发出则不回传，仅存在于邮件中）
+    if not welcome_email_sent:
+        result["initial_password"] = initial_password
+    return result
 
 
 # ===== 编辑用户 =====

@@ -155,7 +155,7 @@ function EmailConfigSection({ showToast }: { showToast: ToastFn }) {
   const [showPassword, setShowPassword] = useState(false)
 
   useEffect(() => {
-    fetch('/api/v1/settings/email-config', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
+    fetch('/api/v1/settings/email-config', { headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` } })
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setCfg(prev => ({ ...prev, ...d, password: '' })) })
       .catch(() => {})
@@ -178,7 +178,7 @@ function EmailConfigSection({ showToast }: { showToast: ToastFn }) {
       if (cfg.password) payload.password = cfg.password
       const r = await fetch('/api/v1/settings/email-config', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('auth_token')}` },
         body: JSON.stringify(payload),
       })
       if (!r.ok) throw new Error((await r.json()).detail || '保存失败')
@@ -197,7 +197,7 @@ function EmailConfigSection({ showToast }: { showToast: ToastFn }) {
     try {
       const r = await fetch('/api/v1/settings/email-config/test', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('auth_token')}` },
         body: JSON.stringify({ to: testTo }),
       })
       const d = await r.json()
@@ -503,12 +503,9 @@ function AnnouncementTab({
               <span className="text-[11px] font-bold text-amber-300">公告</span>
               {!enabled && <span className="text-[11px] text-gray-500">（停用，不会显示）</span>}
             </div>
-            <div
-              className="text-[11px] text-amber-100 truncate"
-              dangerouslySetInnerHTML={{
-                __html: content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200) || '（暂无内容）',
-              }}
-            />
+            <div className="text-[11px] text-amber-100 truncate">
+              {content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200) || '（暂无内容）'}
+            </div>
           </div>
           <div className="px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/5">
             <div className="flex items-center gap-2 mb-1">

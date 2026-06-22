@@ -38,10 +38,15 @@ export async function fetchSimpleUsers(fetchWithAuth: FetchWithAuth): Promise<Si
   return res.json()
 }
 
+export type CreateUserResult = UserData & {
+  welcome_email_sent?: boolean
+  initial_password?: string  // 仅当欢迎邮件未发出时由后端回传，便于管理员线下转交
+}
+
 export async function createUser(
   fetchWithAuth: FetchWithAuth,
   data: UserCreatePayload,
-): Promise<UserData> {
+): Promise<CreateUserResult> {
   const res = await fetchWithAuth('/api/v1/users', {
     method: 'POST',
     body: JSON.stringify(data),

@@ -16,6 +16,9 @@
 | `week_range` 重复定义 | `daily_reports.py` 仅剩 1 处（line 24），已去重 |
 | Tavily key 明文返回 | `settings.py:1265` 改为 `tavily-config` 接口，脱敏返回（masked） |
 | `uploads/contracts` 入库 | `.gitignore:16` 已忽略 `backend/uploads/`，`git ls-files` 跟踪 0 个 |
+| **存储型 XSS（富文本渲染无净化）** | `MarkdownRenderer.tsx:48` 已加 `DOMPurify.sanitize`；`SettingsPage` 公告预览改纯文本渲染（2026-06-22） |
+| **B4 setup SSRF / 初始化后未关闭** | `setup.py` `test-db` 已初始化即 403 + 限 postgresql scheme + 5/min 限流；`initialize` 仍 400（2026-06-22） |
+| **B11 datetime.utcnow naive 混用** | 16 处 `default_factory=datetime.utcnow` 全改 `lambda: datetime.now(timezone.utc)`（channel/reconcile/bill_reconcile，2026-06-22） |
 
 ---
 
@@ -28,7 +31,7 @@
 | B1 | 硬编码默认 DB 凭据 | `config.py:36` | `postgresql://worktrack:worktrack@...` 仍作默认值 |
 | B2 | JWT 默认密钥 | `config.py` | `change-me-in-production` 默认值仍在（虽有启动校验，但默认值留在代码里） |
 | B3 | 默认管理员密码 | `database.py` | 初始化 admin 用 `admin123`（报告提及，建议改为随机生成并强制首登改密） |
-| B4 | `/api/v1/setup` 公开 | `main.py:308` | 任何人可触发初始化向导，应加"系统已初始化则禁用"的硬开关 |
+| B4 | ~~`/api/v1/setup` 公开~~ | `setup.py` | **已修复（2026-06-22）**：`test-db` 已初始化即 403 + 限 postgresql + 限流；`initialize` 仍 400 |
 | B5 | 登录无速率限制 | `routers/auth.py` | 有账户锁定，但缺 IP/全局限流，可跨用户名爆破 |
 | B6 | MCP 工具无数据权限 | `mcp_server.py` | create/update/delete 工具无用户上下文与归属校验（报告 P1，升级为 P0，因 Agent 调用面扩大） |
 
@@ -40,7 +43,7 @@
 | B8 | `ai_service.py` 1861 行 | `services/ai_service.py` | 单文件承担 LLM/ASR/Vertex 编排，职责过重，应按能力拆分 + 抽公共 provider 解析 |
 | B9 | AI 调用无重试 / 熔断 / 统一超时 | `ai_service.py` | 仅有基础超时，无重试与熔断，外部服务抖动直接传导给用户 |
 | B10 | sync/async 端点混用 | 多路由 | `def` 同步端点阻塞事件循环，应统一 `async def` + 异步 DB/IO |
-| B11 | datetime 时区不一致 | 全后端 | `datetime.now()` 与 `datetime.now(timezone.utc)` 混用，跨时区易出 bug |
+| B11 | ~~datetime 时区不一致~~ | 全后端 | **已修复（2026-06-22）**：16 处 `datetime.utcnow`（naive）全改 aware UTC，`utcnow` 已清零 |
 | B12 | `create_all()` + Alembic 双 schema 管理 | `database.py` | 有迁移漂移风险，建议移除 `create_all()`，只靠 Alembic |
 | B13 | AI 异常用通用 `RuntimeError` | `ai_service.py` | 缺自定义异常类型，调用方无法精确处理 |
 

@@ -12,12 +12,21 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session, select, text
 from sqlmodel import create_engine as sm_create_engine
 
-from app.database import engine, get_session, DEFAULT_FIELD_OPTIONS, _init_default_options_in_session, _init_rbac_data, _init_rbac_data, _init_rbac_data, _init_rbac_data
+from app.database import engine, get_session, DEFAULT_FIELD_OPTIONS, _init_default_options_in_session, _init_rbac_data
 from app.models.user import User
 from app.models.field_option import FieldOption
 from app.rate_limit import limiter
 
 router = APIRouter(prefix="/api/v1/setup", tags=["setup"])
+
+
+def _admin_exists() -> bool:
+    """系统是否已初始化（存在任意管理员）"""
+    try:
+        with Session(engine) as session:
+            return session.exec(select(User).where(User.is_admin == True)).first() is not None
+    except Exception:
+        return False
 
 
 class SetupStatusResponse(BaseModel):
@@ -69,8 +78,14 @@ def setup_status():
 
 
 @router.post("/test-db", response_model=TestDbResponse)
-def test_db(req: TestDbRequest):
-    """测试数据库连接是否可用"""
+@limiter.limit("5/minute")
+def test_db(request: Request, req: TestDbRequest):
+    """测试数据库连接是否可用（仅在系统未初始化时开放，避免被滥用为 SSRF 探测内网）"""
+    if _admin_exists():
+        raise HTTPException(status_code=403, detail="系统已初始化，该接口已禁用")
+    # 仅允许 PostgreSQL 连接串，禁止 file:// 等其他 scheme 被用于探测
+    if not req.db_url.startswith(("postgresql://", "postgresql+")):
+        return TestDbResponse(ok=False, error="仅支持 postgresql 连接串")
     try:
         test_engine = sm_create_engine(req.db_url, echo=False)
         with Session(test_engine) as session:

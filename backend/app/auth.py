@@ -2,6 +2,7 @@
 
 import re
 import time
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -55,6 +56,19 @@ def validate_password_strength(password: str) -> Optional[str]:
     if not re.search(r'\d', password):
         return "密码必须包含至少一个数字"
     return None
+
+
+def generate_initial_password(length: int = 12) -> str:
+    """生成满足强度要求的随机初始密码（去除易混淆字符 0/O/1/l/I，便于从邮件抄录）"""
+    letters = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ"
+    digits = "23456789"
+    alphabet = letters + digits
+    length = max(length, settings.password_min_length, 8)
+    while True:
+        pwd = "".join(secrets.choice(alphabet) for _ in range(length))
+        # 保证至少含一个字母和一个数字，满足 validate_password_strength
+        if any(c.isalpha() for c in pwd) and any(c.isdigit() for c in pwd):
+            return pwd
 
 
 # ===== 账号状态检查 =====

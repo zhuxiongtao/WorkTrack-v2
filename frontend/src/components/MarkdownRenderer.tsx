@@ -1,5 +1,7 @@
+import { useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import DOMPurify from 'dompurify'
 
 interface MarkdownRendererProps {
   content: string
@@ -42,12 +44,20 @@ export function stripMarkdown(input: string): string {
  * 用于日报、会议纪要等场景，保持与编辑器一致的渲染效果。
  */
 export default function MarkdownRenderer({ content, className = '' }: MarkdownRendererProps) {
+  const isHtml = isHtmlContent(content)
+  // 仅对 HTML 内容做净化，避免 dangerouslySetInnerHTML 引入存储型 XSS
+  // （日报/会议纪要等为用户可编辑内容，可能被注入 <img onerror>/<script> 等）
+  const safeHtml = useMemo(
+    () => (isHtml ? DOMPurify.sanitize(content) : ''),
+    [content, isHtml],
+  )
+
   if (!content) return null
 
-  // HTML 内容直接渲染
-  if (isHtmlContent(content)) {
+  // HTML 内容净化后再渲染
+  if (isHtml) {
     return (
-      <div className={`markdown-body ${className}`} dangerouslySetInnerHTML={{ __html: content }} />
+      <div className={`markdown-body ${className}`} dangerouslySetInnerHTML={{ __html: safeHtml }} />
     )
   }
 

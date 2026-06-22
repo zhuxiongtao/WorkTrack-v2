@@ -15,6 +15,21 @@ from typing import Optional
 
 logger = logging.getLogger("worktrack.email")
 
+
+def _ssl_context() -> ssl.SSLContext:
+    """构造带 CA 根证书的 SSL 上下文。
+
+    python.org 版 Python（尤其 macOS）和精简容器镜像默认可能没有根证书库，
+    直接用 ssl.create_default_context() 会在 TLS 握手时抛
+    CERTIFICATE_VERIFY_FAILED（unable to get local issuer certificate）。
+    优先使用 certifi 提供的 CA 包，缺失时再退回系统默认。
+    """
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        return ssl.create_default_context()
+
 # ── 邮件服务商预设 ──
 PROVIDER_PRESETS = {
     "gmail": {
@@ -102,14 +117,14 @@ def _send_smtp(to: list[str], subject: str, html_body: str, cfg: dict) -> None:
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     if use_ssl:
-        context = ssl.create_default_context()
-        with smtplib.SMTP_SSL(host, port, context=context) as server:
+        context = _ssl_context()
+        with smtplib.SMTP_SSL(host, port, context=context, timeout=10) as server:
             server.login(username, password)
             server.sendmail(username, to, msg.as_string())
     else:
-        with smtplib.SMTP(host, port) as server:
+        with smtplib.SMTP(host, port, timeout=10) as server:
             if use_tls:
-                context = ssl.create_default_context()
+                context = _ssl_context()
                 server.starttls(context=context)
             server.login(username, password)
             server.sendmail(username, to, msg.as_string())
@@ -181,6 +196,14 @@ def notify_approval_finished(instance, submitter_email: Optional[str]) -> None:
     )
     html = _tpl_approval_finished(instance, status_label)
     send_email([submitter_email], f"【审批结果】{instance.title} — {status_label}", html)
+
+
+# ── 新用户欢迎邮件 ──
+
+def send_welcome_email(to: str, username: str, password: str, name: str = "", login_url: str = "") -> bool:
+    """新建账号后发送欢迎邮件，告知用户名 + 初始密码 + 首登需改密"""
+    html = _tpl_welcome(username, password, name, login_url)
+    return send_email([to], "【WorkTrack】您的账号已创建，请尽快登录", html)
 
 
 # ── 密码重置 ──
@@ -342,6 +365,32 @@ def _tpl_approval_finished(instance, status_label: str) -> str:
   登录 WorkTrack 查看详细审批记录。
 </p>"""
     return _base_html(f"审批结果: {instance.title}", body)
+
+
+def _tpl_welcome(username: str, password: str, name: str = "", login_url: str = "") -> str:
+    greeting = f"{name}，您好" if name else "您好"
+    login_btn = (
+        f'<a href="{login_url}" style="display:inline-block;background:linear-gradient(135deg,#7C3AED,#4F46E5);color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-size:13px;font-weight:600;margin-top:4px;">立即登录</a>'
+        if login_url else ""
+    )
+    body = f"""
+<p style="color:#E5E7EB;font-size:15px;font-weight:600;margin:0 0 12px;">{greeting} 👋</p>
+<p style="color:#9CA3AF;font-size:13px;line-height:1.7;margin:0 0 16px;">
+  管理员已为您创建 WorkTrack 账号，以下是您的登录凭据：
+</p>
+<div style="background:rgba(124,58,237,0.1);border:1px solid rgba(124,58,237,0.3);border-radius:10px;padding:16px;margin:0 0 16px;">
+  <div style="color:#9CA3AF;font-size:12px;margin-bottom:4px;">登录用户名</div>
+  <div style="color:#A78BFA;font-size:15px;font-weight:700;margin-bottom:12px;font-family:monospace;">{username}</div>
+  <div style="color:#9CA3AF;font-size:12px;margin-bottom:4px;">初始密码</div>
+  <div style="color:#A78BFA;font-size:15px;font-weight:700;font-family:monospace;letter-spacing:0.5px;">{password}</div>
+</div>
+<div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:10px;padding:12px 16px;margin:0 0 16px;">
+  <div style="color:#FBBF24;font-size:12px;line-height:1.6;">
+    🔒 为保障账号安全，<b>首次登录后系统将要求您立即修改密码</b>。请勿将初始密码告知他人。
+  </div>
+</div>
+{login_btn}"""
+    return _base_html("欢迎加入 WorkTrack", body)
 
 
 def _tpl_password_reset(to: str, reset_url: str) -> str:

@@ -52,7 +52,7 @@ const TONE_BG: Record<string, string> = {
 }
 
 export function UserFormModal({ isOpen, editingUser, onClose }: UserFormModalProps) {
-  const { toast: showToast } = useToast()
+  const { toast: showToast, alert: showAlert } = useToast()
 
   const [form, setForm] = useState(() => ({
     username: editingUser?.username ?? '',
@@ -120,7 +120,8 @@ export function UserFormModal({ isOpen, editingUser, onClose }: UserFormModalPro
 
   // 当前密码强度（仅创建用户时计算）
   const pwdEval = useMemo(() => evaluatePassword(form.password), [form.password])
-  const pwdValid = editingUser || (pwdEval.score >= 3) // 至少"良好"
+  // 编辑时不校验；创建时密码可留空（系统自动生成），若填写则需至少"良好"
+  const pwdValid = !!editingUser || !form.password || pwdEval.score >= 3
 
   // 基础信息校验
   const basicsValid = useMemo(() => {
@@ -140,7 +141,7 @@ export function UserFormModal({ isOpen, editingUser, onClose }: UserFormModalPro
     if (!form.email.trim()) { showToast('电子邮箱不能为空', 'warning'); setStep('basics'); return }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(form.email.trim())) { showToast('请输入有效的电子邮箱地址', 'warning'); setStep('basics'); return }
-    if (!editingUser && !pwdValid) { showToast('请设置一个强密码（至少 8 位且含字母数字）', 'warning'); setStep('basics'); return }
+    if (!editingUser && form.password && !pwdValid) { showToast('自定义密码需至少 8 位且含字母数字，或留空由系统自动生成', 'warning'); setStep('basics'); return }
 
     if (editingUser) {
       updateMutation.mutate({
@@ -160,7 +161,7 @@ export function UserFormModal({ isOpen, editingUser, onClose }: UserFormModalPro
     } else {
       createMutation.mutate({
         username: form.username,
-        password: form.password,
+        password: form.password || undefined,  // 留空 → 后端自动生成初始密码
         name: form.name,
         email: form.email,
         is_admin: form.is_admin,
@@ -169,7 +170,22 @@ export function UserFormModal({ isOpen, editingUser, onClose }: UserFormModalPro
         leader_id: form.leader_id,
         department_id: form.department_id,
         job_title: form.job_title,
-      }, { onSuccess: onClose })
+      }, {
+        onSuccess: (data) => {
+          if (data?.welcome_email_sent) {
+            showToast('账号已创建，欢迎邮件（含初始密码）已发送给用户', 'success')
+          } else if (data?.initial_password) {
+            // 邮件未配置/发送失败：把初始密码弹给管理员线下转交
+            showAlert(
+              `账号「${form.username}」已创建，但欢迎邮件未发送（邮件服务未配置或发送失败）。\n\n请将以下初始密码转交给用户，其首次登录后需修改密码：\n\n初始密码：${data.initial_password}`,
+              'warning',
+            )
+          } else {
+            showToast('账号已创建', 'success')
+          }
+          onClose()
+        },
+      })
     }
   }, [form, editingUser, pwdValid, updateMutation, createMutation, showToast, onClose])
 
@@ -269,14 +285,14 @@ export function UserFormModal({ isOpen, editingUser, onClose }: UserFormModalPro
               </div>
 
               {!editingUser && (
-                <FormField label="初始密码" required icon={Lock} hint="用户首次登录后可自行修改">
+                <FormField label="初始密码" icon={Lock} hint="留空则系统自动生成并通过邮件发送给用户；无论是否自定义，用户首次登录都需强制修改密码">
                   <div className="relative">
                     <input
                       type={showPassword ? "text" : "password"}
                       value={form.password}
                       onChange={e => updateFormField('password', e.target.value)}
                       className="form-input pr-10 font-mono"
-                      placeholder="至少 8 位，包含字母和数字"
+                      placeholder="留空自动生成，或自定义（≥8 位，含字母数字）"
                     />
                     <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 flex items-center pr-3 hover:text-gray-800 dark:hover:text-gray-200 text-gray-400 cursor-pointer">
                       {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
