@@ -5,6 +5,8 @@ MCP (Model Context Protocol) 服务 - 对外暴露 WorkTrack 工具
 import json
 import os
 import time
+import secrets
+import logging
 from fastmcp import FastMCP
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
@@ -21,6 +23,17 @@ from app.models.system_preference import SystemPreference
 from app.services.vector_store import search_similar
 from datetime import date, timedelta
 from typing import Optional
+
+# ---------- MCP 审计日志 ----------
+# MCP 采用单一管理员签发的共享密钥，协议层无单用户身份，无法做行级数据隔离；
+# 因此对所有写操作统一记审计日志，保证每次变更可追溯（谁通过 MCP 改了什么）。
+_mcp_logger = logging.getLogger("worktrack.mcp")
+
+
+def _audit_write(tool: str, **detail) -> None:
+    """记录一次 MCP 写操作（工具名 + 关键参数/结果）"""
+    _mcp_logger.info("[MCP写操作] %s | %s", tool, detail)
+
 
 # ---------- MCP API Key 认证 ----------
 
@@ -84,7 +97,8 @@ class MCPAuthMiddleware(BaseHTTPMiddleware):
             )
         auth_header = request.headers.get("Authorization", "")
         expected = f"Bearer {key}"
-        if auth_header != expected:
+        # 常量时间比较，避免通过响应时间侧信道逐字节爆破密钥
+        if not secrets.compare_digest(auth_header, expected):
             return JSONResponse(
                 {"error": "MCP API Key 无效，请检查 Authorization 头"},
                 status_code=401,
@@ -163,6 +177,7 @@ def create_daily_report(user_id: int, content: str) -> dict:
         db.add(report)
         db.commit()
         db.refresh(report)
+        _audit_write("create_daily_report", report_id=report.id, user_id=user_id)
         return {"success": True, "report_id": report.id, "date": str(report.report_date)}
     finally:
         db.close()
@@ -180,6 +195,7 @@ def update_daily_report(report_id: int, content: Optional[str] = None) -> dict:
             r.content_md = content
         db.add(r)
         db.commit()
+        _audit_write("update_daily_report", report_id=r.id)
         return {"success": True, "report_id": r.id}
     finally:
         db.close()
@@ -331,6 +347,7 @@ def create_project(name: str, status: str = "active", customer_id: Optional[int]
         db.add(proj)
         db.commit()
         db.refresh(proj)
+        _audit_write("create_project", project_id=proj.id, user_id=user_id, customer_id=customer_id)
         return {"success": True, "project_id": proj.id}
     finally:
         db.close()
@@ -355,6 +372,7 @@ def update_project(project_id: int, name: Optional[str] = None, status: Optional
             p.deadline = date.fromisoformat(deadline) if deadline else None
         db.add(p)
         db.commit()
+        _audit_write("update_project", project_id=p.id)
         return {"success": True, "project_id": p.id}
     finally:
         db.close()
@@ -437,6 +455,7 @@ def create_customer(name: str, industry: str = "", status: str = "潜在", user_
         db.add(c)
         db.commit()
         db.refresh(c)
+        _audit_write("create_customer", customer_id=c.id, user_id=user_id)
         return {"success": True, "customer_id": c.id}
     finally:
         db.close()
@@ -517,6 +536,7 @@ def create_meeting(title: str, meeting_date: str, customer_id: Optional[int] = N
         db.add(m)
         db.commit()
         db.refresh(m)
+        _audit_write("create_meeting", meeting_id=m.id, customer_id=customer_id, project_id=project_id)
         return {"success": True, "meeting_id": m.id}
     finally:
         db.close()

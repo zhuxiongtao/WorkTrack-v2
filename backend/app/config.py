@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     # JWT（未设置时自动生成随机密钥并发出警告，生产环境务必设置 JWT_SECRET_KEY）
     jwt_secret_key: str = ""
 
+    # 运行环境：development | production
+    # production 下关键密钥缺失/使用默认值将直接拒绝启动（见 validate_security）
+    app_env: str = "development"
+
     # 安全配置
     allow_registration: bool = False
     cors_origins: str = "http://localhost:5173"
@@ -108,9 +112,48 @@ class Settings(BaseSettings):
     def effective_embedding_api_key(self) -> str:
         return self.embedding_api_key or self.llm_api_key
 
+    @property
+    def is_production(self) -> bool:
+        return self.app_env.strip().lower() in ("production", "prod")
+
     def validate_security(self) -> None:
-        """启动时校验安全配置，生产环境下关键密钥未设置时发出强烈警告"""
-        if not self.jwt_secret_key or self.jwt_secret_key == "change-me-in-production":
+        """启动时校验安全配置。
+
+        - 生产环境（APP_ENV=production）：关键密钥缺失/使用默认值直接抛错拒绝启动，
+          避免带病上线（弱凭据、可伪造 Token、跨域全开）。
+        - 非生产环境：保持「自动生成随机密钥 + 告警」的开发友好行为。
+        """
+        jwt_missing = (not self.jwt_secret_key) or self.jwt_secret_key == "change-me-in-production"
+        db_default = "worktrack:worktrack" in self.database_url and os.getenv("DATABASE_URL") is None
+        cors_wildcard = self.cors_origins == "*"
+
+        if self.is_production:
+            # 仅对真正致命的两项硬失败（弱凭据/可伪造 Token），避免误伤现有部署
+            problems = []
+            if jwt_missing:
+                problems.append(
+                    "JWT_SECRET_KEY 未设置（生产环境必须显式配置稳定密钥；缺失会导致重启即登出，且自动生成的密钥存在被推断/伪造风险）"
+                )
+            if db_default:
+                problems.append(
+                    "使用默认数据库凭据 worktrack:worktrack（生产环境必须通过 DATABASE_URL 或 DB_PASSWORD 设置安全凭据）"
+                )
+            if problems:
+                raise RuntimeError(
+                    "❌ 生产环境（APP_ENV=production）安全配置校验未通过，已拒绝启动：\n  - "
+                    + "\n  - ".join(problems)
+                    + "\n请在环境变量/.env 中补全后重启。"
+                )
+            # CORS 通配仅告警（与 credentials 的组合已在 main.py 处理），不阻断启动
+            if cors_wildcard:
+                warnings.warn(
+                    "⚠️  生产环境 CORS_ORIGINS=*（允许所有来源），建议改为具体域名以收紧跨域。",
+                    stacklevel=2,
+                )
+            return
+
+        # ===== 非生产环境：自动兜底 + 告警 =====
+        if jwt_missing:
             self.jwt_secret_key = secrets.token_urlsafe(32)
             warnings.warn(
                 "⚠️  JWT_SECRET_KEY 未设置，已自动生成随机密钥。重启后已有 Token 将失效！"
@@ -118,13 +161,13 @@ class Settings(BaseSettings):
                 "建议使用: python -c \"import secrets; print(secrets.token_urlsafe(32))\"",
                 stacklevel=2,
             )
-        if "worktrack:worktrack" in self.database_url and os.getenv("DATABASE_URL") is None:
+        if db_default:
             warnings.warn(
                 "⚠️  使用默认数据库凭据（worktrack:worktrack），这是严重安全隐患！"
                 "生产环境请务必通过 DATABASE_URL 环境变量设置安全的连接串。",
                 stacklevel=2,
             )
-        if self.cors_origins == "*":
+        if cors_wildcard:
             warnings.warn(
                 "⚠️  CORS_ORIGINS 设置为 *（允许所有来源），存在跨域安全风险！"
                 "生产环境请设置具体的域名，如: https://your-domain.com",

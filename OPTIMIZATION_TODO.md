@@ -28,12 +28,12 @@
 
 | # | 问题 | 位置 | 说明 |
 |---|---|---|---|
-| B1 | 硬编码默认 DB 凭据 | `config.py:36` | `postgresql://worktrack:worktrack@...` 仍作默认值 |
-| B2 | JWT 默认密钥 | `config.py` | `change-me-in-production` 默认值仍在（虽有启动校验，但默认值留在代码里） |
-| B3 | 默认管理员密码 | `database.py` | 初始化 admin 用 `admin123`（报告提及，建议改为随机生成并强制首登改密） |
+| B1 | ~~硬编码默认 DB 凭据~~ | `config.py` | **已缓解（2026-06-22）**：默认值保留供本地开发；`APP_ENV=production` 下使用 `worktrack:worktrack` 默认凭据直接拒绝启动 |
+| B2 | ~~JWT 默认密钥~~ | `config.py` | **已缓解（2026-06-22）**：`APP_ENV=production` 下 JWT 未设置/为占位值直接拒绝启动；开发环境自动生成随机密钥 |
+| B3 | ~~默认管理员密码~~ | `database.py:94` | **已修复**：`admin_password or token_urlsafe(12)` 随机生成 + 打印日志；并已加首登强制改密（须 ADMIN_PASSWORD 或随机） |
 | B4 | ~~`/api/v1/setup` 公开~~ | `setup.py` | **已修复（2026-06-22）**：`test-db` 已初始化即 403 + 限 postgresql + 限流；`initialize` 仍 400 |
-| B5 | 登录无速率限制 | `routers/auth.py` | 有账户锁定，但缺 IP/全局限流，可跨用户名爆破 |
-| B6 | MCP 工具无数据权限 | `mcp_server.py` | create/update/delete 工具无用户上下文与归属校验（报告 P1，升级为 P0，因 Agent 调用面扩大） |
+| B5 | ~~登录无速率限制~~ | `routers/auth.py:107` | **已修复**：登录与 setup 均加 `@limiter.limit("5/minute")`（slowapi，按 IP） |
+| B6 | ~~MCP 工具无数据权限~~ | `mcp_server.py` | **已缓解（2026-06-22）**：共享密钥模型无单用户身份，无法行级隔离；已加密钥常量时间比较 + 6 个写工具审计日志（可追溯）。彻底隔离需把密钥绑定到服务用户，属后续 |
 
 ### P1 可靠性 / 架构
 

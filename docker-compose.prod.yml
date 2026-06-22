@@ -4,6 +4,8 @@ services:
     ports:
       - "80:80"
     environment:
+      # 生产模式：JWT_SECRET_KEY / DB_PASSWORD 缺失将拒绝启动（见 config.validate_security）
+      - APP_ENV=production
       - DB_HOST=pgsql
       - DB_PORT=5432
       - DB_USER=${DB_USER}
