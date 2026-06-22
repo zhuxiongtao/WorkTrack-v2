@@ -9,7 +9,10 @@ __pycache__/
 
 # 环境 & 密钥
 .env
+.env.*
 *.env.local
+*.env.production
+*.env.nas
 
 # 数据文件（本地）
 backend/data/
@@ -18,15 +21,18 @@ backend/uploads/
 *.db-journal
 *.db-wal
 
-# IDE
+# IDE & 工具私有配置
 .vscode/
 .idea/
 .claude/
 .trae/
+.arts/
+.qoder/
 *.swp
 *.swo
 *~
 .DS_Store
+Thumbs.db
 
 # 截图 & 临时文件
 screenshot_*.png
@@ -67,5 +73,19 @@ backend/openapi.json
 consistency_report.json
 backend/test_reparse_api.py
 
-# Trae IDE 本地数据
-.trae/
+# 内部设计文档 / 规格文档（不进公开仓库）
+.spec/
+
+# 废弃迁移备份
+backend/alembic/versions_backup/
+
+# 废弃脚本
+backend/init_sqlite.py
+
+# 上传文件（用户数据，绝对不进仓库）
+backend/uploads/
+backend/data/
+
+# 内部分析 / TODO 文档
+OPTIMIZATION_TODO.md
+PROJECT_ANALYSIS.md
