@@ -20,16 +20,17 @@ interface InsightData {
 
 interface Overview {
   approvals: { pending_for_me: number; my_pending_submissions: number }
-  contracts: { total: number; status: Record<string, number>; expiring_soon: number; total_active_amount: number }
-  projects: { total: number; status: Record<string, number> }
-  customers: { total: number; new_this_month: number }
-  suppliers: { total: number; active: number }
-  channels: { total: number; active: number }
+  contracts: { total: number; status: Record<string, number>; expiring_soon: number; total_active_amount: number; visible: boolean }
+  projects: { total: number; status: Record<string, number>; visible: boolean }
+  customers: { total: number; new_this_month: number; visible: boolean }
+  suppliers: { total: number; active: number; visible: boolean }
+  channels: { total: number; active: number; visible: boolean }
   model_changes: Array<{
     id: number; title: string; risk_level: string; effective_date: string | null
     current_stage_name: string | null; current_stage_order: number | null; current_stage_status: string | null
   }>
-  personal: { report_streak: number; meetings_this_month: number }
+  model_changes_visible: boolean
+  personal: { meetings_this_month: number; meetings_visible: boolean; customers_visible: boolean }
 }
 
 type PresetKey = 'week' | 'month' | 'quarter' | 'half_year' | 'year'
@@ -101,7 +102,7 @@ const PROJECT_STATUS_STYLE: Record<string, { color: string }> = {
 
 export default function DashboardPage() {
   const { toast: showToast } = useToast()
-  const { user, fetchWithAuth } = useAuth()
+  const { user, fetchWithAuth, hasPermission } = useAuth()
   const navigate = useNavigate()
 
   const [preset, setPreset] = useState<PresetKey>('month')
@@ -198,8 +199,7 @@ export default function DashboardPage() {
 
   const getSubGreeting = (): { text: string; accent: boolean } => {
     const pending = overview?.approvals?.pending_for_me ?? 0
-    const expiring = overview?.contracts?.expiring_soon ?? 0
-    const streak = overview?.personal?.report_streak ?? 0
+    const expiring = (overview?.contracts?.visible ? overview.contracts.expiring_soon : 0) ?? 0
 
     if (pending > 0 && expiring > 0)
       return { text: `${pending} 条审批待处理，另有 ${expiring} 份合同即将到期，请注意跟进`, accent: true }
@@ -214,7 +214,7 @@ export default function DashboardPage() {
       2: '周二，保持节奏，一件一件做扎实',
       3: '周中关键节点，看看本周目标完成得如何',
       4: '再坚持一天，周五就在前面了',
-      5: `周五了，收好今天的工作，轻松进入周末${streak > 1 ? `，日报已连续打卡 ${streak} 天` : ''}`,
+      5: '周五了，收好今天的工作，轻松进入周末',
       6: '周末也在，辛苦了，注意休息',
       0: '周日，养精蓄锐，明天又是新的开始',
     }
@@ -324,57 +324,74 @@ export default function DashboardPage() {
               tone="blue"
               onClick={() => navigate('/approvals')}
             />
-            <ActionAlertCard
-              icon={AlertTriangle}
-              label="合同即将到期（30天内）"
-              count={overview.contracts.expiring_soon}
-              emptyText="无即将到期合同"
-              tone="red"
-              onClick={() => navigate('/contracts')}
-            />
+            {overview.contracts.visible && (
+              <ActionAlertCard
+                icon={AlertTriangle}
+                label="合同即将到期（30天内）"
+                count={overview.contracts.expiring_soon}
+                emptyText="无即将到期合同"
+                tone="red"
+                onClick={() => navigate('/contracts')}
+              />
+            )}
           </div>
 
           {/* ══ 业务总览 ══ */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
-            <BizCard
-              icon={FileText} label="合同" tone="indigo"
-              main={`${overview.contracts.status['生效中'] ?? 0}`} mainSub="生效中"
-              sub={`共 ${overview.contracts.total} 份${overview.contracts.total_active_amount > 0 ? ' · 在效 ¥' + overview.contracts.total_active_amount.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 1 }) + ' 万' : ''}`}
-              onClick={() => navigate('/contracts')}
-            />
-            <BizCard
-              icon={Briefcase} label="项目" tone="blue"
-              main={`${overview.projects.status['进行中'] ?? 0}`} mainSub="进行中"
-              sub={`共 ${overview.projects.total} 个`}
-              onClick={() => navigate('/projects')}
-            />
-            <BizCard
-              icon={Users} label="客户" tone="green"
-              main={`${overview.customers.total}`} mainSub="总客户"
-              sub={`本月新增 +${overview.customers.new_this_month}`}
-              onClick={() => navigate('/customers')}
-            />
-            <BizCard
-              icon={Building2} label="供应商" tone="purple"
-              main={`${overview.suppliers.active}`} mainSub="合作中"
-              sub={`共 ${overview.suppliers.total} 家`}
-              onClick={() => navigate('/suppliers')}
-            />
-            <BizCard
-              icon={Cpu} label="通道" tone="cyan"
-              main={`${overview.channels.active}`} mainSub="合作中"
-              sub={`共 ${overview.channels.total} 条`}
-              onClick={() => navigate('/channels')}
-            />
-          </div>
+          {(overview.contracts.visible || overview.projects.visible || overview.customers.visible || overview.suppliers.visible) && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
+              {overview.contracts.visible && (
+                <BizCard
+                  icon={FileText} label="合同" tone="indigo"
+                  main={`${overview.contracts.status['生效中'] ?? 0}`} mainSub="生效中"
+                  sub={`共 ${overview.contracts.total} 份${overview.contracts.total_active_amount > 0 ? ' · 在效 ¥' + overview.contracts.total_active_amount.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 1 }) + ' 万' : ''}`}
+                  onClick={() => navigate('/contracts')}
+                />
+              )}
+              {overview.projects.visible && (
+                <BizCard
+                  icon={Briefcase} label="项目" tone="blue"
+                  main={`${overview.projects.status['进行中'] ?? 0}`} mainSub="进行中"
+                  sub={`共 ${overview.projects.total} 个`}
+                  onClick={() => navigate('/projects')}
+                />
+              )}
+              {overview.customers.visible && (
+                <BizCard
+                  icon={Users} label="客户" tone="green"
+                  main={`${overview.customers.total}`} mainSub="总客户"
+                  sub={`本月新增 +${overview.customers.new_this_month}`}
+                  onClick={() => navigate('/customers')}
+                />
+              )}
+              {overview.suppliers.visible && (
+                <BizCard
+                  icon={Building2} label="供应商" tone="purple"
+                  main={`${overview.suppliers.active}`} mainSub="合作中"
+                  sub={`共 ${overview.suppliers.total} 家`}
+                  onClick={() => navigate('/suppliers')}
+                />
+              )}
+              {overview.channels.visible && (
+                <BizCard
+                  icon={Cpu} label="通道" tone="cyan"
+                  main={`${overview.channels.active}`} mainSub="合作中"
+                  sub={`共 ${overview.channels.total} 条`}
+                  onClick={() => navigate('/channels')}
+                />
+              )}
+            </div>
+          )}
 
           {/* ══ 主内容网格 ══ */}
+          {(overview.contracts.visible || overview.model_changes_visible || overview.projects.visible || overview.personal.meetings_visible || overview.personal.customers_visible) && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
             {/* 左：合同状态 + 模型变更 */}
+            {(overview.contracts.visible || overview.model_changes_visible) && (
             <div className="lg:col-span-2 space-y-4">
 
               {/* 合同状态分布 */}
+              {overview.contracts.visible && (
               <div className="rounded-2xl bg-bg-card border border-border/50 p-5">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
@@ -392,7 +409,6 @@ export default function DashboardPage() {
                   <p className="text-xs text-gray-500 text-center py-4">暂无合同数据</p>
                 ) : (
                   <>
-                    {/* 进度条 */}
                     <div className="flex h-2 rounded-full overflow-hidden mb-4 gap-0.5">
                       {Object.entries(overview.contracts.status).map(([status, count]) => {
                         const style = CONTRACT_STATUS_STYLE[status] || { bar: 'bg-gray-500', text: 'text-gray-400', bg: 'bg-gray-500/10' }
@@ -400,7 +416,6 @@ export default function DashboardPage() {
                         return <div key={status} className={`${style.bar} rounded-full`} style={{ width: `${pct}%` }} title={`${status}: ${count}`} />
                       })}
                     </div>
-                    {/* 图例 */}
                     <div className="flex flex-wrap gap-x-5 gap-y-2">
                       {Object.entries(overview.contracts.status).map(([status, count]) => {
                         const style = CONTRACT_STATUS_STYLE[status] || { bar: 'bg-gray-500', text: 'text-gray-400', bg: 'bg-gray-500/10' }
@@ -417,8 +432,10 @@ export default function DashboardPage() {
                   </>
                 )}
               </div>
+              )}
 
               {/* 进行中的模型变更 */}
+              {overview.model_changes_visible && (
               <div className="rounded-2xl bg-bg-card border border-border/50 p-5">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
@@ -470,12 +487,16 @@ export default function DashboardPage() {
                   </div>
                 )}
               </div>
+              )}
             </div>
+            )}
 
             {/* 右：个人统计 + 项目状态 */}
+            {(overview.personal.meetings_visible || overview.personal.customers_visible || overview.projects.visible) && (
             <div className="space-y-4">
 
               {/* 个人统计 */}
+              {(overview.personal.meetings_visible || overview.personal.customers_visible) && (
               <div className="rounded-2xl bg-bg-card border border-border/50 p-5">
                 <div className="flex items-center gap-2 mb-4">
                   <div className="w-7 h-7 rounded-lg bg-blue-500/15 flex items-center justify-center">
@@ -484,16 +505,7 @@ export default function DashboardPage() {
                   <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>个人统计</span>
                 </div>
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 rounded-xl bg-bg-hover/30">
-                    <div className="flex items-center gap-2">
-                      <FileText size={13} className="text-amber-400" />
-                      <span className="text-xs text-gray-400">日报连续打卡</span>
-                    </div>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-xl font-bold text-amber-400">{overview.personal.report_streak}</span>
-                      <span className="text-[11px] text-gray-500">天</span>
-                    </div>
-                  </div>
+                  {overview.personal.meetings_visible && (
                   <div className="flex items-center justify-between p-3 rounded-xl bg-bg-hover/30">
                     <div className="flex items-center gap-2">
                       <Calendar size={13} className="text-green-400" />
@@ -504,6 +516,8 @@ export default function DashboardPage() {
                       <span className="text-[11px] text-gray-500">次</span>
                     </div>
                   </div>
+                  )}
+                  {overview.personal.customers_visible && (
                   <div className="flex items-center justify-between p-3 rounded-xl bg-bg-hover/30">
                     <div className="flex items-center gap-2">
                       <Users size={13} className="text-purple-400" />
@@ -514,10 +528,13 @@ export default function DashboardPage() {
                       <span className="text-[11px] text-gray-500">家</span>
                     </div>
                   </div>
+                  )}
                 </div>
               </div>
+              )}
 
               {/* 项目状态 */}
+              {overview.projects.visible && (
               <div className="rounded-2xl bg-bg-card border border-border/50 p-5">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
@@ -553,10 +570,14 @@ export default function DashboardPage() {
                   </div>
                 )}
               </div>
+              )}
             </div>
+            )}
           </div>
+          )}
 
           {/* ══ AI 智能洞察 ══ */}
+          {hasPermission('ai:use') && (
           <div className="rounded-2xl bg-bg-card border border-border/50 p-5">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2.5">
@@ -631,6 +652,7 @@ export default function DashboardPage() {
               )
             })()}
           </div>
+          )}
         </>
       )}
     </div>

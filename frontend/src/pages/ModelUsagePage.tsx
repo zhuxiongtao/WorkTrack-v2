@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { BarChart2, Users, Zap, TrendingUp, RefreshCw, Activity } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -54,6 +54,7 @@ interface TrendRow {
   calls: number
   input_tokens: number
   output_tokens: number
+  cache_read_tokens: number
   total_tokens: number
 }
 
@@ -134,10 +135,29 @@ export default function ModelUsagePage() {
 
   useEffect(() => { load() }, [load])
 
-  const maxTotal = Math.max(...trend.map(r => r.total_tokens), 1)
+  // 填充完整日期范围（缺失日期补 0），保证 x 轴与周期选择器对齐
+  const filledTrend = useMemo<TrendRow[]>(() => {
+    const map = new Map(trend.map(r => [r.day, r]))
+    const result: TrendRow[] = []
+    const now = new Date()
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(now)
+      d.setDate(d.getDate() - i)
+      const key = d.toISOString().slice(0, 10)
+      result.push(map.get(key) ?? { day: key, calls: 0, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, total_tokens: 0 })
+    }
+    return result
+  }, [trend, days])
+
+  const maxTotal = Math.max(...filledTrend.map(r => r.total_tokens), 1)
+  const CHART_BAR_H = 100
+  const BAR_MIN_W = days <= 7 ? 20 : days <= 31 ? 8 : 5
+  const BAR_GAP = 3
+  const labelStep = days <= 7 ? 1 : days <= 31 ? 5 : 10
+  const [hoveredRow, setHoveredRow] = useState<TrendRow | null>(null)
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -187,26 +207,85 @@ export default function ModelUsagePage() {
         ))}
       </div>
 
-      {/* Trend Chart (bar-based) */}
-      {trend.length > 0 && (
-        <div className="rounded-xl border border-border bg-bg-card p-5">
-          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">每日 Token 趋势</h2>
-          <div className="flex items-end gap-1 h-28 overflow-x-auto pb-1">
-            {trend.map(row => {
-              const pct = Math.round((row.total_tokens / maxTotal) * 100)
-              return (
-                <div key={row.day} className="flex flex-col items-center gap-1 min-w-[28px] flex-1 group" title={`${row.day}\n总计: ${fmt(row.total_tokens)} tokens\n调用: ${row.calls} 次`}>
-                  <div
-                    className="w-full rounded-t-sm bg-blue-500/70 group-hover:bg-blue-500 transition-all"
-                    style={{ height: `${Math.max(pct, 2)}%` }}
-                  />
-                  <span className="text-[11px] text-gray-400 truncate w-full text-center">{row.day.slice(5)}</span>
+      {/* Trend Chart */}
+      <div className="rounded-xl border border-border bg-bg-card p-5">
+        <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">每日 Token 趋势</h2>
+        {loading ? (
+          <div className="flex items-center justify-center h-24 text-sm text-gray-400">加载中…</div>
+        ) : maxTotal === 1 ? (
+          <div className="flex items-center justify-center h-24 text-sm text-gray-400">暂无数据</div>
+        ) : (
+          <>
+            {/* 悬停信息行 */}
+            <div className="h-7 mb-3 flex items-center">
+              {hoveredRow && hoveredRow.total_tokens > 0 && (
+                <div className="flex items-center gap-4 text-xs">
+                  <span className="text-gray-400 font-medium tabular-nums">{hoveredRow.day}</span>
+                  <span className="text-blue-400">总计 <span className="font-semibold text-blue-300">{fmt(hoveredRow.total_tokens)}</span></span>
+                  <span className="text-green-400">输入 <span className="font-semibold">{fmt(hoveredRow.input_tokens)}</span></span>
+                  <span className="text-orange-400">输出 <span className="font-semibold">{fmt(hoveredRow.output_tokens)}</span></span>
+                  {hoveredRow.cache_read_tokens > 0 && (
+                    <span className="text-purple-400">缓存命中 <span className="font-semibold">{fmt(hoveredRow.cache_read_tokens)}</span></span>
+                  )}
+                  <span className="text-gray-500">{hoveredRow.calls} 次调用</span>
                 </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
+              )}
+            </div>
+            <div className="overflow-hidden">
+              {/* 柱区：flex 铺满容器，minWidth 防止过窄，无 maxWidth 保证撑满 */}
+              <div
+                className="flex items-end w-full"
+                style={{ height: `${CHART_BAR_H}px`, gap: `${BAR_GAP}px` }}
+              >
+                {filledTrend.map((row) => {
+                  const barH = row.total_tokens > 0
+                    ? Math.max(Math.round((row.total_tokens / maxTotal) * CHART_BAR_H), 4)
+                    : 0
+                  const isHovered = hoveredRow?.day === row.day
+                  return (
+                    <div
+                      key={row.day}
+                      className="flex flex-col justify-end h-full cursor-default"
+                      style={{ flex: 1, minWidth: `${BAR_MIN_W}px` }}
+                      onMouseEnter={() => setHoveredRow(row)}
+                      onMouseLeave={() => setHoveredRow(null)}
+                    >
+                      {barH > 0 ? (
+                        <div
+                          className={`w-full rounded-t transition-colors ${isHovered ? 'bg-blue-400' : 'bg-blue-400/60'}`}
+                          style={{ height: `${barH}px` }}
+                        />
+                      ) : (
+                        <div
+                          className={`w-full rounded transition-opacity ${isHovered ? 'opacity-40' : 'opacity-0'} bg-gray-600`}
+                          style={{ height: '2px' }}
+                        />
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+              {/* x 轴标签：与柱区相同 flex，overflow-visible 让文字不被裁剪 */}
+              <div
+                className="flex mt-1 w-full"
+                style={{ gap: `${BAR_GAP}px` }}
+              >
+                {filledTrend.map((row, i) => (
+                  <div
+                    key={row.day}
+                    className="flex justify-center h-4 overflow-visible"
+                    style={{ flex: 1, minWidth: `${BAR_MIN_W}px` }}
+                  >
+                    {(i % labelStep === 0 || i === filledTrend.length - 1) ? (
+                      <span className="text-[10px] text-gray-400 whitespace-nowrap">{row.day.slice(5)}</span>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
 
       {/* Tabs */}
       <div>

@@ -1,5 +1,6 @@
 from typing import Optional
 from datetime import datetime, timezone
+from app.utils.time import BEIJING_TZ, now
 from sqlmodel import SQLModel, Field
 
 
@@ -18,8 +19,8 @@ class User(SQLModel, table=True):
     leader_id: Optional[int] = Field(default=None, foreign_key="user.id") # 汇报上级/领导 ID
     department_id: Optional[int] = Field(default=None, foreign_key="department.id") # 所属部门 ID
     job_title: Optional[str] = Field(default=None, max_length=100) # 职位名称
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())
+    updated_at: datetime = Field(default_factory=lambda: now())
     last_login_at: Optional[datetime] = Field(default=None)
     failed_login_attempts: int = Field(default=0)
     locked_until: Optional[datetime] = Field(default=None)

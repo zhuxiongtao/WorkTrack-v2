@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../contexts/ToastContext'
 import type { UserData, UserListParams } from '../../services/types'
 import type { PaginatedResponse } from '../../services/types'
+import { resendWelcomeEmail } from '../../services/userService'
 import {
   useUserListQuery,
   useRolesQuery,
@@ -43,7 +44,7 @@ interface UserListTabProps {
 }
 
 export function UserListTab({ departmentId }: UserListTabProps) {
-  const { user: currentUser, hasPermission } = useAuth()
+  const { user: currentUser, hasPermission, fetchWithAuth } = useAuth()
   const { toast: showToast, confirm: showConfirm } = useToast()
 
   // 操作权限（与后端 require_permission 对齐：避免渲染会 403 的按钮）
@@ -130,6 +131,23 @@ export function UserListTab({ departmentId }: UserListTabProps) {
     if (!await showConfirm(`确定删除用户「${u.name || u.username}」？\n此操作将同时删除其关联的所有日报、周报、合同、对话和项目配置等数据且不可恢复！`)) return
     deleteMutation.mutate(u.id)
   }, [currentUser, showToast, showConfirm, deleteMutation])
+
+  const handleResendWelcome = useCallback(async (u: UserData) => {
+    if (!await showConfirm(
+      `确定要为「${u.name || u.username}」重发欢迎邮件吗？\n系统将生成新的临时密码并发送至 ${u.email}，用户原密码将立即失效。`
+    )) return
+    try {
+      const res = await resendWelcomeEmail(fetchWithAuth, u.id)
+      if (res.sent) {
+        showToast(`欢迎邮件已发送至 ${u.email}`, 'success')
+      } else {
+        const pwd = res.initial_password
+        showToast(`邮件服务未配置，新临时密码：${pwd}（请线下告知用户）`, 'warning')
+      }
+    } catch (e: any) {
+      showToast(e.message || '发送失败', 'error')
+    }
+  }, [fetchWithAuth, showConfirm, showToast])
 
   const handleSetStatus = useCallback(async (u: UserData, status: string) => {
     if (u.id === currentUser?.id) { showToast('不能修改自己的账号状态', 'warning'); return }
@@ -221,6 +239,7 @@ export function UserListTab({ departmentId }: UserListTabProps) {
         onSetStatus={handleSetStatus}
         onDelete={handleDelete}
         onResetPassword={(u) => setResetPwdUser(u)}
+        onResendWelcome={handleResendWelcome}
         onManageRoles={openRoles}
         canEdit={canEdit}
         canDelete={canDelete}

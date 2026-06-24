@@ -18,6 +18,7 @@ services:
       POSTGRES_USER: ${DB_USER:-worktrack}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-worktrack}
       POSTGRES_DB: ${DB_NAME:-worktrack}
+      TZ: Asia/Shanghai
     volumes:
       - ./pgdata:/var/lib/postgresql/data
     restart: unless-stopped
@@ -49,6 +50,7 @@ services:
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
       - TAVILY_API_KEY=${TAVILY_API_KEY:-}
       - AUTO_CREATE_ADMIN=false
+      - TZ=Asia/Shanghai
     volumes:
       - ./worktrack_data:/app/data
       - ./worktrack_uploads:/app/uploads

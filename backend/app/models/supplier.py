@@ -1,6 +1,7 @@
 """供应商管理模型：MaaS 平台接入的模型供应商"""
 from typing import Optional
 from datetime import datetime, timezone
+from app.utils.time import BEIJING_TZ, now
 from sqlmodel import SQLModel, Field
 
 
@@ -39,5 +40,5 @@ class Supplier(SQLModel, table=True):
     # ── 其他 ──
     remarks: Optional[str] = None
 
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())
+    updated_at: datetime = Field(default_factory=lambda: now())

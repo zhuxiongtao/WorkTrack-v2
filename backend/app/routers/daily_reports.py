@@ -12,7 +12,7 @@ from app.models.user import User
 from app.auth import get_current_user, require_permission
 from app.schemas import DailyReportCreate, DailyReportUpdate, DailyReportOut
 from app.services.vector_store import index_document, delete_document
-from app.services.ai_service import summarize_daily_report, _get_prompt, _fill_template, _get_active_provider, _get_client, _extract_message_text
+from app.services.ai_service import summarize_daily_report, _get_prompt, _fill_template, _get_active_provider, _get_client, _extract_message_text, _record_usage_silent
 from app.routers.logs import write_log
 from datetime import timedelta
 from app.utils.time import utc_now
@@ -487,6 +487,7 @@ def generate_weekly_summary(data: WeeklySummaryRequest, current_user: User = Dep
             temperature=0.5,
         )
         summary_text = _extract_message_text(response.choices[0].message) or "AI 总结生成失败"
+        _record_usage_silent(db, response, current_user.id, getattr(provider, 'id', None), model, "weekly_summary")
 
         # 持久化存储（按用户隔离）
         existing = db.exec(

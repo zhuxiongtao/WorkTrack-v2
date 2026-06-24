@@ -4,11 +4,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.config import settings as app_settings
 from app.database import init_db
-from app.routers import daily_reports, customers, projects, meetings, scheduled_tasks, ai_agent, search, settings, logs, auth, users, dashboard, setup, files, contracts, wiki, rbac, monitor, data_export, shares, console, news, project_costs, suppliers, channels, reconcile, models, approval, model_change, contract_templates, bill_reconcile, model_usage
+from app.routers import daily_reports, customers, projects, meetings, scheduled_tasks, ai_agent, search, settings, logs, auth, users, dashboard, setup, files, contracts, wiki, rbac, monitor, data_export, shares, console, news, project_costs, suppliers, channels, reconcile, models, approval, model_change, contract_templates, bill_reconcile, model_usage, feedback, payments, seals
+from app.routers import project_follow_ups
 from app.rate_limit import limiter
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from app.utils.time import utc_now, ensure_utc
+from app.utils.time import utc_now
 
 
 def _seed_contract_templates(db):
@@ -225,7 +226,7 @@ async def lifespan(app: FastAPI):
         last_log = db.exec(stmt).first()
 
         now = utc_now()
-        if not last_log or (now - ensure_utc(last_log.created_at)) > timedelta(minutes=15):
+        if not last_log or (now - last_log.created_at) > timedelta(minutes=15):
             write_log("info", "system", "WorkTrack 服务已启动", details=f"版本: 1.0.0", db=db)
     # 种子：初始化默认合同模板（幂等，已有则跳过）
     from app.models.contract_template import ContractTemplate
@@ -360,6 +361,10 @@ def create_app() -> FastAPI:
     app.include_router(model_change.router)
     app.include_router(bill_reconcile.router)
     app.include_router(model_usage.router)
+    app.include_router(feedback.router)
+    app.include_router(payments.router)
+    app.include_router(seals.router)
+    app.include_router(project_follow_ups.router)
 
     # 挂载 MCP 服务（带 API Key 认证）
     from app.mcp_server import mcp, MCPAuthMiddleware

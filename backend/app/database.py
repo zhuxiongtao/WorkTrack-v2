@@ -134,7 +134,32 @@ DEFAULT_FIELD_OPTIONS = {
     "industry": ["互联网", "金融", "教育", "医疗", "制造业", "零售", "房地产", "能源", "物流", "其他"],
     "sales_person": ["张三", "李四", "王五"],
     "project_status": ["进行中", "已完成", "暂停", "已取消", "待启动"],
-    "cloud": ["阿里云", "腾讯云", "华为云", "AWS", "Azure", "GCP", "私有部署", "其他"],
+    "project_scenario": [
+        "智能客服 / 客服机器人",
+        "知识库问答（RAG）",
+        "文档处理与分析",
+        "代码辅助 / Copilot",
+        "内容生成与创作",
+        "数据分析与报告",
+        "企业搜索增强",
+        "工作流自动化",
+        "AI Agent / 任务规划",
+        "多模态理解（图文/语音）",
+        "垂直行业大模型定制",
+        "模型评测与对比",
+    ],
+    "cloud": [
+        "自建 AI 网关",
+        "具备访问海外模型的网络能力",
+        "聚合平台对外服务",
+        "私有化部署（K8s/Docker）",
+        "公有云（已有账户）",
+        "裸金属 / GPU 服务器",
+        "自建向量数据库 / 知识库",
+        "API 网关已有",
+        "混合云架构",
+        "无技术团队（纯 API 接入）",
+    ],
 }
 
 
@@ -170,6 +195,7 @@ PERMISSION_DEFS = [
     ("project:edit", "编辑项目", "project", "edit"),
     ("project:delete", "删除项目", "project", "delete"),
     ("project:view_all", "查看全部项目", "project", "view_all"),
+    ("project:follow_tech", "写入技术跟进记录", "project", "follow_tech"),
     # 客户管理
     ("customer:read", "查看客户", "customer", "read"),
     ("customer:create", "创建客户", "customer", "create"),
@@ -182,6 +208,7 @@ PERMISSION_DEFS = [
     ("contract:delete", "删除合同", "contract", "delete"),
     ("contract:parse", "解析合同", "contract", "parse"),
     ("contract:view_all", "查看全部合同", "contract", "view_all"),
+    ("contract:archive", "历史合同归档", "contract", "archive"),
     # 日报/周报
     ("report:read", "查看报告", "report", "read"),
     ("report:create", "创建报告", "report", "create"),
@@ -240,6 +267,12 @@ PERMISSION_DEFS = [
     # 模型变更（上游 LLM 模型上下线 / 价格变动追踪，独立于「管理总览」）
     ("model:read", "查看模型变更", "model", "read"),
     ("model:edit", "管理模型变更", "model", "edit"),
+    # 意见反馈（提交端零门槛，仅后台聚合管理需要此权限）
+    ("feedback:manage", "管理意见反馈", "feedback", "manage"),
+    # 付款申请（员工报销 / 供应商付款 / 工资 / 其他；发起仅需登录，view_all 供财务/出纳/老板查看全部）
+    ("payment:view_all", "查看全部付款申请", "payment", "view_all"),
+    # 盖章申请（公章 / 财务章 / 法人章；发起仅需登录，view_all 供法务/印章管理员/老板查看全部）
+    ("seal:view_all", "查看全部盖章申请", "seal", "view_all"),
 ]
 
 ROLE_DEFS = {
@@ -252,7 +285,7 @@ ROLE_DEFS = {
             # 全部业务模块
             "project:read", "project:create", "project:edit", "project:delete", "project:view_all",
             "customer:read", "customer:create", "customer:edit", "customer:delete", "customer:view_all",
-            "contract:read", "contract:create", "contract:edit", "contract:delete", "contract:parse", "contract:view_all",
+            "contract:read", "contract:create", "contract:edit", "contract:delete", "contract:parse", "contract:view_all", "contract:archive",
             "report:read", "report:create", "report:edit", "report:submit", "report:delete", "report:view_all",
             "meeting:read", "meeting:create", "meeting:edit", "meeting:delete", "meeting:view_all",
             "wiki:read", "wiki:create", "wiki:edit", "wiki:delete", "wiki:manage_space",
@@ -273,6 +306,10 @@ ROLE_DEFS = {
             # 管理总览与分享
             "management:console",
             "share:create", "share:read", "share:comment",
+            # 意见反馈管理
+            "feedback:manage",
+            # 付款 / 盖章申请全局查看
+            "payment:view_all", "seal:view_all",
         ],
     },
     "dept_leader": {
@@ -304,7 +341,7 @@ ROLE_DEFS = {
         "perms": [
             "project:read", "project:create", "project:edit",
             "customer:read", "customer:create", "customer:edit",
-            "contract:read", "contract:create", "contract:edit", "contract:parse",
+            "contract:read", "contract:create", "contract:edit", "contract:parse", "contract:archive",
             "report:read", "report:create", "report:submit",
             "ai:use",
             "wiki:read",
@@ -316,7 +353,7 @@ ROLE_DEFS = {
         "name": "技术",
         "description": "技术人员，负责项目交付、会议协作和技术文档管理",
         "perms": [
-            "project:read",
+            "project:read", "project:follow_tech",
             "meeting:read", "meeting:create", "meeting:edit", "meeting:delete",
             "wiki:read", "wiki:create", "wiki:edit",
             "ai:use", "ai:manage_own",
@@ -343,7 +380,7 @@ ROLE_DEFS = {
         "name": "商务",
         "description": "商务人员，负责合同谈判、客户对接和上游供应商管理（删除权归管理员）",
         "perms": [
-            "contract:read", "contract:create", "contract:edit", "contract:parse",
+            "contract:read", "contract:create", "contract:edit", "contract:parse", "contract:archive",
             "customer:read", "customer:create", "customer:edit",
             "project:read",
             "report:read", "report:submit",
@@ -366,6 +403,8 @@ ROLE_DEFS = {
             "ai:use", "wiki:read",
             "dashboard:read",
             "share:create", "share:read", "share:comment",
+            # 财务作为付款/盖章审批链的财务初审节点，需查看全部申请
+            "payment:view_all", "seal:view_all",
         ],
     },
     "legal": {
@@ -379,6 +418,8 @@ ROLE_DEFS = {
             "ai:use", "wiki:read",
             "dashboard:read",
             "share:create", "share:read", "share:comment",
+            # 法务作为盖章审批链的法务初审节点，需查看全部盖章申请
+            "seal:view_all",
         ],
     },
     "boss": {
@@ -401,6 +442,31 @@ ROLE_DEFS = {
             "task:read",
             "log:read",
             "management:console",
+            "share:read", "share:comment",
+            # 付款 / 盖章申请全局查看
+            "payment:view_all", "seal:view_all",
+        ],
+    },
+    "cashier": {
+        "name": "出纳",
+        "description": "财务出纳，负责付款执行；作为付款审批链的「出纳付款」执行节点，可查看全部付款申请",
+        "ensure_exists": True,
+        "perms": [
+            "payment:view_all",
+            "reconcile:read",
+            "dashboard:read",
+            "ai:use",
+            "share:read", "share:comment",
+        ],
+    },
+    "seal_keeper": {
+        "name": "印章管理员",
+        "description": "印章管理员，负责用印盖章执行；作为盖章审批链的「盖章」执行节点，可查看全部盖章申请",
+        "ensure_exists": True,
+        "perms": [
+            "seal:view_all",
+            "dashboard:read",
+            "ai:use",
             "share:read", "share:comment",
         ],
     },
@@ -444,11 +510,45 @@ APPROVAL_FLOW_DEFS = [
         "business_type": "contract",
         "is_system": True,
         "trigger_condition": None,
-        "description": "合同提交后依次经法务审查、财务审批、总经理审批，全部通过方可生效",
+        "description": "合同提交后依次经部门负责人/分管领导、法务初审、财务初审、总经理审批，最后用印盖章方可生效",
         "nodes": [
-            {"name": "法务审查", "approver_type": "role", "approver_value": "legal", "order": 1},
-            {"name": "财务审批", "approver_type": "role", "approver_value": "finance", "order": 2},
+            {"name": "部门负责人/分管领导", "approver_type": "dept_or_leader", "approver_value": "", "order": 1},
+            {"name": "法务初审", "approver_type": "role", "approver_value": "legal", "order": 2},
+            {"name": "财务初审", "approver_type": "role", "approver_value": "finance", "order": 3},
+            {"name": "总经理审批", "approver_type": "role", "approver_value": "boss", "order": 4},
+            {"name": "盖章", "approver_type": "role", "approver_value": "seal_keeper", "order": 5,
+             "node_kind": "execution", "action_label": "确认盖章"},
+        ],
+    },
+    {
+        "code": "payment_approval",
+        "name": "付款申请审批",
+        "business_type": "payment",
+        "is_system": True,
+        "trigger_condition": None,
+        "description": "付款申请（供应商付款/员工报销/工资/其他）依次经部门负责人或分管领导、财务初审、总经理审批，最后由出纳执行付款",
+        "nodes": [
+            {"name": "部门负责人/分管领导", "approver_type": "dept_or_leader", "approver_value": "", "order": 1},
+            {"name": "财务初审", "approver_type": "role", "approver_value": "finance", "order": 2},
             {"name": "总经理审批", "approver_type": "role", "approver_value": "boss", "order": 3},
+            {"name": "出纳付款", "approver_type": "role", "approver_value": "cashier", "order": 4,
+             "node_kind": "execution", "action_label": "确认付款"},
+        ],
+    },
+    {
+        "code": "seal_approval",
+        "name": "盖章申请审批",
+        "business_type": "seal",
+        "is_system": True,
+        "trigger_condition": None,
+        "description": "用印申请（公章/财务章/法人章）依次经部门负责人或分管领导、法务初审、财务初审、总经理审批，最后由印章管理员盖章",
+        "nodes": [
+            {"name": "部门负责人/分管领导", "approver_type": "dept_or_leader", "approver_value": "", "order": 1},
+            {"name": "法务初审", "approver_type": "role", "approver_value": "legal", "order": 2},
+            {"name": "财务初审", "approver_type": "role", "approver_value": "finance", "order": 3},
+            {"name": "总经理审批", "approver_type": "role", "approver_value": "boss", "order": 4},
+            {"name": "盖章", "approver_type": "role", "approver_value": "seal_keeper", "order": 5,
+             "node_kind": "execution", "action_label": "确认盖章"},
         ],
     },
     {
@@ -649,4 +749,250 @@ def _init_rbac_data(engine):
                 if not existing_ur:
                     session.add(UserRole(user_id=au.id, role_id=admin_role.id))
             session.commit()
+
+    # ── 3. 预制合同模板种子（幂等：按 name+category 去重）──
+    _seed_contract_templates(engine)
+
+
+# ──────────────────────────────────────────────────
+# 合同模板预制数据
+# ──────────────────────────────────────────────────
+_CONTRACT_TEMPLATES = [
+    {
+        "name": "标准销售合同模板",
+        "category": "销售合同",
+        "description": "适用于软件/SaaS/AI 服务销售，含服务范围、验收、付款节点条款",
+        "content": """<h2 style="text-align:center">销售合同</h2>
+<p><strong>合同编号：</strong>[合同编号]</p>
+<p><strong>签订日期：</strong>[签订日期]</p>
+<p>甲方（买方）：[甲方名称]，统一社会信用代码：[甲方信用代码]</p>
+<p>乙方（卖方）：[乙方名称]，统一社会信用代码：[乙方信用代码]</p>
+<h3>第一条 服务内容</h3>
+<p>乙方向甲方提供 [服务名称/产品名称]，具体内容详见附件《服务说明书》。</p>
+<h3>第二条 合同金额及付款方式</h3>
+<p>合同总金额：人民币 [合同金额] 元（大写：[金额大写]）。</p>
+<p>付款安排：合同签订后 [N] 个工作日内支付预付款 [比例]%；验收合格后 [N] 个工作日内支付尾款。</p>
+<h3>第三条 服务期限</h3>
+<p>自 [开始日期] 起至 [结束日期] 止，共 [期限] 个月。</p>
+<h3>第四条 验收标准</h3>
+<p>双方按《验收标准》进行验收，甲方应在收到验收申请后 [N] 个工作日内完成验收。</p>
+<h3>第五条 违约责任</h3>
+<p>任何一方未按约定履行义务，应向守约方支付合同总金额 [N]% 的违约金。</p>
+<h3>第六条 争议解决</h3>
+<p>本合同在履行过程中如发生争议，双方协商解决；协商不成，提交 [仲裁机构/法院] 解决。</p>
+<p>本合同一式两份，甲乙双方各执一份，具有同等法律效力。</p>
+<p>甲方（盖章）：________________　　乙方（盖章）：________________</p>
+<p>日期：________________　　　　　　日期：________________</p>""",
+    },
+    {
+        "name": "标准采购合同模板",
+        "category": "采购合同",
+        "description": "适用于向供应商采购商品或服务，含质量保证、交付、付款条款",
+        "content": """<h2 style="text-align:center">采购合同</h2>
+<p><strong>合同编号：</strong>[合同编号]</p>
+<p>甲方（采购方）：[甲方名称]</p>
+<p>乙方（供应商）：[乙方名称]</p>
+<h3>第一条 采购内容</h3>
+<p>采购品名：[品名]，规格型号：[规格]，数量：[数量]，单价：[单价]，合计金额：[合计金额] 元。</p>
+<h3>第二条 质量标准</h3>
+<p>乙方提供的商品/服务须符合 [质量标准/国家标准]，并提供质保期 [N] 个月。</p>
+<h3>第三条 交付方式</h3>
+<p>乙方应于 [交付日期] 前完成交付，交付地点：[地址]。</p>
+<h3>第四条 付款方式</h3>
+<p>甲方在收到发票并验收合格后 [N] 个工作日内付款。</p>
+<h3>第五条 违约责任</h3>
+<p>乙方逾期交付，每逾期一日按合同金额 0.1% 支付违约金。</p>
+<p>甲方（盖章）：________________　　乙方（盖章）：________________</p>
+<p>日期：________________</p>""",
+    },
+    {
+        "name": "标准劳动合同模板",
+        "category": "劳动合同",
+        "description": "符合《劳动合同法》的标准劳动合同，含岗位、薪酬、社保、保密条款",
+        "content": """<h2 style="text-align:center">劳动合同</h2>
+<p><strong>合同编号：</strong>[合同编号]</p>
+<p>用人单位（甲方）：[公司名称]，统一社会信用代码：[信用代码]，法定代表人：[法代姓名]</p>
+<p>劳动者（乙方）：[员工姓名]，身份证号：[身份证号]，联系方式：[电话]</p>
+<h3>第一条 劳动合同期限</h3>
+<p>合同期限自 [开始日期] 起至 [结束日期] 止，其中试用期为 [试用期] 个月。</p>
+<h3>第二条 工作内容及地点</h3>
+<p>乙方担任 [岗位名称] 岗位，工作地点为 [工作地点]，岗位职责详见岗位说明书。</p>
+<h3>第三条 工作时间</h3>
+<p>执行标准工时制，每日工作不超过 8 小时，每周不超过 40 小时。</p>
+<h3>第四条 劳动报酬</h3>
+<p>试用期月薪：人民币 [试用期薪资] 元；转正后月薪：人民币 [正式薪资] 元，含基本工资及绩效工资。</p>
+<p>工资于每月 [发薪日] 日以银行转账方式发放。</p>
+<h3>第五条 社会保险及福利</h3>
+<p>甲方按国家及地方规定为乙方缴纳社会保险及住房公积金。</p>
+<h3>第六条 保密义务</h3>
+<p>乙方应对甲方的商业秘密、技术秘密及客户信息严格保密，合同终止后保密义务仍持续 [N] 年。</p>
+<h3>第七条 竞业限制</h3>
+<p>乙方离职后 [N] 年内不得在与甲方存在竞争关系的单位任职，甲方按月支付竞业限制补偿金。</p>
+<h3>第八条 合同解除</h3>
+<p>双方按《劳动合同法》相关规定解除本合同。</p>
+<p>甲方（公章/法人章）：________________　　乙方（签名）：________________</p>
+<p>日期：________________</p>""",
+    },
+    {
+        "name": "保密协议（NDA）模板",
+        "category": "保密协议",
+        "description": "适用于商务合作、技术对接前的双向保密约定",
+        "content": """<h2 style="text-align:center">保密协议（NDA）</h2>
+<p>披露方：[披露方名称]（以下简称"甲方"）</p>
+<p>接收方：[接收方名称]（以下简称"乙方"）</p>
+<p>鉴于双方就 [合作事项] 进行洽谈，双方同意就彼此披露的保密信息承担如下保密义务：</p>
+<h3>第一条 保密信息定义</h3>
+<p>保密信息包括但不限于：技术方案、商业计划、客户数据、财务信息、产品路线图及以任何形式标注为"保密"的信息。</p>
+<h3>第二条 保密义务</h3>
+<p>接收方不得向第三方披露保密信息，不得用于合作目的以外的任何用途，应采取不低于保护自身同类信息的措施加以保护。</p>
+<h3>第三条 保密期限</h3>
+<p>本协议自签署之日起生效，保密义务持续至保密信息进入公知领域或合同终止后 [N] 年，以较晚者为准。</p>
+<h3>第四条 违约责任</h3>
+<p>违约方须赔偿守约方因此遭受的全部损失，且损失赔偿额不低于人民币 [最低赔偿金额] 元。</p>
+<p>甲方（盖章）：________________　　乙方（盖章）：________________</p>
+<p>日期：________________</p>""",
+    },
+    {
+        "name": "技术服务合同模板",
+        "category": "技术合同",
+        "description": "适用于软件开发、系统集成、AI 技术服务等技术类合同",
+        "content": """<h2 style="text-align:center">技术服务合同</h2>
+<p><strong>合同编号：</strong>[合同编号]</p>
+<p>委托方（甲方）：[甲方名称]</p>
+<p>服务方（乙方）：[乙方名称]</p>
+<h3>第一条 技术服务内容</h3>
+<p>乙方为甲方提供 [技术服务名称]，具体需求详见附件《技术需求说明书》。</p>
+<h3>第二条 交付成果</h3>
+<p>乙方应交付：[成果清单，如源代码、文档、培训等]，交付时间不晚于 [交付日期]。</p>
+<h3>第三条 知识产权</h3>
+<p>本合同项下由乙方专门为甲方开发的成果，知识产权归 [甲方/乙方/共有]。乙方保留对通用组件/底层框架的所有权。</p>
+<h3>第四条 合同金额及付款</h3>
+<p>服务费用共计人民币 [金额] 元，付款安排：签订合同后支付 [比例]%，里程碑一完成支付 [比例]%，验收合格后支付尾款。</p>
+<h3>第五条 技术保障</h3>
+<p>乙方提供 [N] 个月免费维护期，期满后提供有偿技术支持。</p>
+<p>甲方（盖章）：________________　　乙方（盖章）：________________</p>
+<p>日期：________________</p>""",
+    },
+    {
+        "name": "服务合同通用模板",
+        "category": "服务合同",
+        "description": "通用服务合同，适用于咨询、运维、培训等各类服务",
+        "content": """<h2 style="text-align:center">服务合同</h2>
+<p>甲方（委托方）：[甲方名称]</p>
+<p>乙方（服务方）：[乙方名称]</p>
+<h3>第一条 服务内容</h3>
+<p>乙方为甲方提供 [服务内容]，服务期限自 [开始日期] 至 [结束日期]。</p>
+<h3>第二条 服务费用</h3>
+<p>服务费用为人民币 [金额] 元，按 [月/季度/项目] 结算，甲方于每期结束后 [N] 日内付款。</p>
+<h3>第三条 服务标准</h3>
+<p>乙方应按照 [服务标准/SLA] 提供服务，响应时间不超过 [N] 小时。</p>
+<h3>第四条 保密条款</h3>
+<p>双方对合作中知悉的对方商业秘密负有保密义务。</p>
+<p>甲方（盖章）：________________　　乙方（盖章）：________________</p>
+<p>日期：________________</p>""",
+    },
+    {
+        "name": "合作协议模板",
+        "category": "合作协议",
+        "description": "战略合作、渠道合作、联合运营等合作关系约定",
+        "content": """<h2 style="text-align:center">合作协议</h2>
+<p>甲方：[甲方名称]</p>
+<p>乙方：[乙方名称]</p>
+<p>鉴于双方在 [合作领域] 方面具有合作意愿，经友好协商，达成如下合作协议：</p>
+<h3>第一条 合作内容</h3>
+<p>双方在 [具体合作领域/项目] 方面开展合作，各自承担如下工作：</p>
+<p>甲方职责：[甲方职责]</p>
+<p>乙方职责：[乙方职责]</p>
+<h3>第二条 合作期限</h3>
+<p>合作期限自 [开始日期] 起至 [结束日期] 止，期满前 [N] 日双方协商续约事宜。</p>
+<h3>第三条 利益分配</h3>
+<p>双方按 [比例] 分配合作收益，具体结算周期为 [月/季度]。</p>
+<h3>第四条 保密与排他</h3>
+<p>合作期内，双方对合作项目内容及数据保密；[是否]约定排他合作条款。</p>
+<p>甲方（盖章）：________________　　乙方（盖章）：________________</p>
+<p>日期：________________</p>""",
+    },
+    {
+        "name": "框架协议模板",
+        "category": "框架协议",
+        "description": "长期合作框架，具体项目/订单以补充协议或订单确认单为准",
+        "content": """<h2 style="text-align:center">框架合作协议</h2>
+<p>甲方：[甲方名称]</p>
+<p>乙方：[乙方名称]</p>
+<p>双方本着平等互利的原则，就长期合作事宜签订本框架协议，具体业务以各期《业务订单》/《补充协议》为准。</p>
+<h3>第一条 合作范围</h3>
+<p>本框架协议适用于双方在 [业务范围] 内开展的所有合作事项。</p>
+<h3>第二条 框架期限</h3>
+<p>本协议有效期 [N] 年，自 [开始日期] 起计算，期满自动续签，任一方提前 [N] 日书面通知可终止。</p>
+<h3>第三条 定价机制</h3>
+<p>各期业务价格按市场价格协商确定，并在对应订单中列明，本框架协议不承诺固定价格。</p>
+<h3>第四条 结算方式</h3>
+<p>按各期订单约定结算，乙方开具正规发票后甲方于 [N] 个工作日内付款。</p>
+<p>甲方（盖章）：________________　　乙方（盖章）：________________</p>
+<p>日期：________________</p>""",
+    },
+    {
+        "name": "补充协议模板",
+        "category": "补充协议",
+        "description": "对已签订合同的条款进行补充或变更",
+        "content": """<h2 style="text-align:center">补充协议</h2>
+<p><strong>原合同编号：</strong>[原合同编号]</p>
+<p>甲方：[甲方名称]</p>
+<p>乙方：[乙方名称]</p>
+<p>鉴于双方于 [原合同签署日期] 签订的《[原合同名称]》（以下简称"原合同"）在执行过程中出现 [变更原因]，双方协商一致，就以下事项达成补充约定：</p>
+<h3>第一条 变更内容</h3>
+<p>原合同第 [X] 条"[原条款标题]"修改为：[新内容]。</p>
+<h3>第二条 新增条款</h3>
+<p>[如有新增条款，在此说明]</p>
+<h3>第三条 其他</h3>
+<p>本补充协议与原合同具有同等法律效力，如有冲突，以本补充协议为准；本补充协议未涉及的条款仍按原合同执行。</p>
+<p>甲方（盖章）：________________　　乙方（盖章）：________________</p>
+<p>日期：________________</p>""",
+    },
+    {
+        "name": "委托协议模板",
+        "category": "委托协议",
+        "description": "委托代理、业务外包、授权委托等场景",
+        "content": """<h2 style="text-align:center">委托协议</h2>
+<p>委托方（甲方）：[甲方名称]</p>
+<p>受托方（乙方）：[乙方名称]</p>
+<h3>第一条 委托事项</h3>
+<p>甲方委托乙方办理 [委托事项]，具体范围及权限如下：[详细说明]。</p>
+<h3>第二条 委托期限</h3>
+<p>委托期限自 [开始日期] 至 [结束日期]，期满自动失效。</p>
+<h3>第三条 委托报酬</h3>
+<p>甲方向乙方支付委托报酬人民币 [金额] 元，于 [支付节点] 支付。</p>
+<h3>第四条 乙方义务</h3>
+<p>乙方应按甲方指示处理委托事务，不得超越授权范围，及时向甲方汇报进展。</p>
+<h3>第五条 风险承担</h3>
+<p>乙方在授权范围内的行为产生的法律后果由甲方承担；乙方超越授权范围的行为，后果由乙方自行承担。</p>
+<p>甲方（盖章）：________________　　乙方（盖章）：________________</p>
+<p>日期：________________</p>""",
+    },
+]
+
+
+def _seed_contract_templates(db_engine):
+    """幂等写入预制合同模板，已存在则跳过"""
+    from app.models.contract_template import ContractTemplate
+    from sqlmodel import Session, select
+
+    with Session(db_engine) as session:
+        for tpl in _CONTRACT_TEMPLATES:
+            existing = session.exec(
+                select(ContractTemplate).where(
+                    ContractTemplate.name == tpl["name"],
+                    ContractTemplate.category == tpl["category"],
+                )
+            ).first()
+            if existing:
+                continue
+            session.add(ContractTemplate(
+                name=tpl["name"],
+                category=tpl["category"],
+                description=tpl.get("description", ""),
+                content=tpl["content"],
+                is_active=True,
+            ))
+        session.commit()
 

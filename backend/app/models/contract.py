@@ -1,12 +1,13 @@
 from typing import Optional
 from datetime import date, datetime, timezone
+from app.utils.time import BEIJING_TZ, now
 from sqlmodel import SQLModel, Field
 
 
 class Contract(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: Optional[int] = Field(default=None, foreign_key="user.id", index=True)
-    customer_id: int = Field(foreign_key="customer.id", index=True)
+    customer_id: Optional[int] = Field(default=None, foreign_key="customer.id", index=True)
     project_id: Optional[int] = Field(default=None, foreign_key="project.id")
     title: str
     contract_no: str = ""
@@ -20,6 +21,7 @@ class Contract(SQLModel, table=True):
     party_a: str = ""
     party_b: str = ""
     contract_amount: Optional[float] = None
+    amount_unit: str = "万元"  # 合同金额单位：元 | 万元
     currency: str = "CNY"
     payment_terms: Optional[str] = None
     key_clauses: Optional[str] = None
@@ -72,5 +74,11 @@ class Contract(SQLModel, table=True):
     signed_file_path: str = ""
     signed_file_name: str = ""
 
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    # ===== 用章申请（提交审批前选择，逗号分隔，如"公章,合同章"）=====
+    seal_types_requested: str = ""
+
+    # ===== 历史归档标识 =====
+    is_historical: bool = False
+
+    created_at: datetime = Field(default_factory=lambda: now())
+    updated_at: datetime = Field(default_factory=lambda: now())

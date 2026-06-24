@@ -101,6 +101,24 @@ def is_email_configured() -> bool:
     )
 
 
+def _get_frontend_url() -> str:
+    """从品牌配置读取前端地址"""
+    try:
+        from sqlmodel import Session, select
+        from app.database import engine
+        from app.models.system_preference import SystemPreference
+        with Session(engine) as db:
+            row = db.exec(
+                select(SystemPreference).where(
+                    SystemPreference.key == "brand_frontend_url",
+                    SystemPreference.user_id == None,
+                )
+            ).first()
+            return (row.value or "").strip() if row else ""
+    except Exception:
+        return ""
+
+
 def _send_smtp(to: list[str], subject: str, html_body: str, cfg: dict) -> None:
     host = cfg.get("host", "")
     port = int(cfg.get("port", 587))

@@ -6,6 +6,7 @@
 """
 import json
 from datetime import datetime, timezone
+from app.utils.time import BEIJING_TZ, now
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -43,7 +44,7 @@ router = APIRouter(prefix="/api/v1/model-changes", tags=["模型变更管理"])
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return now()
 
 
 # ── 辅助函数 ─────────────────────────────────────────────────────────────────

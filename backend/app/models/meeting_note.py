@@ -1,5 +1,6 @@
 from typing import Optional
 from datetime import datetime, timezone
+from app.utils.time import BEIJING_TZ, now
 from sqlmodel import SQLModel, Field
 
 
@@ -15,5 +16,5 @@ class MeetingNote(SQLModel, table=True):
     audio_url: Optional[str] = None
     files_json: Optional[str] = Field(default=None, description="附件列表 JSON: [{name, path, size, type}]")
     meeting_date: datetime
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())
+    updated_at: datetime = Field(default_factory=lambda: now())

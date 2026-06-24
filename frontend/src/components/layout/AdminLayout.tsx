@@ -3,7 +3,7 @@ import { NavLink, Navigate, useNavigate } from 'react-router-dom'
 import {
   Sun, Moon, Monitor, LogOut, ChevronDown,
   BarChart3, Shield, GitBranch, Activity, Database,
-  Settings, Cpu, FileText, Menu, BarChart2, type LucideIcon,
+  Settings, Cpu, FileText, Menu, BarChart2, MessageSquarePlus, type LucideIcon,
 } from 'lucide-react'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -38,9 +38,10 @@ const ADMIN_SECTIONS: AdminMenuSection[] = [
     title: '系统管理',
     items: [
       { to: '/admin/users',          label: '用户管理',   icon: Shield,    gradientFrom: '#EF4444', gradientTo: '#F87171', permission: 'user:read' },
-      { to: '/admin/approval-flows', label: '审批流配置', icon: GitBranch, gradientFrom: '#8B5CF6', gradientTo: '#6366F1' },
+      { to: '/admin/approval-flows', label: '审批流配置', icon: GitBranch, gradientFrom: '#8B5CF6', gradientTo: '#6366F1', permission: 'settings:edit' },
       { to: '/admin/monitor',        label: '运维监控',   icon: Activity,  gradientFrom: '#10B981', gradientTo: '#14B8A6', permission: 'monitor:read' },
       { to: '/admin/data',           label: '数据管理',   icon: Database,  gradientFrom: '#6366F1', gradientTo: '#8B5CF6', permission: 'data:export' },
+      { to: '/admin/feedback',       label: '意见反馈',   icon: MessageSquarePlus, gradientFrom: '#3B82F6', gradientTo: '#06B6D4', permission: 'feedback:manage' },
       { to: '/admin/logs',           label: '日志查看',   icon: FileText,  gradientFrom: '#6B7280', gradientTo: '#9CA3AF', permission: 'log:read' },
     ],
   },
@@ -48,10 +49,10 @@ const ADMIN_SECTIONS: AdminMenuSection[] = [
     id: 'platform',
     title: '平台配置',
     items: [
-      { to: '/admin/models',             label: '模型管理',   icon: Cpu,       gradientFrom: '#EC4899', gradientTo: '#F472B6' },
-      { to: '/admin/model-usage',        label: '用量统计',   icon: BarChart2, gradientFrom: '#06B6D4', gradientTo: '#3B82F6' },
-      { to: '/admin/contract-templates', label: '合同模板',   icon: FileText,  gradientFrom: '#F97316', gradientTo: '#FB923C' },
-      { to: '/admin/settings',           label: '系统设置',   icon: Settings,  gradientFrom: '#6B7280', gradientTo: '#9CA3AF' },
+      { to: '/admin/models',             label: '模型管理',   icon: Cpu,       gradientFrom: '#EC4899', gradientTo: '#F472B6', permission: 'ai:manage_shared' },
+      { to: '/admin/model-usage',        label: '用量统计',   icon: BarChart2, gradientFrom: '#06B6D4', gradientTo: '#3B82F6', permission: 'ai:manage_shared' },
+      { to: '/admin/contract-templates', label: '合同模板',   icon: FileText,  gradientFrom: '#F97316', gradientTo: '#FB923C', permission: 'contract:create' },
+      { to: '/admin/settings',           label: '系统设置',   icon: Settings,  gradientFrom: '#6B7280', gradientTo: '#9CA3AF', permission: 'settings:edit' },
     ],
   },
 ]

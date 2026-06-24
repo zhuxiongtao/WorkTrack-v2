@@ -3,12 +3,12 @@ import { createPortal } from 'react-dom'
 import { X, Save, Loader2, UserCog } from 'lucide-react'
 import { useToast } from '../../contexts/ToastContext'
 import type { DepartmentTreeNode, DepartmentFlat } from '../../services/types'
+import SearchableSelect from '../SearchableSelect'
 import {
   useCreateDepartmentMutation,
   useUpdateDepartmentMutation,
   useUsersSimpleQuery,
 } from '../../hooks/useUserManagementQueries'
-import SearchableSelect from '../../components/SearchableSelect'
 
 interface DepartmentFormModalProps {
   isOpen: boolean
@@ -179,18 +179,14 @@ export function DepartmentFormModal({ isOpen, editingDepartment, parentDepartmen
               <UserCog size={12} className="text-amber-500" />
               部门负责人
             </label>
-            <select
+            <SearchableSelect
+              options={[
+                { id: 0, label: '暂不指定负责人' },
+                ...departmentMembers.map(u => ({ id: u.id, label: `${u.name || u.username} (@${u.username})` })),
+              ]}
               value={managerId ?? 0}
-              onChange={(e) => setManagerId(parseInt(e.target.value, 10) || null)}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-sm text-gray-800 dark:text-gray-200 outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all cursor-pointer"
-            >
-              <option value={0}>暂不指定负责人</option>
-              {departmentMembers.map(u => (
-                <option key={u.id} value={u.id}>
-                  {u.name || u.username} (@{u.username})
-                </option>
-              ))}
-            </select>
+              onChange={(v) => setManagerId(v && v !== 0 ? (v as number) : null)}
+            />
             <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
               只能从本部门成员中选择负责人，负责人将自动获得本部门及所有子部门成员的日报、周报等数据查看权限
             </p>

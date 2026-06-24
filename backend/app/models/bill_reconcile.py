@@ -10,6 +10,7 @@
 5. 审批通过 → session 置 approved，作为月度正式账单
 """
 from datetime import datetime, timezone
+from app.utils.time import BEIJING_TZ, now
 from typing import Optional
 from sqlmodel import SQLModel, Field, Column
 from sqlalchemy import Text
@@ -29,8 +30,8 @@ class BillUpload(SQLModel, table=True):
     status: str = "parsed"                       # parsed | error
     parse_error: Optional[str] = Field(default=None, sa_column=Column(Text))
     uploaded_by: Optional[int] = Field(default=None, foreign_key="user.id")
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())
+    updated_at: datetime = Field(default_factory=lambda: now())
 
 
 class BillUploadRow(SQLModel, table=True):
@@ -67,8 +68,8 @@ class BillReconcileSession(SQLModel, table=True):
     notes: Optional[str] = Field(default=None, sa_column=Column(Text))
     created_by: Optional[int] = Field(default=None, foreign_key="user.id")
     approval_instance_id: Optional[int] = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())
+    updated_at: datetime = Field(default_factory=lambda: now())
 
 
 class BillReconcileItem(SQLModel, table=True):
@@ -115,5 +116,5 @@ class BillReconcileItem(SQLModel, table=True):
     # 人工复核
     review_status: str = "pending"               # pending | confirmed | disputed
     review_note: Optional[str] = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())
+    updated_at: datetime = Field(default_factory=lambda: now())

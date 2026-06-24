@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Search, X } from 'lucide-react'
 import { useTheme } from '../../contexts/ThemeContext'
 import type { RoleData } from '../../services/types'
+import SearchableSelect from '../SearchableSelect'
 
 interface UserFilterBarProps {
   search: string
@@ -63,34 +64,36 @@ export function UserFilterBar({
       {/* 角色过滤 */}
       <div className="flex items-center gap-2">
         <span className="text-[11px] font-bold text-gray-400 dark:text-gray-500 shrink-0">角色:</span>
-        <select
-          value={roleId}
-          onChange={e => onRoleChange(e.target.value)}
-          style={{ colorScheme: theme }}
-          className="flex-1 px-3 py-2 rounded-xl bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-xs text-gray-700 dark:text-gray-200 outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all cursor-pointer font-medium"
-        >
-          <option value="all" className="bg-white dark:bg-bg-input text-gray-800 dark:text-gray-200">全部系统角色</option>
-          {roles.map(r => (
-            <option key={r.id} value={r.id} className="bg-white dark:bg-bg-input text-gray-800 dark:text-gray-200">{r.name}</option>
-          ))}
-        </select>
+        <div className="flex-1">
+          <SearchableSelect
+            options={[
+              { id: 'all', label: '全部系统角色' },
+              ...roles.map(r => ({ id: r.id, label: r.name })),
+            ]}
+            value={roleId}
+            onChange={(v) => onRoleChange(v === 0 ? 'all' : v)}
+            clearValue=""
+          />
+        </div>
       </div>
 
       {/* 状态过滤 */}
       <div className="flex items-center gap-2">
         <span className="text-[11px] font-bold text-gray-400 dark:text-gray-500 shrink-0">账号状态:</span>
-        <select
-          value={status}
-          onChange={e => onStatusChange(e.target.value)}
-          style={{ colorScheme: theme }}
-          className="flex-1 px-3 py-2 rounded-xl bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-xs text-gray-700 dark:text-gray-200 outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all cursor-pointer font-medium"
-        >
-          <option value="all" className="bg-white dark:bg-bg-input text-gray-800 dark:text-gray-200">不限状态</option>
-          <option value="active" className="bg-white dark:bg-bg-input text-gray-800 dark:text-gray-200">正常活跃</option>
-          <option value="disabled" className="bg-white dark:bg-bg-input text-gray-800 dark:text-gray-200">已停用</option>
-          <option value="resigned" className="bg-white dark:bg-bg-input text-gray-800 dark:text-gray-200">已离职</option>
-          <option value="locked" className="bg-white dark:bg-bg-input text-gray-800 dark:text-gray-200">锁定制中</option>
-        </select>
+        <div className="flex-1">
+          <SearchableSelect
+            options={[
+              { id: 'all', label: '不限状态' },
+              { id: 'active', label: '正常活跃' },
+              { id: 'disabled', label: '已停用' },
+              { id: 'resigned', label: '已离职' },
+              { id: 'locked', label: '锁定制中' },
+            ]}
+            value={status}
+            onChange={(v) => onStatusChange(v === 0 ? 'all' : String(v))}
+            clearValue=""
+          />
+        </div>
       </div>
     </div>
   )

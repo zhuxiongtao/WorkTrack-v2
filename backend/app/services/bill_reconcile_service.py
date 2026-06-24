@@ -4,6 +4,7 @@ import json
 import logging
 import re
 from datetime import datetime, timezone
+from app.utils.time import BEIJING_TZ, now
 from typing import Optional
 
 import openpyxl
@@ -123,8 +124,8 @@ def parse_excel(
         filename=filename,
         status="parsed",
         uploaded_by=uploaded_by,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=now(),
+        updated_at=now(),
     )
     db.add(upload)
     db.commit()
@@ -292,13 +293,13 @@ def run_compare(period: str, db: Session) -> BillReconcileSession:
     session = db.exec(
         select(BillReconcileSession).where(BillReconcileSession.period == period)
     ).first()
-    now = datetime.now(timezone.utc)
+    now_dt = now()
     if not session:
         session = BillReconcileSession(
             period=period,
             status="draft",
-            created_at=now,
-            updated_at=now,
+            created_at=now_dt,
+            updated_at=now_dt,
         )
         db.add(session)
         db.commit()
@@ -397,8 +398,8 @@ def run_compare(period: str, db: Session) -> BillReconcileSession:
             customer_diff_pct=customer_diff_pct,
             has_customer_diff=has_customer_diff,
             review_status="pending" if (has_supplier_diff or has_customer_diff) else "ok",
-            created_at=now,
-            updated_at=now,
+            created_at=now_dt,
+            updated_at=now_dt,
         )
         db.add(item)
 
@@ -409,7 +410,7 @@ def run_compare(period: str, db: Session) -> BillReconcileSession:
     session.has_maas_bill     = has_maas
     session.has_supplier_bill = has_supplier
     session.has_customer_bill = has_customer
-    session.updated_at = now
+    session.updated_at = now_dt
     db.add(session)
     db.commit()
     db.refresh(session)

@@ -2,6 +2,7 @@
 
 from typing import Optional
 from datetime import datetime, timezone
+from app.utils.time import BEIJING_TZ, now
 from sqlmodel import SQLModel, Field, Relationship
 
 
@@ -12,7 +13,7 @@ class UserGroup(SQLModel, table=True):
     name: str = Field(max_length=100)
     description: str = Field(default="", max_length=500)  # 用户组描述
     owner_id: int = Field(foreign_key="user.id")
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())
 
 
 class UserGroupMember(SQLModel, table=True):
@@ -34,8 +35,8 @@ class WikiSpace(SQLModel, table=True):
     cover_url: str = Field(default="", max_length=500)  # 自定义封面图片 URL
     share_password: Optional[str] = Field(default=None, max_length=100) # 共享提取码/密码
     share_expires_at: Optional[datetime] = Field(default=None) # 共享到期失效时间
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())
+    updated_at: datetime = Field(default_factory=lambda: now())
 
 
 # ===== Wiki 页面 =====
@@ -49,8 +50,8 @@ class WikiPage(SQLModel, table=True):
     sort_order: int = Field(default=0)
     created_by: int = Field(foreign_key="user.id")
     updated_by: int = Field(foreign_key="user.id")
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())
+    updated_at: datetime = Field(default_factory=lambda: now())
 
 
 # ===== Wiki 权限 =====
@@ -72,4 +73,4 @@ class WikiPageVersion(SQLModel, table=True):
     content: str = Field()  # 该版本的完整内容快照
     version: int = Field()  # 版本号
     created_by: int = Field(foreign_key="user.id")
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())

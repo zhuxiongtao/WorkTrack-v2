@@ -1,5 +1,6 @@
 from typing import Optional
 from datetime import datetime, timezone
+from app.utils.time import BEIJING_TZ, now
 from sqlmodel import SQLModel, Field
 
 
@@ -19,4 +20,4 @@ class NewsCache(SQLModel, table=True):
     category: Optional[str] = Field(default=None, max_length=50, index=True)
     # RSS 原始发布时间 + 我们入库时间
     pub_date: Optional[datetime] = Field(default=None, index=True)
-    fetched_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    fetched_at: datetime = Field(default_factory=lambda: now())

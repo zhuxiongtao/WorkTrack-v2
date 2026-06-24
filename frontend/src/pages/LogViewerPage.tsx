@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Loader2, AlertCircle, AlertTriangle, Info, Trash2, RefreshCw, ChevronDown, ChevronRight, ScrollText, Filter } from 'lucide-react'
 import { useToast } from '../contexts/ToastContext'
+import SearchableSelect from '../components/SearchableSelect'
 
 interface LogItem {
   id: number
@@ -105,26 +106,26 @@ export default function LogViewerPage() {
       {/* 筛选栏 */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         <Filter size={13} className="text-gray-500" />
-        <select
+        <SearchableSelect
+          options={[
+            { id: '', label: '全部级别' },
+            { id: 'error', label: '🔴 错误' },
+            { id: 'warning', label: '🟡 警告' },
+            { id: 'info', label: '🔵 信息' },
+          ]}
           value={filterLevel}
-          onChange={(e) => setFilterLevel(e.target.value)}
-          className="px-2.5 py-1 rounded-lg bg-bg-input border border-border text-xs text-gray-300 outline-none"
-        >
-          <option value="">全部级别</option>
-          <option value="error">🔴 错误</option>
-          <option value="warning">🟡 警告</option>
-          <option value="info">🔵 信息</option>
-        </select>
-        <select
+          onChange={(v) => setFilterLevel(v === 0 ? '' : String(v))}
+          clearValue=""
+        />
+        <SearchableSelect
+          options={[
+            { id: '', label: '全部分类' },
+            ...Object.entries(CATEGORY_LABELS).map(([k, v]) => ({ id: k, label: v })),
+          ]}
           value={filterCategory}
-          onChange={(e) => setFilterCategory(e.target.value)}
-          className="px-2.5 py-1 rounded-lg bg-bg-input border border-border text-xs text-gray-300 outline-none"
-        >
-          <option value="">全部分类</option>
-          {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
-            <option key={k} value={k}>{v}</option>
-          ))}
-        </select>
+          onChange={(v) => setFilterCategory(v === 0 ? '' : String(v))}
+          clearValue=""
+        />
       </div>
 
       {/* 日志列表 */}

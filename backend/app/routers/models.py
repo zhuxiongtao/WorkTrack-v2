@@ -10,6 +10,7 @@ import json
 import logging
 import time
 from datetime import datetime, timezone
+from app.utils.time import BEIJING_TZ, now
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -101,9 +102,9 @@ def update_model(
         for k, v in data.items():
             setattr(row, k, v)
         if "is_active" in data and data["is_active"]:
-            row.reviewed_at = datetime.now(timezone.utc)
+            row.reviewed_at = now()
             row.reviewed_by = user.id
-        row.updated_at = datetime.now(timezone.utc)
+        row.updated_at = now()
         db.add(row)
         db.commit()
         db.refresh(row)

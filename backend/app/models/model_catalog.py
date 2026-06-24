@@ -1,10 +1,11 @@
 from typing import Optional
 from datetime import datetime, date, timezone
+from app.utils.time import BEIJING_TZ, now
 from sqlmodel import SQLModel, Field
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return now()
 
 
 class ModelCatalog(SQLModel, table=True):

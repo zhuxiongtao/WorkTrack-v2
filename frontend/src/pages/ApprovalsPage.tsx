@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   CheckSquare, Loader2, Check, X, RotateCcw, Clock, FileText,
-  ChevronRight, CircleCheck, CircleX, CircleDot, Send,
+  ChevronRight, ChevronDown, ChevronUp, CircleCheck, CircleX, CircleDot, Send,
 } from 'lucide-react'
 import { PageHeader, EmptyState, Modal } from '../components/design-system'
 import { useToast } from '../contexts/ToastContext'
@@ -27,6 +27,8 @@ interface ApprovalNode {
   name: string
   order: number
   status: string
+  node_kind?: string        // approval | execution
+  action_label?: string     // 执行节点动作文案，如「确认付款」
   approver_ids: number[]
   approver_names: string[]
   decided_by: number | null
@@ -61,15 +63,18 @@ interface ApprovalDetail {
 }
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
-  pending: { label: '审批中', cls: 'text-amber-400 bg-amber-500/10 border-amber-500/30' },
-  approved: { label: '已通过', cls: 'text-green-400 bg-green-500/10 border-green-500/30' },
-  rejected: { label: '已驳回', cls: 'text-red-400 bg-red-500/10 border-red-500/30' },
-  cancelled: { label: '已撤回', cls: 'text-gray-400 bg-gray-500/10 border-gray-500/30' },
+  pending: { label: '审批中', cls: 'text-amber-700 dark:text-amber-400 bg-amber-500/10 border-amber-500/30' },
+  approved: { label: '已通过', cls: 'text-emerald-700 dark:text-green-400 bg-green-500/10 border-green-500/30' },
+  rejected: { label: '已驳回', cls: 'text-red-600 dark:text-red-400 bg-red-500/10 border-red-500/30' },
+  cancelled: { label: '已撤回', cls: 'text-gray-600 dark:text-gray-400 bg-gray-500/10 border-gray-500/30' },
 }
 const ACTION_LABEL: Record<string, string> = {
   submit: '发起申请', approve: '通过', reject: '驳回', cancel: '撤回',
 }
-const TARGET_LABEL: Record<string, string> = { contract: '合同' }
+const TARGET_LABEL: Record<string, string> = {
+  contract: '合同', payment: '付款申请', seal: '盖章申请',
+  supplier: '供应商', channel: '通道', project: '项目', reconcile_summary: '财务月结',
+}
 
 function fmtTime(s: string | null): string {
   if (!s) return '—'
@@ -79,6 +84,17 @@ function fmtTime(s: string | null): string {
 function statusBadge(status: string) {
   const m = STATUS_META[status] || { label: status, cls: 'text-gray-400 bg-gray-500/10 border-gray-500/30' }
   return <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium border ${m.cls}`}>{m.label}</span>
+}
+
+interface ContractDetail {
+  title: string
+  contract_type: string
+  party_a: string
+  party_b: string
+  contract_amount: number | null
+  amount_unit: string
+  seal_types_requested: string
+  status: string
 }
 
 export default function ApprovalsPage() {
@@ -92,6 +108,8 @@ export default function ApprovalsPage() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [comment, setComment] = useState('')
   const [acting, setActing] = useState(false)
+  const [contractDetail, setContractDetail] = useState<ContractDetail | null>(null)
+  const [showNodes, setShowNodes] = useState(true)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -111,10 +129,20 @@ export default function ApprovalsPage() {
   const openDetail = async (id: number) => {
     setDetailLoading(true)
     setComment('')
+    setContractDetail(null)
     try {
       const res = await fetch(`/api/v1/approvals/${id}`)
-      if (res.ok) setDetail(await res.json())
-      else showToast('加载审批详情失败', 'error')
+      if (res.ok) {
+        const inst: ApprovalDetail = await res.json()
+        setDetail(inst)
+        setShowNodes(inst.status === 'pending')
+        if (inst.target_type === 'contract') {
+          fetch(`/api/v1/contracts/${inst.target_id}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(d => { if (d) setContractDetail(d) })
+            .catch(() => {})
+        }
+      } else showToast('加载审批详情失败', 'error')
     } catch { showToast('加载审批详情失败', 'error') }
     finally { setDetailLoading(false) }
   }
@@ -201,7 +229,7 @@ export default function ApprovalsPage() {
           >
             <t.icon size={12} />{t.label}
             {t.count > 0 && (
-              <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-bold">{t.count}</span>
+              <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 font-bold">{t.count}</span>
             )}
           </button>
         ))}
@@ -236,7 +264,7 @@ export default function ApprovalsPage() {
                     <div className="text-[11px] text-gray-500 mt-0.5 truncate">
                       {TARGET_LABEL[item.target_type] || item.target_type}
                       {item.status === 'pending' && item.current_node && (
-                        <span className="ml-1.5">· 当前节点：<span className="text-amber-400">{item.current_node}</span>（{item.node_index + 1}/{item.node_total}）</span>
+                        <span className="ml-1.5">· 当前节点：<span className="text-amber-700 dark:text-amber-400">{item.current_node}</span>（{item.node_index + 1}/{item.node_total}）</span>
                       )}
                       <span className="ml-1.5">· 发起人 {item.submitted_by_name}</span>
                       <span className="ml-1.5">· {fmtTime(item.submitted_at)}</span>
@@ -245,7 +273,7 @@ export default function ApprovalsPage() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {item.can_act && (
-                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-bold">待处理</span>
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 font-bold">待处理</span>
                   )}
                   <ChevronRight size={16} className="text-gray-600 group-hover:text-amber-400 transition-colors" />
                 </div>
@@ -263,7 +291,7 @@ export default function ApprovalsPage() {
           subtitle={`${TARGET_LABEL[detail.target_type] || detail.target_type} · 发起人 ${detail.submitted_by_name} · ${fmtTime(detail.submitted_at)}`}
           tone="orange"
           size="2xl"
-          onClose={() => setDetail(null)}
+          onClose={() => { setDetail(null); setContractDetail(null) }}
         >
           {detailLoading ? (
             <div className="flex items-center justify-center py-12"><Loader2 className="animate-spin text-gray-400" size={22} /></div>
@@ -275,16 +303,67 @@ export default function ApprovalsPage() {
                 {detail.finished_at && <span className="text-[11px] text-gray-500">结束于 {fmtTime(detail.finished_at)}</span>}
               </div>
 
-              {/* 节点进度 */}
+              {/* 合同详情（仅合同类审批显示） */}
+              {detail.target_type === 'contract' && contractDetail && (
+                <div className="rounded-xl bg-bg-input/50 border border-border/50 p-4">
+                  <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">合同信息</div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[12px]">
+                    <div className="col-span-2 flex gap-1.5">
+                      <span className="text-gray-400 shrink-0 w-[4em]">合同名称</span>
+                      <span className="text-gray-100 break-words min-w-0 flex-1">{contractDetail.title}</span>
+                    </div>
+                    {contractDetail.contract_type && (
+                      <div className="flex gap-1.5">
+                        <span className="text-gray-400 shrink-0 w-[4em]">合同类型</span>
+                        <span className="text-gray-200">{contractDetail.contract_type}</span>
+                      </div>
+                    )}
+                    {contractDetail.contract_amount != null && (
+                      <div className="flex gap-1.5">
+                        <span className="text-gray-400 shrink-0 w-[4em]">合同金额</span>
+                        <span className="text-gray-200">{contractDetail.contract_amount}{contractDetail.amount_unit}</span>
+                      </div>
+                    )}
+                    {contractDetail.party_a && (
+                      <div className="flex gap-1.5">
+                        <span className="text-gray-400 shrink-0 w-[4em]">甲方</span>
+                        <span className="text-gray-200">{contractDetail.party_a}</span>
+                      </div>
+                    )}
+                    {contractDetail.party_b && (
+                      <div className="flex gap-1.5">
+                        <span className="text-gray-400 shrink-0 w-[4em]">乙方</span>
+                        <span className="text-gray-200">{contractDetail.party_b}</span>
+                      </div>
+                    )}
+                    {contractDetail.seal_types_requested && (
+                      <div className="col-span-2 flex gap-1.5">
+                        <span className="text-gray-400 shrink-0 w-[4em]">用章类型</span>
+                        <span className="text-gray-200">{contractDetail.seal_types_requested}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 节点进度（可折叠） */}
               <div>
-                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">审批节点</div>
-                <div className="space-y-0">
+                <button
+                  onClick={() => setShowNodes(v => !v)}
+                  className="w-full flex items-center justify-between mb-2"
+                >
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                    审批节点（{detail.nodes.length} 个）
+                  </span>
+                  {showNodes ? <ChevronUp size={13} className="text-gray-500" /> : <ChevronDown size={13} className="text-gray-500" />}
+                </button>
+                {showNodes && <div className="space-y-0">
                   {detail.nodes.map((n, i) => {
                     const isLast = i === detail.nodes.length - 1
                     let dot = <CircleDot size={18} className="text-gray-500" />
-                    if (n.status === 'approved') dot = <CircleCheck size={18} className="text-green-400" />
-                    else if (n.status === 'rejected') dot = <CircleX size={18} className="text-red-400" />
-                    else if (n.is_current) dot = <CircleDot size={18} className="text-amber-400" />
+                    if (n.status === 'approved') dot = <CircleCheck size={18} className="text-emerald-600 dark:text-green-400" />
+                    else if (n.status === 'rejected') dot = <CircleX size={18} className="text-red-600 dark:text-red-400" />
+                    else if (n.is_current) dot = <CircleDot size={18} className="text-amber-600 dark:text-amber-400" />
                     return (
                       <div key={i} className="flex gap-3">
                         <div className="flex flex-col items-center">
@@ -294,9 +373,9 @@ export default function ApprovalsPage() {
                         <div className={`pb-4 flex-1 ${n.is_current ? '' : 'opacity-90'}`}>
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium text-white">{n.name}</span>
-                            {n.is_current && <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 font-bold">当前</span>}
-                            {n.status === 'approved' && <span className="text-[11px] text-green-400">已通过</span>}
-                            {n.status === 'rejected' && <span className="text-[11px] text-red-400">已驳回</span>}
+                            {n.is_current && <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-400 font-bold">当前</span>}
+                            {n.status === 'approved' && <span className="text-[11px] text-emerald-700 dark:text-green-400">已通过</span>}
+                            {n.status === 'rejected' && <span className="text-[11px] text-red-600 dark:text-red-400">已驳回</span>}
                           </div>
                           <div className="text-[11px] text-gray-500 mt-0.5">
                             审批人：{n.approver_names.length ? n.approver_names.join('、') : '（无可用审批人，自动通过）'}
@@ -306,7 +385,7 @@ export default function ApprovalsPage() {
                       </div>
                     )
                   })}
-                </div>
+                </div>}
               </div>
 
               {/* 审批历史 */}
@@ -327,33 +406,46 @@ export default function ApprovalsPage() {
               )}
 
               {/* 操作区 */}
-              {detail.can_act && (
-                <div className="rounded-xl bg-bg-input/50 border border-border/40 p-4 space-y-3">
-                  <textarea
-                    value={comment}
-                    onChange={e => setComment(e.target.value)}
-                    placeholder="审批意见（驳回必填）"
-                    rows={2}
-                    className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-amber-500 transition-all resize-none"
-                  />
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => act('approve')}
-                      disabled={acting}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-green-500 text-white text-xs font-bold hover:bg-green-600 transition-all disabled:opacity-50"
-                    >
-                      {acting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}通过
-                    </button>
-                    <button
-                      onClick={() => act('reject')}
-                      disabled={acting}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-500 text-white text-xs font-bold hover:bg-red-600 transition-all disabled:opacity-50"
-                    >
-                      <X size={14} />驳回
-                    </button>
+              {detail.can_act && (() => {
+                const curNode = detail.nodes.find(n => n.is_current)
+                const isExec = curNode?.node_kind === 'execution'
+                const approveLabel = isExec ? (curNode?.action_label || '确认完成') : '通过'
+                const rejectLabel = isExec ? '退回' : '驳回'
+                return (
+                  <div className="rounded-xl bg-bg-input/50 border border-border/40 p-4 space-y-3">
+                    {isExec && (
+                      <p className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold">
+                        这是执行节点：前序审批已通过，请在线下完成「{curNode?.name}」后点击下方确认。
+                      </p>
+                    )}
+                    <textarea
+                      value={comment}
+                      onChange={e => setComment(e.target.value)}
+                      placeholder={isExec ? '备注（退回必填）' : '审批意见（驳回必填）'}
+                      rows={2}
+                      className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-amber-500 transition-all resize-none"
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => act('approve')}
+                        disabled={acting}
+                        className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-white text-xs font-bold transition-all disabled:opacity-50 ${
+                          isExec ? 'bg-blue-500 hover:bg-blue-600' : 'bg-green-500 hover:bg-green-600'
+                        }`}
+                      >
+                        {acting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}{approveLabel}
+                      </button>
+                      <button
+                        onClick={() => act('reject')}
+                        disabled={acting}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-500 text-white text-xs font-bold hover:bg-red-600 transition-all disabled:opacity-50"
+                      >
+                        <X size={14} />{rejectLabel}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
+                )
+              })()}
 
               {/* 撤回 */}
               {detail.can_cancel && !detail.can_act && (

@@ -8,6 +8,7 @@
 """
 from typing import Optional
 from datetime import datetime, timezone
+from app.utils.time import BEIJING_TZ, now
 from sqlmodel import SQLModel, Field
 
 
@@ -32,8 +33,8 @@ class ApprovalFlow(SQLModel, table=True):
     nodes: str = Field(default="[]")
 
     description: str = Field(default="", max_length=200)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())
+    updated_at: datetime = Field(default_factory=lambda: now())
 
 
 class ApprovalInstance(SQLModel, table=True):
@@ -58,11 +59,11 @@ class ApprovalInstance(SQLModel, table=True):
     nodes_snapshot: str = Field(default="[]")
 
     submitted_by: int = Field(foreign_key="user.id", index=True)
-    submitted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    submitted_at: datetime = Field(default_factory=lambda: now())
     finished_at: Optional[datetime] = Field(default=None)
 
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())
+    updated_at: datetime = Field(default_factory=lambda: now())
 
 
 class ApprovalRecord(SQLModel, table=True):
@@ -77,4 +78,4 @@ class ApprovalRecord(SQLModel, table=True):
     # submit（发起）/ approve（同意）/ reject（驳回）/ cancel（撤回）
     action: str = Field(max_length=20)
     comment: str = Field(default="", max_length=500)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())

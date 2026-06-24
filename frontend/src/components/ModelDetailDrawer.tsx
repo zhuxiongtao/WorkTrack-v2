@@ -3,6 +3,7 @@ import { X, Save, Loader2, Brain, AlertCircle, RotateCcw, FileText, MessageSquar
 import { useToast } from '../contexts/ToastContext'
 import { IconBox } from './design-system'
 import { TONES, type Tone } from '../theme/tokens'
+import SearchableSelect from './SearchableSelect'
 
 interface ModelDetail {
   id: number
@@ -361,10 +362,12 @@ function SelectField({ label, value, options, onChange, onNull }: { label: strin
           <RotateCcw size={9} />继承
         </button>
       </div>
-      <select value={value || ''} onChange={(e) => onChange(e.target.value || null)}
-        className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-xs text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6]">
-        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
+      <SearchableSelect
+        options={options.map(o => ({ id: o.value, label: o.label }))}
+        value={value || ''}
+        onChange={(v) => onChange(v === 0 ? null : (String(v) || null))}
+        clearValue=""
+      />
     </div>
   )
 }

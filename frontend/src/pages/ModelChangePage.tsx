@@ -6,6 +6,7 @@ import {
   PlayCircle, Paperclip, Trash2,
 } from 'lucide-react'
 import { PageHeader, EmptyState, Modal, ModalFooter, SectionLabel, Field } from '../components/design-system'
+import SearchableSelect from '../components/SearchableSelect'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -519,11 +520,12 @@ export default function ModelChangePage() {
           <Modal title={`指派执行人：${showAssign.name}`} onClose={() => setShowAssign(null)} size="sm">
             <div className="py-2">
               <Field label="选择执行人" required>
-                <select value={assignTo} onChange={e => setAssignTo(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-text-primary focus:outline-none">
-                  <option value="">请选择</option>
-                  {users.map(u => <option key={u.id} value={u.id}>{u.name || u.username}</option>)}
-                </select>
+                <SearchableSelect
+                  options={[{ id: '', label: '请选择' }, ...users.map(u => ({ id: String(u.id), label: u.name || u.username }))]}
+                  value={assignTo}
+                  onChange={(v) => setAssignTo(v === 0 ? '' : String(v))}
+                  clearValue=""
+                />
               </Field>
             </div>
             <ModalFooter onClose={() => setShowAssign(null)} onSave={handleAssign} saving={saving} saveText="确认指派" saveDisabled={!assignTo} />
@@ -602,20 +604,26 @@ export default function ModelChangePage() {
             <div className="space-y-3 py-1">
               <div className="grid grid-cols-2 gap-3">
                 <Field label="跟进状态">
-                  <select value={taskForm.status} onChange={e => setTaskForm({ ...taskForm, status: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-text-primary focus:outline-none">
-                    {Object.entries(TASK_STATUS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                  </select>
+                  <SearchableSelect
+                    options={Object.entries(TASK_STATUS_LABELS).map(([v, l]) => ({ id: v, label: l }))}
+                    value={taskForm.status}
+                    onChange={(v) => setTaskForm({ ...taskForm, status: v === 0 ? '' : String(v) })}
+                    clearValue=""
+                  />
                 </Field>
                 <Field label="联系方式">
-                  <select value={taskForm.contact_method} onChange={e => setTaskForm({ ...taskForm, contact_method: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-text-primary focus:outline-none">
-                    <option value="">未选择</option>
-                    <option value="email">邮件</option>
-                    <option value="phone">电话</option>
-                    <option value="meeting">会议</option>
-                    <option value="platform_msg">平台消息</option>
-                  </select>
+                  <SearchableSelect
+                    options={[
+                      { id: '', label: '未选择' },
+                      { id: 'email', label: '邮件' },
+                      { id: 'phone', label: '电话' },
+                      { id: 'meeting', label: '会议' },
+                      { id: 'platform_msg', label: '平台消息' },
+                    ]}
+                    value={taskForm.contact_method}
+                    onChange={(v) => setTaskForm({ ...taskForm, contact_method: v === 0 ? '' : String(v) })}
+                    clearValue=""
+                  />
                 </Field>
               </div>
               <Field label="客户承诺完成日期">
@@ -666,16 +674,18 @@ export default function ModelChangePage() {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="搜索标题、供应商..."
             className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-bg-card border border-border text-sm text-text-primary placeholder-gray-500 focus:outline-none focus:border-accent-blue/50" />
         </div>
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-          className="px-3 py-1.5 rounded-lg bg-bg-card border border-border text-sm text-text-primary focus:outline-none">
-          <option value="">全部状态</option>
-          {Object.entries(STATUS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-        </select>
-        <select value={filterRisk} onChange={e => setFilterRisk(e.target.value)}
-          className="px-3 py-1.5 rounded-lg bg-bg-card border border-border text-sm text-text-primary focus:outline-none">
-          <option value="">全部风险</option>
-          {Object.entries(RISK_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-        </select>
+        <SearchableSelect
+          options={[{ id: '', label: '全部状态' }, ...Object.entries(STATUS_LABELS).map(([v, l]) => ({ id: v, label: l }))]}
+          value={filterStatus}
+          onChange={(v) => setFilterStatus(v === 0 ? '' : String(v))}
+          clearValue=""
+        />
+        <SearchableSelect
+          options={[{ id: '', label: '全部风险' }, ...Object.entries(RISK_LABELS).map(([v, l]) => ({ id: v, label: l }))]}
+          value={filterRisk}
+          onChange={(v) => setFilterRisk(v === 0 ? '' : String(v))}
+          clearValue=""
+        />
       </div>
 
       {/* 列表 */}
@@ -752,27 +762,34 @@ export default function ModelChangePage() {
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="供应商" required>
-                <select value={form.supplier_id} onChange={e => setForm(f => ({ ...f, supplier_id: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-text-primary focus:outline-none">
-                  <option value="">请选择</option>
-                  {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
+                <SearchableSelect
+                  options={[{ id: '', label: '请选择' }, ...suppliers.map(s => ({ id: String(s.id), label: s.name }))]}
+                  value={form.supplier_id}
+                  onChange={(v) => setForm(f => ({ ...f, supplier_id: v === 0 ? '' : String(v) }))}
+                  clearValue=""
+                />
               </Field>
               <Field label="变更类型">
-                <select value={form.change_type} onChange={e => setForm(f => ({ ...f, change_type: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-text-primary focus:outline-none">
-                  {Object.entries(CHANGE_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
+                <SearchableSelect
+                  options={Object.entries(CHANGE_TYPE_LABELS).map(([v, l]) => ({ id: v, label: l }))}
+                  value={form.change_type}
+                  onChange={(v) => setForm(f => ({ ...f, change_type: v === 0 ? '' : String(v) }))}
+                  clearValue=""
+                />
               </Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Field label="风险等级">
-                <select value={form.risk_level} onChange={e => setForm(f => ({ ...f, risk_level: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-text-primary focus:outline-none">
-                  <option value="low">低风险</option>
-                  <option value="medium">中风险</option>
-                  <option value="high">高风险</option>
-                </select>
+                <SearchableSelect
+                  options={[
+                    { id: 'low', label: '低风险' },
+                    { id: 'medium', label: '中风险' },
+                    { id: 'high', label: '高风险' },
+                  ]}
+                  value={form.risk_level}
+                  onChange={(v) => setForm(f => ({ ...f, risk_level: v === 0 ? '' : String(v) }))}
+                  clearValue=""
+                />
               </Field>
               <Field label="上游生效日期">
                 <input type="date" value={form.effective_date} onChange={e => setForm(f => ({ ...f, effective_date: e.target.value }))}

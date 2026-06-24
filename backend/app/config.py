@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     # 默认管理员密码（仅 auto_create_admin=True 时使用；未设置则自动生成随机密码并打印到日志）
     admin_password: str = ""
 
+    # 前端地址（用于邮件等场景拼接完整链接）
+    frontend_url: str = ""
+
     # Tavily 搜索 API Key（兜底用，优先使用系统偏好设置）
     tavily_api_key: str = ""
 

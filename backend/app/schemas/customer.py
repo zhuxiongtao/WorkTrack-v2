@@ -13,10 +13,11 @@ class CustomerCreate(BaseModel):
     scale: Optional[str] = None
     profile: Optional[str] = None
     recent_news: Optional[str] = None
+    recent_news_evidence: Optional[str] = None
     logo_url: Optional[str] = None
     website: Optional[str] = None
     ai_initiatives: Optional[str] = None
-    ai_evidence: Optional[str] = None  # JSON 字符串：来源映射
+    ai_evidence: Optional[str] = None
 
 
 class CustomerUpdate(BaseModel):
@@ -29,6 +30,7 @@ class CustomerUpdate(BaseModel):
     scale: Optional[str] = None
     profile: Optional[str] = None
     recent_news: Optional[str] = None
+    recent_news_evidence: Optional[str] = None
     logo_url: Optional[str] = None
     website: Optional[str] = None
     ai_initiatives: Optional[str] = None
@@ -47,6 +49,7 @@ class CustomerOut(BaseModel):
     scale: Optional[str] = None
     profile: Optional[str] = None
     recent_news: Optional[str] = None
+    recent_news_evidence: Optional[str] = None
     logo_url: Optional[str] = None
     website: Optional[str] = None
     ai_initiatives: Optional[str] = None
@@ -56,6 +59,7 @@ class CustomerOut(BaseModel):
 
 class CompanySearchRequest(BaseModel):
     keyword: str
+    refresh: bool = False   # True=绕过缓存重跑并返回诊断信息（排查 prod 搜不到的原因）
 
 
 class CompanyInfoRequest(BaseModel):

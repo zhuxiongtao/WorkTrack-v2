@@ -26,11 +26,12 @@ def _evict_if_needed() -> None:
         _cache.popitem(last=False)
 
 
-def cached_call(key: str, ttl: int, factory: Callable[[], Any]) -> Tuple[Any, bool]:
+def cached_call(key: str, ttl: int, factory: Callable[[], Any], skip_none: bool = False) -> Tuple[Any, bool]:
     """按 key 在 ttl 秒内缓存 factory() 的结果
 
     返回 (value, hit)。命中时 hit=True；未命中计算并存入 hit=False。
     异常不会被缓存（向上抛）。
+    skip_none=True 时，factory 返回 None 不写入缓存，下次继续重试。
     """
     now = time.monotonic()
     with _lock:
@@ -45,6 +46,8 @@ def cached_call(key: str, ttl: int, factory: Callable[[], Any]) -> Tuple[Any, bo
             del _cache[key]
     # 未命中：在锁外计算（避免长时间持锁）
     value = factory()
+    if value is None and skip_none:
+        return value, False
     with _lock:
         _cache[key] = (now + ttl, now, value)
         _cache.move_to_end(key)

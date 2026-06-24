@@ -171,11 +171,14 @@ export const MODULE_LABELS: Record<string, string> = {
   data: '数据管理',
   management: '管理总览',
   share: '数据分享',
+  feedback: '意见反馈',
+  payment: '付款申请',
+  seal: '盖章申请',
 }
 
 export const PERM_GROUPS = [
   'user', 'project', 'customer', 'contract', 'upstream', 'reconcile',
   'report', 'meeting', 'ai', 'wiki', 'settings', 'model',
   'dashboard', 'task', 'log', 'monitor', 'data',
-  'management', 'share',
+  'management', 'share', 'feedback', 'payment', 'seal',
 ] as const

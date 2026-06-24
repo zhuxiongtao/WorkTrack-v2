@@ -99,7 +99,7 @@ async def serve_file(
     已上传文件访问（需认证）。
     仅允许访问自己上传的文件，管理员可访问所有文件。
     """
-    if str(current_user.id) != user_id and not has_permission(current_user, "user:read", db):
+    if str(current_user.id) != user_id and not current_user.is_admin and not has_permission(current_user, "user:read", db):
         raise HTTPException(status_code=403, detail="无权访问该文件")
 
     safe_filename = os.path.basename(filename)

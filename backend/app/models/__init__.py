@@ -32,6 +32,10 @@ from app.models.model_catalog import ModelCatalog
 from app.models.approval import ApprovalFlow, ApprovalInstance, ApprovalRecord
 from app.models.model_change import ModelChangeEvent, ModelChangeStage, ModelChangeCustomerTask
 from app.models.model_usage_log import ModelUsageLog
+from app.models.feedback import Feedback
+from app.models.payment import PaymentRequest
+from app.models.seal import SealRequest
+from app.models.project_follow_up import ProjectFollowUp
 
 __all__ = [
     "User",
@@ -86,4 +90,8 @@ __all__ = [
     "ModelChangeStage",
     "ModelChangeCustomerTask",
     "ModelUsageLog",
+    "Feedback",
+    "PaymentRequest",
+    "SealRequest",
+    "ProjectFollowUp",
 ]

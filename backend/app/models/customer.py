@@ -1,5 +1,6 @@
 from typing import Optional
 from datetime import datetime, timezone
+from app.utils.time import BEIJING_TZ, now
 from sqlmodel import SQLModel, Field
 
 
@@ -15,8 +16,9 @@ class Customer(SQLModel, table=True):
     scale: Optional[str] = None             # 规模人数
     profile: Optional[str] = None           # 公司简介
     recent_news: Optional[str] = None       # 近期动向
+    recent_news_evidence: Optional[str] = None  # 近期动向来源 JSON: [{"url":..., "title":..., "domain":...}, ...]
     logo_url: Optional[str] = None          # 公司Logo URL
     website: Optional[str] = None           # 公司官网/产品官网
     ai_initiatives: Optional[str] = None     # AI 领域动向（基于真实联网搜索）
     ai_evidence: Optional[str] = None        # AI 动向的来源映射 JSON: [{"text":..., "url":..., "domain":...}, ...]
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())

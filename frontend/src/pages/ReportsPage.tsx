@@ -3,6 +3,7 @@ import { Plus, X, Trash2, Loader2, ChevronDown, ChevronRight, Upload, Mic, MicOf
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useUnsavedGuard } from '../hooks/useUnsavedGuard'
+import SearchableSelect from '../components/SearchableSelect'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import FileUpload from '../components/FileUpload'
 import RichTextEditor from '../components/RichTextEditor'
@@ -580,17 +581,12 @@ export default function ReportsPage() {
                   {uploading ? '提取中...' : '上传文件'}
                 </button>
                 {audioDevices.length > 1 && !recording && (
-                  <select
+                  <SearchableSelect
+                    options={audioDevices.map((d) => ({ id: d.deviceId, label: d.label || `麦克风 ${d.deviceId.slice(0, 8)}` }))}
                     value={selectedDeviceId}
-                    onChange={(e) => updateDevicePreference(e.target.value)}
-                    className="px-2 py-1.5 rounded-lg bg-bg-hover border border-border text-[11px] text-gray-400 outline-none focus:border-[#3B82F6] max-w-[120px] truncate"
-                  >
-                    {audioDevices.map((d) => (
-                      <option key={d.deviceId} value={d.deviceId}>
-                        {d.label || `麦克风 ${d.deviceId.slice(0, 8)}`}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(v) => updateDevicePreference(v === 0 ? '' : String(v))}
+                    clearValue=""
+                  />
                 )}
                 <button onClick={toggleRecording}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-all ${

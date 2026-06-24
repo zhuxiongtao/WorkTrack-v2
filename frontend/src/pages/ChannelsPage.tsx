@@ -5,6 +5,7 @@ import {
   ChevronRight, FileText, AlertTriangle, Hash, BookOpen, Percent, GitBranch,
 } from 'lucide-react'
 import { PageHeader, IconBox, EmptyState, SectionHeader, Modal, ModalFooter, SectionLabel, Field } from '../components/design-system'
+import SearchableSelect from '../components/SearchableSelect'
 import { useToast } from '../contexts/ToastContext'
 import { apiFetch, apiPost, apiPut, apiDelete } from '../services/api'
 import { ApprovalTimeline } from '../components/approval/ApprovalTimeline'
@@ -373,26 +374,30 @@ export default function ChannelsPage() {
                   className="w-full pl-8 pr-3 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500/50"
                 />
               </div>
-              <select value={filterSupplier} onChange={e => setFilterSupplier(e.target.value)}
-                className="px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none focus:border-cyan-500/50">
-                <option value="">全部供应商</option>
-                {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-              <select value={filterKind} onChange={e => setFilterKind(e.target.value)}
-                className="px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none focus:border-cyan-500/50">
-                <option value="">全部类型</option>
-                {KINDS.map(k => <option key={k} value={k}>{k}</option>)}
-              </select>
-              <select value={filterModel} onChange={e => setFilterModel(e.target.value)}
-                className="px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none focus:border-cyan-500/50">
-                <option value="">全部模型</option>
-                {modelTypes.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
-              <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-                className="px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none focus:border-cyan-500/50">
-                <option value="">全部状态</option>
-                {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
+              <SearchableSelect
+                options={[{ id: '', label: '全部供应商' }, ...suppliers.map(s => ({ id: String(s.id), label: s.name }))]}
+                value={filterSupplier}
+                onChange={(v) => setFilterSupplier(v === 0 ? '' : String(v))}
+                clearValue=""
+              />
+              <SearchableSelect
+                options={[{ id: '', label: '全部类型' }, ...KINDS.map(k => ({ id: k, label: k }))]}
+                value={filterKind}
+                onChange={(v) => setFilterKind(v === 0 ? '' : String(v))}
+                clearValue=""
+              />
+              <SearchableSelect
+                options={[{ id: '', label: '全部模型' }, ...modelTypes.map(m => ({ id: m, label: m }))]}
+                value={filterModel}
+                onChange={(v) => setFilterModel(v === 0 ? '' : String(v))}
+                clearValue=""
+              />
+              <SearchableSelect
+                options={[{ id: '', label: '全部状态' }, ...STATUSES.map(s => ({ id: s, label: s }))]}
+                value={filterStatus}
+                onChange={(v) => setFilterStatus(v === 0 ? '' : String(v))}
+                clearValue=""
+              />
               <button onClick={openCreate}
                 className="ml-auto inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-cyan-500 to-blue-500 rounded-lg hover:opacity-90">
                 <Plus size={14} /> 新建通道
@@ -1017,11 +1022,12 @@ function ChannelFormModal({
           <SectionLabel>基本信息</SectionLabel>
           <div className="grid grid-cols-2 gap-3">
             <Field label="所属供应商" required>
-              <select value={form.supplier_id} onChange={e => upd({ supplier_id: parseInt(e.target.value) || 0 })}
-                className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all">
-                <option value={0}>请选择…</option>
-                {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
+              <SearchableSelect
+                options={[{ id: 0, label: '请选择…' }, ...suppliers.map(s => ({ id: s.id, label: s.name }))]}
+                value={form.supplier_id || 0}
+                onChange={(v) => upd({ supplier_id: (v as number) || 0 })}
+                clearValue={0}
+              />
             </Field>
             <Field label="通道名称" required>
               <input value={form.name} onChange={e => upd({ name: e.target.value })}
@@ -1039,16 +1045,20 @@ function ChannelFormModal({
                 className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" />
             </Field>
             <Field label="通道类型">
-              <select value={form.kind} onChange={e => upd({ kind: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all">
-                {KINDS.map(k => <option key={k} value={k}>{k}</option>)}
-              </select>
+              <SearchableSelect
+                options={KINDS.map(k => ({ id: k, label: k }))}
+                value={form.kind}
+                onChange={(v) => upd({ kind: v === 0 ? '' : String(v) })}
+                clearValue=""
+              />
             </Field>
             <Field label="状态">
-              <select value={form.status} onChange={e => upd({ status: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all">
-                {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
+              <SearchableSelect
+                options={STATUSES.map(s => ({ id: s, label: s }))}
+                value={form.status}
+                onChange={(v) => upd({ status: v === 0 ? '' : String(v) })}
+                clearValue=""
+              />
             </Field>
           </div>
         </div>

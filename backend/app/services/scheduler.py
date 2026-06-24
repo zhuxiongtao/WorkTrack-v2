@@ -6,6 +6,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.date import DateTrigger
 from sqlmodel import Session, select
 from datetime import date, datetime
+from app.utils.time import BEIJING_TZ, now
 
 from app.database import engine
 from app.config import settings
@@ -259,7 +260,7 @@ def cleanup_chat_history():
     with Session(engine) as db:
         # ── 规则一：时间过期 ──────────────────────────────────────────────
         if retention_days > 0:
-            cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+            cutoff = now() - timedelta(days=retention_days)
             old_convs = db.exec(
                 select(ChatConversation).where(ChatConversation.updated_at < cutoff)
             ).all()

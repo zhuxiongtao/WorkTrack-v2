@@ -7,6 +7,7 @@ import {
   Layers, X, Calendar,
 } from 'lucide-react'
 import { PageHeader, IconBox, EmptyState, SectionHeader, Modal, ModalFooter, SectionLabel, Field } from '../components/design-system'
+import SearchableSelect from '../components/SearchableSelect'
 import { ApprovalTimeline } from '../components/approval/ApprovalTimeline'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -485,16 +486,20 @@ export default function UpstreamPage() {
                   className="w-full pl-7 pr-3 py-1.5 rounded-lg bg-bg-input border border-border text-xs text-gray-300 outline-none focus:border-[#3B82F6] transition-colors placeholder-gray-600" />
               </div>
               <div className="flex gap-2">
-                <select value={supplierFilterStatus} onChange={e => setSupplierFilterStatus(e.target.value)}
-                  className="flex-1 px-2 py-1.5 rounded-lg bg-bg-input border border-border text-xs text-gray-300 outline-none focus:border-[#3B82F6]">
-                  <option value="">全部状态</option>
-                  {SUPPLIER_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-                <select value={supplierFilterCategory} onChange={e => setSupplierFilterCategory(e.target.value)}
-                  className="flex-1 px-2 py-1.5 rounded-lg bg-bg-input border border-border text-xs text-gray-300 outline-none focus:border-[#3B82F6]">
-                  <option value="">全部类型</option>
-                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <SearchableSelect
+                  className="flex-1"
+                  options={[{ id: '', label: '全部状态' }, ...SUPPLIER_STATUSES.map(s => ({ id: s, label: s }))]}
+                  value={supplierFilterStatus}
+                  onChange={(v) => setSupplierFilterStatus(v === 0 ? '' : String(v))}
+                  clearValue=""
+                />
+                <SearchableSelect
+                  className="flex-1"
+                  options={[{ id: '', label: '全部类型' }, ...CATEGORIES.map(c => ({ id: c, label: c }))]}
+                  value={supplierFilterCategory}
+                  onChange={(v) => setSupplierFilterCategory(v === 0 ? '' : String(v))}
+                  clearValue=""
+                />
               </div>
             </div>
             <div className="flex-1 overflow-y-auto max-h-[620px]">
@@ -583,7 +588,7 @@ export default function UpstreamPage() {
                 </div>
 
                 {/* 指标条 */}
-                <div className="grid grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <MetricBox label="累计成本" value={fmtAmt(supplierProjects.total_cost, supplierProjects.supplier.settlement_currency || selectedSupplierDetail.settlement_currency)} tone="orange" />
                   <MetricBox label="关联项目" value={supplierProjects.total_projects} tone="blue" />
                   <MetricBox label="关联通道" value={supplierChannels.length} tone="cyan" />
@@ -763,26 +768,30 @@ export default function UpstreamPage() {
               <input value={channelSearch} onChange={e => setChannelSearch(e.target.value)} placeholder="搜索通道名 / 编码 / 模型 / 供应商"
                 className="w-full pl-8 pr-3 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500/50" />
             </div>
-            <select value={channelFilterSupplier} onChange={e => setChannelFilterSupplier(e.target.value)}
-              className="px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none focus:border-cyan-500/50">
-              <option value="">全部供应商</option>
-              {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-            <select value={channelFilterKind} onChange={e => setChannelFilterKind(e.target.value)}
-              className="px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none focus:border-cyan-500/50">
-              <option value="">全部类型</option>
-              {KINDS.map(k => <option key={k} value={k}>{k}</option>)}
-            </select>
-            <select value={channelFilterModel} onChange={e => setChannelFilterModel(e.target.value)}
-              className="px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none focus:border-cyan-500/50">
-              <option value="">全部模型</option>
-              {modelTypes.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
-            <select value={channelFilterStatus} onChange={e => setChannelFilterStatus(e.target.value)}
-              className="px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none focus:border-cyan-500/50">
-              <option value="">全部状态</option>
-              {CHANNEL_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+            <SearchableSelect
+              options={[{ id: '', label: '全部供应商' }, ...suppliers.map(s => ({ id: String(s.id), label: s.name }))]}
+              value={channelFilterSupplier}
+              onChange={(v) => setChannelFilterSupplier(v === 0 ? '' : String(v))}
+              clearValue=""
+            />
+            <SearchableSelect
+              options={[{ id: '', label: '全部类型' }, ...KINDS.map(k => ({ id: k, label: k }))]}
+              value={channelFilterKind}
+              onChange={(v) => setChannelFilterKind(v === 0 ? '' : String(v))}
+              clearValue=""
+            />
+            <SearchableSelect
+              options={[{ id: '', label: '全部模型' }, ...modelTypes.map(m => ({ id: m, label: m }))]}
+              value={channelFilterModel}
+              onChange={(v) => setChannelFilterModel(v === 0 ? '' : String(v))}
+              clearValue=""
+            />
+            <SearchableSelect
+              options={[{ id: '', label: '全部状态' }, ...CHANNEL_STATUSES.map(s => ({ id: s, label: s }))]}
+              value={channelFilterStatus}
+              onChange={(v) => setChannelFilterStatus(v === 0 ? '' : String(v))}
+              clearValue=""
+            />
             {hasPermission('upstream:edit') && (
               <button onClick={() => openCreateChannel()}
                 className="ml-auto inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-cyan-500 to-blue-500 rounded-lg hover:opacity-90">
@@ -869,8 +878,8 @@ export default function UpstreamPage() {
               <div className="grid grid-cols-2 gap-3">
                 <Field label="名称" required><input value={supplierForm.name} onChange={e => setSupplierForm(f => ({ ...f, name: e.target.value }))} placeholder="如 OpenAI" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" /></Field>
                 <Field label="简码" hint="英文字母+数字"><input value={supplierForm.code} onChange={e => setSupplierForm(f => ({ ...f, code: e.target.value }))} placeholder="如 openai" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" /></Field>
-                <Field label="类型"><select value={supplierForm.category} onChange={e => setSupplierForm(f => ({ ...f, category: e.target.value }))} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all">{CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}</select></Field>
-                <Field label="状态"><select value={supplierForm.status} onChange={e => setSupplierForm(f => ({ ...f, status: e.target.value }))} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all">{SUPPLIER_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select></Field>
+                <Field label="类型"><SearchableSelect options={CATEGORIES.map(c => ({ id: c, label: c }))} value={supplierForm.category} onChange={(v) => setSupplierForm(f => ({ ...f, category: v === 0 ? '' : String(v) }))} clearValue="" /></Field>
+                <Field label="状态"><SearchableSelect options={SUPPLIER_STATUSES.map(s => ({ id: s, label: s }))} value={supplierForm.status} onChange={(v) => setSupplierForm(f => ({ ...f, status: v === 0 ? '' : String(v) }))} clearValue="" /></Field>
               </div>
             </div>
             <div>
@@ -884,7 +893,7 @@ export default function UpstreamPage() {
             <div>
               <SectionLabel>商务信息</SectionLabel>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="结算币种"><select value={supplierForm.settlement_currency} onChange={e => setSupplierForm(f => ({ ...f, settlement_currency: e.target.value }))} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all">{CURRENCIES.map(c => <option key={c} value={c}>{c} - {CURRENCY_META[c]?.name || c}</option>)}</select></Field>
+                <Field label="结算币种"><SearchableSelect options={CURRENCIES.map(c => ({ id: c, label: `${c} - ${CURRENCY_META[c]?.name || c}` }))} value={supplierForm.settlement_currency} onChange={(v) => setSupplierForm(f => ({ ...f, settlement_currency: v === 0 ? '' : String(v) }))} clearValue="" /></Field>
                 <Field label="付款条件"><input value={supplierForm.payment_terms} onChange={e => setSupplierForm(f => ({ ...f, payment_terms: e.target.value }))} placeholder="如 月结30天" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" /></Field>
                 <Field label="合同起始"><input type="month" value={supplierForm.contract_start} onChange={e => setSupplierForm(f => ({ ...f, contract_start: e.target.value }))} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" /></Field>
                 <Field label="合同终止"><input type="month" value={supplierForm.contract_end} onChange={e => setSupplierForm(f => ({ ...f, contract_end: e.target.value }))} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" /></Field>
@@ -896,7 +905,7 @@ export default function UpstreamPage() {
                 <Field label="API 入口" full hint="完整 URL，含 https://"><input value={supplierForm.api_endpoint} onChange={e => setSupplierForm(f => ({ ...f, api_endpoint: e.target.value }))} placeholder="https://api.openai.com" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" /></Field>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="提供模型" hint="逗号分隔"><input value={supplierForm.models_provided} onChange={e => setSupplierForm(f => ({ ...f, models_provided: e.target.value }))} placeholder="GPT-4o,Claude-3.5" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" /></Field>
-                  <Field label="认证方式"><select value={supplierForm.auth_type} onChange={e => setSupplierForm(f => ({ ...f, auth_type: e.target.value }))} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all"><option value="">请选择</option>{AUTH_TYPES.map(a => <option key={a} value={a}>{a}</option>)}</select></Field>
+                  <Field label="认证方式"><SearchableSelect options={[{ id: '', label: '请选择' }, ...AUTH_TYPES.map(a => ({ id: a, label: a }))]} value={supplierForm.auth_type} onChange={(v) => setSupplierForm(f => ({ ...f, auth_type: v === 0 ? '' : String(v) }))} clearValue="" /></Field>
                 </div>
               </div>
             </div>
@@ -1154,12 +1163,12 @@ function ChannelFormModal({ form, setForm, suppliers, editing, saving, onClose, 
         <div>
           <SectionLabel>基本信息</SectionLabel>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="所属供应商" required><select value={form.supplier_id} onChange={e => upd({ supplier_id: parseInt(e.target.value) || 0 })} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all"><option value={0}>请选择…</option>{suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
+            <Field label="所属供应商" required><SearchableSelect options={[{ id: 0, label: '请选择…' }, ...suppliers.map(s => ({ id: s.id, label: s.name }))]} value={form.supplier_id || 0} onChange={(v) => upd({ supplier_id: (v as number) || 0 })} clearValue={0} /></Field>
             <Field label="通道名称" required><input value={form.name} onChange={e => upd({ name: e.target.value })} placeholder="如 AWS 通道 / CC 号池" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" /></Field>
             <Field label="通道编码" hint="如 AWS-01"><input value={form.code} onChange={e => upd({ code: e.target.value })} placeholder="AWS-01" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" /></Field>
             <Field label="模型族"><input value={form.model_type} onChange={e => upd({ model_type: e.target.value })} placeholder="Anthropic Claude / OpenAI GPT" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" /></Field>
-            <Field label="通道类型"><select value={form.kind} onChange={e => upd({ kind: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all">{KINDS.map(k => <option key={k} value={k}>{k}</option>)}</select></Field>
-            <Field label="状态"><select value={form.status} onChange={e => upd({ status: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all">{CHANNEL_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select></Field>
+            <Field label="通道类型"><SearchableSelect options={KINDS.map(k => ({ id: k, label: k }))} value={form.kind} onChange={(v) => upd({ kind: v === 0 ? '' : String(v) })} clearValue="" /></Field>
+            <Field label="状态"><SearchableSelect options={CHANNEL_STATUSES.map(s => ({ id: s, label: s }))} value={form.status} onChange={(v) => upd({ status: v === 0 ? '' : String(v) })} clearValue="" /></Field>
           </div>
         </div>
         <div>

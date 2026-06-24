@@ -18,6 +18,7 @@ const MODULE_ICONS: Record<string, string> = {
   meeting: '📅', ai: '🤖', wiki: '📚', settings: '⚙️', dashboard: '📊',
   task: '⏰', log: '📜', monitor: '🖥️', data: '💾',
   upstream: '🔗', reconcile: '🧮', model: '🔄', management: '🗂️', share: '🔁',
+  feedback: '💬', payment: '💰', seal: '🔏',
 }
 
 const ACTION_LABELS: Record<string, string> = {
@@ -25,6 +26,7 @@ const ACTION_LABELS: Record<string, string> = {
   manage_roles: '管理角色', view_all: '查看全部', parse: '解析',
   use: '使用', manage_own: '管理自有', manage_shared: '管理共享',
   manage_space: '管理空间', export: '导出', import: '导入',
+  manage: '管理', process: '处理', console: '总览', comment: '评论',
 }
 
 export function RoleFormModal({ isOpen, editingRole, permissions, onClose }: RoleFormModalProps) {
@@ -107,7 +109,7 @@ export function RoleFormModal({ isOpen, editingRole, permissions, onClose }: Rol
 
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           {/* 角色基本信息 */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-[11px] font-semibold text-gray-400 mb-1">角色名称 *</label>
               <input value={roleForm.name} onChange={e => setRoleForm({ ...roleForm, name: e.target.value })}

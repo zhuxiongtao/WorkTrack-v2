@@ -33,6 +33,7 @@ services:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-me-in-production}
       - CORS_ORIGINS=*
       - AUTO_CREATE_ADMIN=true
+      - TZ=Asia/Shanghai
     volumes:
       - worktrack_data:/app/data
       - worktrack_uploads:/app/uploads

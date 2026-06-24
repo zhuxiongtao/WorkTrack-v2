@@ -7,7 +7,9 @@ class ProjectCreate(BaseModel):
     customer_name: str = ""
     name: str
     opportunity_amount: Optional[float] = None
+    opportunity_amount_unit: str = "万元"
     deal_amount: Optional[float] = None
+    deal_amount_unit: str = "万元"
     currency: str = "CNY"
     product: Optional[str] = None
     project_scenario: Optional[str] = None
@@ -29,18 +31,23 @@ class ProjectCreate(BaseModel):
     monthly_call_volume: Optional[str] = None
     usage_scenario: Optional[str] = None
     contract_period: Optional[str] = None
+    contract_ids: Optional[list[int]] = None
+    tech_support_user_id: Optional[int] = None
 
 
 class ProjectUpdate(BaseModel):
     customer_name: Optional[str] = None
     name: Optional[str] = None
     opportunity_amount: Optional[float] = None
+    opportunity_amount_unit: Optional[str] = None
     deal_amount: Optional[float] = None
+    deal_amount_unit: Optional[str] = None
     currency: Optional[str] = None
     product: Optional[str] = None
     project_scenario: Optional[str] = None
     sales_person: Optional[str] = None
     tech_support_person: Optional[str] = None
+    tech_support_user_id: Optional[int] = None
     status: Optional[str] = None
     progress: Optional[str] = None
     cloud_provider: Optional[str] = None
@@ -56,6 +63,7 @@ class ProjectUpdate(BaseModel):
     monthly_call_volume: Optional[str] = None
     usage_scenario: Optional[str] = None
     contract_period: Optional[str] = None
+    contract_ids: Optional[list[int]] = None
 
 
 class ProjectOut(BaseModel):
@@ -66,7 +74,9 @@ class ProjectOut(BaseModel):
     customer_name: str
     name: str
     opportunity_amount: Optional[float] = None
+    opportunity_amount_unit: str = "万元"
     deal_amount: Optional[float] = None
+    deal_amount_unit: str = "万元"
     currency: str = "CNY"
     product: Optional[str] = None
     project_scenario: Optional[str] = None
@@ -94,6 +104,9 @@ class ProjectOut(BaseModel):
     discount_rate: Optional[float] = None
     cost_amount: Optional[float] = None
     gross_margin: Optional[float] = None
+
+    # 技术支持用户 FK
+    tech_support_user_id: Optional[int] = None
 
     # 关联合同数（反查，避免前端 N+1）
     contract_count: int = 0

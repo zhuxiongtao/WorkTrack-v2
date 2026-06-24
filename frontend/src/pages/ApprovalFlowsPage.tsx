@@ -2,17 +2,22 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   GitBranch, Plus, Edit3, Trash2, Loader2, Power, PowerOff,
   ChevronUp, ChevronDown, X, User, Shield, Users, Building2,
+  FileText, Wallet, Stamp, Calculator, Briefcase, Layers,
+  CheckCircle2, AlertCircle,
 } from 'lucide-react'
-import { PageHeader, Modal, ModalFooter, Field } from '../components/design-system'
+import { Modal, ModalFooter } from '../components/design-system'
+import SearchableSelect from '../components/SearchableSelect'
 import { useToast } from '../contexts/ToastContext'
 import { apiFetch, apiPost, apiPut, apiDelete } from '../services/api'
 
-/* ──── 类型 ──── */
+/* ──── 类型 ─── */
 interface ApprovalNode {
   name: string
-  approver_type: 'role' | 'leader' | 'dept_manager' | 'user'
+  approver_type: 'role' | 'leader' | 'dept_manager' | 'dept_or_leader' | 'user'
   approver_value: string
   order: number
+  node_kind?: string
+  action_label?: string
 }
 interface ApprovalFlow {
   id: number
@@ -28,30 +33,35 @@ interface ApprovalFlow {
 interface Role { id: number; code: string; name: string }
 interface UserBrief { id: number; name: string; username: string; department_name?: string | null }
 
-/* ──── 常量 ──── */
+/* ──── 业务类型映射 ──── */
 const BUSINESS_TYPES = [
-  { value: 'contract',          label: '合同审批' },
-  { value: 'reconcile_summary', label: '对账月结' },
-  { value: 'project',           label: '项目审批' },
-  { value: 'supplier',          label: '供应商入驻审批' },
-  { value: 'channel',           label: '通道开通审批' },
+  { value: 'contract',          label: '合同审批',       icon: FileText,    color: '#3B82F6' },
+  { value: 'payment',           label: '付款申请审批',   icon: Wallet,      color: '#10B981' },
+  { value: 'seal',              label: '盖章申请审批',   icon: Stamp,       color: '#EF4444' },
+  { value: 'reconcile_summary', label: '财务月结复核',   icon: Calculator,  color: '#F59E0B' },
+  { value: 'supplier',          label: '供应商入驻审批', icon: Layers,      color: '#8B5CF6' },
+  { value: 'channel',           label: '通道价格变更审批', icon: Briefcase, color: '#06B6D4' },
+  { value: 'project',           label: '项目立项审批',   icon: Briefcase,   color: '#EC4899' },
 ]
-const BUSINESS_TYPE_LABEL: Record<string, string> = Object.fromEntries(
-  BUSINESS_TYPES.map(t => [t.value, t.label])
+
+const BIZ_TYPE_MAP: Record<string, typeof BUSINESS_TYPES[number]> = Object.fromEntries(
+  BUSINESS_TYPES.map(t => [t.value, t])
 )
 
 const APPROVER_TYPES = [
-  { value: 'role', label: '按角色', icon: Shield, desc: '持有该角色的全部用户（任一审批通过即可）' },
-  { value: 'user', label: '指定用户', icon: User, desc: '指定一个固定的审批人' },
-  { value: 'leader', label: '直属上级', icon: Users, desc: '发起人的直属上级（动态解析）' },
-  { value: 'dept_manager', label: '部门负责人', icon: Building2, desc: '发起人所属部门的负责人（动态解析）' },
+  { value: 'role',          label: '按角色',     icon: Shield,      desc: '持有该角色的全部用户（任一审批通过即可）' },
+  { value: 'user',          label: '指定用户',   icon: User,        desc: '指定一个固定的审批人' },
+  { value: 'leader',        label: '直属上级',   icon: Users,       desc: '发起人的直属上级（动态解析）' },
+  { value: 'dept_manager',  label: '部门负责人', icon: Building2,   desc: '发起人所属部门的负责人（动态解析）' },
+  { value: 'dept_or_leader',label: '部门负责人或上级', icon: Users, desc: '优先部门负责人，无则取直属上级（动态解析）' },
 ] as const
 
-const TYPE_COLOR: Record<string, { bg: string; text: string }> = {
-  role: { bg: '#3B82F615', text: '#60A5FA' },
-  user: { bg: '#10B98115', text: '#34D399' },
-  leader: { bg: '#F59E0B15', text: '#FBBF24' },
-  dept_manager: { bg: '#8B5CF615', text: '#A78BFA' },
+const TYPE_COLOR: Record<string, { bg: string; text: string; border: string }> = {
+  role:         { bg: 'rgba(59,130,246,0.1)',  text: '#60A5FA', border: 'rgba(96,165,250,0.3)' },
+  user:         { bg: 'rgba(16,185,129,0.1)',  text: '#34D399', border: 'rgba(52,211,153,0.3)' },
+  leader:       { bg: 'rgba(245,158,11,0.1)',  text: '#FBBF24', border: 'rgba(251,191,36,0.3)' },
+  dept_manager: { bg: 'rgba(139,92,246,0.1)',  text: '#A78BFA', border: 'rgba(167,139,250,0.3)' },
+  dept_or_leader: { bg: 'rgba(236,72,153,0.1)', text: '#F472B6', border: 'rgba(244,114,182,0.3)' },
 }
 
 /* ──── 主页面 ──── */
@@ -99,47 +109,67 @@ export default function ApprovalFlowsPage() {
     } catch (e) { toast(String(e), 'error') }
   }
 
-  const grouped = flows.reduce<Record<string, ApprovalFlow[]>>((acc, f) => {
-    const key = f.business_type
-    if (!acc[key]) acc[key] = []
-    acc[key].push(f)
-    return acc
-  }, {})
+  // 按业务类型分组
+  const grouped = BUSINESS_TYPES
+    .filter(bt => flows.some(f => f.business_type === bt.value))
+    .map(bt => ({
+      ...bt,
+      flows: flows.filter(f => f.business_type === bt.value),
+    }))
+  // 未匹配的业务类型
+  const otherTypes = flows.filter(f => !BIZ_TYPE_MAP[f.business_type])
+  if (otherTypes.length > 0) {
+    grouped.push({
+      value: '__other__',
+      label: '其他',
+      icon: GitBranch,
+      color: '#6B7280',
+      flows: otherTypes,
+    })
+  }
 
   return (
-    <div className="px-6 py-5">
-      <PageHeader
-        icon={GitBranch}
-        title="审批流配置"
-        description="为不同业务场景配置多级审批节点，支持按角色、指定用户、直属上级、部门负责人四种方式"
-        tone="purple"
-        right={
-          <button
-            onClick={() => { setEditing(null); setShowForm(true) }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-purple-500 to-indigo-500 rounded-lg hover:opacity-90"
-          >
-            <Plus size={14} />新建审批流
-          </button>
-        }
-      />
+    <div>
+      {/* 页面标题 */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-lg font-bold text-white flex items-center gap-2">
+            <GitBranch size={20} className="text-purple-400" />
+            审批流配置
+          </h1>
+          <p className="text-xs text-gray-500 mt-1">为不同业务场景配置多级审批节点，支持按角色、指定用户、直属上级、部门负责人等方式</p>
+        </div>
+        <button
+          onClick={() => { setEditing(null); setShowForm(true) }}
+          className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-gradient-to-r from-purple-500 to-indigo-500 rounded-lg hover:opacity-90 transition-opacity shadow-lg shadow-purple-500/20"
+        >
+          <Plus size={14} />新建审批流
+        </button>
+      </div>
 
       {loading ? (
         <div className="flex items-center justify-center py-20 text-gray-500">
           <Loader2 size={20} className="animate-spin mr-2" />加载中…
         </div>
       ) : flows.length === 0 ? (
-        <div className="text-center py-20 text-gray-500 text-sm">
-          还没有审批流配置，点击右上角「新建审批流」开始配置
+        <div className="text-center py-20">
+          <GitBranch size={40} className="mx-auto text-gray-700 mb-3" />
+          <p className="text-sm text-gray-500">还没有审批流配置</p>
+          <p className="text-xs text-gray-600 mt-1">点击右上角「新建审批流」开始配置</p>
         </div>
       ) : (
-        <div className="space-y-6">
-          {Object.entries(grouped).map(([btype, bflows]) => (
-            <div key={btype}>
-              <div className="text-xs font-bold text-purple-400 uppercase tracking-wider mb-3">
-                {BUSINESS_TYPE_LABEL[btype] || btype}
+        <div className="space-y-8">
+          {grouped.map(group => (
+            <div key={group.value}>
+              {/* 分组标题 */}
+              <div className="flex items-center gap-2 mb-3">
+                <group.icon size={16} style={{ color: group.color }} />
+                <span className="text-sm font-semibold text-white">{group.label}</span>
+                <span className="text-[11px] text-gray-600">({group.flows.length})</span>
               </div>
+
               <div className="space-y-3">
-                {bflows.map(flow => (
+                {group.flows.map(flow => (
                   <FlowCard
                     key={flow.id}
                     flow={flow}
@@ -169,7 +199,7 @@ export default function ApprovalFlowsPage() {
   )
 }
 
-/* ──── 单条审批流卡片 ──── */
+/* ──── 审批流卡片 ──── */
 function FlowCard({
   flow, roles, users, onEdit, onToggle, onDelete,
 }: {
@@ -182,77 +212,122 @@ function FlowCard({
 }) {
   const roleMap = Object.fromEntries(roles.map(r => [r.code, r.name]))
   const userMap = Object.fromEntries(users.map(u => [String(u.id), u.name || u.username]))
+  const bizType = BIZ_TYPE_MAP[flow.business_type]
 
   return (
-    <div className={`rounded-xl border bg-white/[0.02] p-4 transition-opacity ${flow.is_active ? 'border-white/10' : 'border-white/5 opacity-60'}`}>
-      <div className="flex items-start gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-sm font-bold text-white">{flow.name}</span>
-            {flow.is_system && (
-              <span className="text-[11px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-semibold">系统预置</span>
+    <div className={`rounded-xl border transition-all ${
+      flow.is_active
+        ? 'border-white/10 bg-white/[0.03] hover:bg-white/[0.05]'
+        : 'border-white/5 bg-white/[0.01] opacity-50'
+    }`}>
+      <div className="p-4">
+        {/* 卡片头部 */}
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              {bizType && (
+                <span
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold"
+                  style={{ background: bizType.color + '18', color: bizType.color }}
+                >
+                  <bizType.icon size={11} />
+                  {bizType.label}
+                </span>
+              )}
+              <span className="text-sm font-bold text-white">{flow.name}</span>
+              {flow.is_system && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-semibold border border-indigo-500/20">
+                  系统预置
+                </span>
+              )}
+            </div>
+            {flow.description && (
+              <p className="text-[11px] text-gray-500 mt-1.5 leading-relaxed line-clamp-2">{flow.description}</p>
             )}
-            <span className={`text-[11px] px-1.5 py-0.5 rounded font-semibold ${flow.is_active ? 'bg-emerald-500/15 text-emerald-400' : 'bg-gray-500/15 text-gray-400'}`}>
+            {flow.trigger_condition && (
+              <div className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">
+                <AlertCircle size={10} className="text-amber-400" />
+                <span className="text-[10px] text-amber-400/80">
+                  触发条件: {flow.trigger_condition.field} {flow.trigger_condition.op} {flow.trigger_condition.value}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* 状态 + 操作 */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className={`text-[11px] px-2 py-1 rounded-lg font-medium flex items-center gap-1 ${
+              flow.is_active
+                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                : 'bg-gray-500/15 text-gray-400 border border-gray-500/20'
+            }`}>
+              {flow.is_active ? <CheckCircle2 size={11} /> : <X size={11} />}
               {flow.is_active ? '启用' : '已停用'}
             </span>
-          </div>
-          <div className="text-[11px] text-gray-500 mb-3">
-            {flow.description || '无说明'}
-            {flow.trigger_condition && (
-              <span className="ml-2 text-amber-400/80">
-                · 触发条件: {flow.trigger_condition.field} {flow.trigger_condition.op} {flow.trigger_condition.value}
-              </span>
+            <button onClick={onToggle}
+              className="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-white/10 transition-colors"
+              title={flow.is_active ? '停用' : '启用'}>
+              {flow.is_active ? <PowerOff size={14} /> : <Power size={14} />}
+            </button>
+            <button onClick={onEdit}
+              className="p-1.5 rounded-lg text-gray-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors">
+              <Edit3 size={14} />
+            </button>
+            {!flow.is_system && (
+              <button onClick={onDelete}
+                className="p-1.5 rounded-lg text-gray-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors">
+                <Trash2 size={14} />
+              </button>
             )}
           </div>
+        </div>
 
-          {/* 节点流程图 */}
-          <div className="flex items-center gap-0 flex-wrap">
-            {flow.nodes.length === 0 ? (
-              <span className="text-[11px] text-gray-600 italic">无审批节点（发起即通过）</span>
-            ) : flow.nodes.map((node, i) => {
-              const tc = TYPE_COLOR[node.approver_type] || TYPE_COLOR.role
-              const typeLabel = APPROVER_TYPES.find(t => t.value === node.approver_type)?.label || node.approver_type
-              const valueLabel = node.approver_type === 'role'
-                ? (roleMap[node.approver_value] || node.approver_value)
-                : node.approver_type === 'user'
-                ? (userMap[node.approver_value] || `用户${node.approver_value}`)
-                : ''
-              return (
-                <div key={i} className="flex items-center">
-                  <div className="rounded-lg border px-2.5 py-1.5 text-[11px]"
-                    style={{ borderColor: tc.text + '40', background: tc.bg }}>
-                    <div className="font-semibold" style={{ color: tc.text }}>{node.name}</div>
-                    <div className="text-gray-500 mt-0.5">
-                      {typeLabel}{valueLabel ? `・${valueLabel}` : ''}
+        {/* 节点流程图 */}
+        {flow.nodes.length > 0 && (
+          <div className="border-t border-white/5 pt-3">
+            <div className="flex items-center gap-0 flex-wrap">
+              {flow.nodes.map((node, i) => {
+                const tc = TYPE_COLOR[node.approver_type] || TYPE_COLOR.role
+                const typeLabel = APPROVER_TYPES.find(t => t.value === node.approver_type)?.label || node.approver_type
+                const valueLabel = node.approver_type === 'role'
+                  ? (roleMap[node.approver_value] || node.approver_value)
+                  : node.approver_type === 'user'
+                  ? (userMap[node.approver_value] || `用户${node.approver_value}`)
+                  : ''
+                return (
+                  <div key={i} className="flex items-center">
+                    <div className="rounded-lg px-3 py-2 text-[11px] border"
+                      style={{ borderColor: tc.border, background: tc.bg }}>
+                      <div className="font-semibold" style={{ color: tc.text }}>
+                        <span className="text-[10px] opacity-60 mr-1">{i + 1}.</span>
+                        {node.name}
+                      </div>
+                      <div className="mt-0.5 flex items-center gap-1" style={{ color: tc.text, opacity: 0.7 }}>
+                        {(() => {
+                          const at = APPROVER_TYPES.find(t => t.value === node.approver_type)
+                          return at ? <at.icon size={9} /> : null
+                        })()}
+                        <span>{typeLabel}</span>
+                        {valueLabel && <span>· {valueLabel}</span>}
+                      </div>
+                      {node.node_kind === 'execution' && node.action_label && (
+                        <div className="mt-0.5 text-[10px] text-amber-400/70">执行: {node.action_label}</div>
+                      )}
                     </div>
+                    {i < flow.nodes.length - 1 && (
+                      <div className="px-1.5 text-gray-600 text-xs">→</div>
+                    )}
                   </div>
-                  {i < flow.nodes.length - 1 && (
-                    <div className="px-1.5 text-gray-600 text-xs">→</div>
-                  )}
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
           </div>
-        </div>
-
-        {/* 操作按钮 */}
-        <div className="flex items-center gap-1 shrink-0">
-          <button onClick={onToggle}
-            className="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-white/10 transition-colors"
-            title={flow.is_active ? '停用' : '启用'}>
-            {flow.is_active ? <PowerOff size={14} /> : <Power size={14} />}
-          </button>
-          <button onClick={onEdit}
-            className="p-1.5 rounded-lg text-gray-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors">
-            <Edit3 size={14} />
-          </button>
-          {!flow.is_system && (
-            <button onClick={onDelete}
-              className="p-1.5 rounded-lg text-gray-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors">
-              <Trash2 size={14} />
-            </button>
-          )}
-        </div>
+        )}
+        {flow.nodes.length === 0 && (
+          <div className="border-t border-white/5 pt-3">
+            <span className="text-[11px] text-gray-600 italic">无审批节点（发起即通过）</span>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -261,7 +336,7 @@ function FlowCard({
 /* ──── 新建/编辑弹窗 ──── */
 interface NodeForm {
   name: string
-  approver_type: 'role' | 'leader' | 'dept_manager' | 'user'
+  approver_type: 'role' | 'leader' | 'dept_manager' | 'dept_or_leader' | 'user'
   approver_value: string
   order: number
 }
@@ -353,7 +428,7 @@ function FlowFormModal({
 
   return (
     <Modal
-      title={flow ? `编辑审批流・${flow.name}` : '新建审批流'}
+      title={flow ? `编辑审批流 · ${flow.name}` : '新建审批流'}
       subtitle="配置触发条件与审批节点链"
       onClose={onClose}
       size="xl"
@@ -362,41 +437,46 @@ function FlowFormModal({
         {/* 基本信息 */}
         <div className="grid grid-cols-2 gap-4">
           {!flow && (
-            <Field label="唯一标识" required>
+            <div>
+              <label className="block text-[11px] font-medium text-gray-400 mb-1.5">唯一标识 <span className="text-rose-400">*</span></label>
               <input value={code} onChange={e => setCode(e.target.value)}
                 placeholder="如 contract_approval"
-                className="w-full px-3 py-2 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none focus:border-purple-500/50" />
-            </Field>
+                className="w-full px-3 py-2 text-xs bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-gray-600 focus:outline-none focus:border-purple-500/50 transition-colors" />
+            </div>
           )}
-          <Field label="审批流名称" required>
+          <div>
+            <label className="block text-[11px] font-medium text-gray-400 mb-1.5">审批流名称 <span className="text-rose-400">*</span></label>
             <input value={name} onChange={e => setName(e.target.value)}
               placeholder="如 合同审批流"
-              className="w-full px-3 py-2 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none focus:border-purple-500/50" />
-          </Field>
-          <Field label="业务场景">
-            <select value={businessType} onChange={e => setBusinessType(e.target.value)}
-              disabled={!!flow}
-              className="w-full px-3 py-2 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none focus:border-purple-500/50 disabled:opacity-50">
-              {BUSINESS_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-              {!BUSINESS_TYPES.find(t => t.value === businessType) && (
-                <option value={businessType}>{businessType}</option>
-              )}
-            </select>
-          </Field>
+              className="w-full px-3 py-2 text-xs bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-gray-600 focus:outline-none focus:border-purple-500/50 transition-colors" />
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium text-gray-400 mb-1.5">业务场景</label>
+            <SearchableSelect
+              options={[
+                ...BUSINESS_TYPES.map(t => ({ id: t.value, label: t.label })),
+                ...(!BUSINESS_TYPES.find(t => t.value === businessType) ? [{ id: businessType, label: businessType }] : []),
+              ]}
+              value={businessType}
+              onChange={(v) => !flow && setBusinessType(v === 0 ? '' : String(v))}
+              clearValue=""
+            />
+          </div>
         </div>
 
-        <Field label="描述说明">
+        <div>
+          <label className="block text-[11px] font-medium text-gray-400 mb-1.5">描述说明</label>
           <input value={description} onChange={e => setDescription(e.target.value)}
             placeholder="简要说明该审批流的用途"
-            className="w-full px-3 py-2 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none focus:border-purple-500/50" />
-        </Field>
+            className="w-full px-3 py-2 text-xs bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-gray-600 focus:outline-none focus:border-purple-500/50 transition-colors" />
+        </div>
 
         {/* 触发条件 */}
-        <div className="rounded-xl border border-white/5 bg-black/20 p-4">
+        <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
           <div className="flex items-center gap-2 mb-3">
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={hasCond} onChange={e => setHasCond(e.target.checked)}
-                className="rounded" />
+                className="rounded border-white/20 bg-white/5" />
               <span className="text-xs font-semibold text-white">设置触发条件</span>
             </label>
             <span className="text-[11px] text-gray-500">（不设置则该业务所有数据均触发此审批流）</span>
@@ -405,14 +485,16 @@ function FlowFormModal({
             <div className="flex items-center gap-2">
               <input value={condField} onChange={e => setCondField(e.target.value)}
                 placeholder="字段名，如 amount"
-                className="flex-1 px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none focus:border-purple-500/50" />
-              <select value={condOp} onChange={e => setCondOp(e.target.value)}
-                className="px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none focus:border-purple-500/50">
-                {['>=', '>', '<=', '<', '==', '!='].map(op => <option key={op} value={op}>{op}</option>)}
-              </select>
+                className="flex-1 px-3 py-2 text-xs bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-gray-600 focus:outline-none focus:border-purple-500/50 transition-colors" />
+              <SearchableSelect
+                options={['>=', '>', '<=', '<', '==', '!='].map(op => ({ id: op, label: op }))}
+                value={condOp}
+                onChange={(v) => setCondOp(v === 0 ? '' : String(v))}
+                clearValue=""
+              />
               <input value={condValue} onChange={e => setCondValue(e.target.value)}
                 placeholder="值，如 500000"
-                className="flex-1 px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none focus:border-purple-500/50" />
+                className="flex-1 px-3 py-2 text-xs bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-gray-600 focus:outline-none focus:border-purple-500/50 transition-colors" />
             </div>
           )}
         </div>
@@ -422,13 +504,14 @@ function FlowFormModal({
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-semibold text-white">审批节点</span>
             <button onClick={addNode}
-              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-purple-300 border border-purple-500/30 bg-purple-500/10 rounded-lg hover:bg-purple-500/20">
+              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-purple-300 border border-purple-500/30 bg-purple-500/10 rounded-lg hover:bg-purple-500/20 transition-colors">
               <Plus size={12} />添加节点
             </button>
           </div>
 
           {nodes.length === 0 ? (
-            <div className="text-center py-6 text-xs text-gray-500 border border-dashed border-white/10 rounded-xl">
+            <div className="text-center py-8 text-xs text-gray-500 border border-dashed border-white/10 rounded-xl">
+              <GitBranch size={20} className="mx-auto text-gray-700 mb-2" />
               无审批节点，发起申请后将直接通过
             </div>
           ) : (
@@ -454,7 +537,7 @@ function FlowFormModal({
         {/* 启用状态 */}
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)}
-            className="rounded" />
+            className="rounded border-white/20 bg-white/5" />
           <span className="text-xs text-gray-300">创建后立即启用</span>
         </label>
       </div>
@@ -488,37 +571,41 @@ function NodeEditor({
   const approverType = APPROVER_TYPES.find(t => t.value === node.approver_type)
 
   return (
-    <div className="rounded-xl border p-3 bg-black/20 flex gap-3 items-start"
-      style={{ borderColor: tc.text + '30' }}>
+    <div className="rounded-xl border p-3.5 bg-white/[0.02] flex gap-3 items-start transition-colors hover:bg-white/[0.04]"
+      style={{ borderColor: tc.border }}>
       {/* 序号 + 排序 */}
-      <div className="flex flex-col items-center gap-1 shrink-0 pt-0.5">
-        <div className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold"
-          style={{ background: tc.bg, color: tc.text }}>
+      <div className="flex flex-col items-center gap-0.5 shrink-0 pt-0.5">
+        <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+          style={{ background: tc.bg, color: tc.text, border: `1px solid ${tc.border}` }}>
           {index + 1}
         </div>
         <button onClick={onMoveUp} disabled={index === 0}
-          className="text-gray-600 hover:text-gray-300 disabled:opacity-30"><ChevronUp size={12} /></button>
+          className="text-gray-600 hover:text-gray-300 disabled:opacity-20 transition-colors"><ChevronUp size={12} /></button>
         <button onClick={onMoveDown} disabled={index === total - 1}
-          className="text-gray-600 hover:text-gray-300 disabled:opacity-30"><ChevronDown size={12} /></button>
+          className="text-gray-600 hover:text-gray-300 disabled:opacity-20 transition-colors"><ChevronDown size={12} /></button>
       </div>
 
       {/* 节点配置 */}
-      <div className="flex-1 min-w-0 space-y-2">
+      <div className="flex-1 min-w-0 space-y-2.5">
         {/* 节点名称 */}
         <input
           value={node.name}
           onChange={e => onChange({ name: e.target.value })}
           placeholder="节点名称，如「法务审批」"
-          className="w-full px-2.5 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none focus:border-purple-500/50"
+          className="w-full px-3 py-2 text-xs bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-gray-600 focus:outline-none focus:border-purple-500/50 transition-colors"
         />
 
         {/* 审批人类型 */}
-        <div className="grid grid-cols-4 gap-1">
+        <div className="grid grid-cols-5 gap-1.5">
           {APPROVER_TYPES.map(t => (
             <button key={t.value}
               onClick={() => onChange({ approver_type: t.value, approver_value: '' })}
-              className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold flex items-center gap-1 justify-center transition-colors ${node.approver_type === t.value ? 'text-white' : 'text-gray-500 hover:text-gray-300 bg-black/20'}`}
-              style={node.approver_type === t.value ? { background: tc.bg, color: tc.text } : undefined}
+              className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold flex items-center gap-1 justify-center transition-all ${
+                node.approver_type === t.value
+                  ? 'shadow-sm'
+                  : 'text-gray-500 hover:text-gray-300 bg-white/5 hover:bg-white/10'
+              }`}
+              style={node.approver_type === t.value ? { background: tc.bg, color: tc.text, border: `1px solid ${tc.border}` } : { border: '1px solid transparent' }}
               title={t.desc}>
               <t.icon size={11} />
               {t.label}
@@ -528,33 +615,32 @@ function NodeEditor({
 
         {/* 根据类型展示选择器 */}
         {node.approver_type === 'role' && (
-          <select value={node.approver_value} onChange={e => onChange({ approver_value: e.target.value })}
-            className="w-full px-2.5 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none focus:border-purple-500/50">
-            <option value="">请选择角色</option>
-            {roles.map(r => <option key={r.id} value={r.code}>{r.name}（{r.code}）</option>)}
-          </select>
+          <SearchableSelect
+            options={[{ id: '', label: '请选择角色' }, ...roles.map(r => ({ id: r.code, label: `${r.name}（${r.code}）` }))]}
+            value={node.approver_value}
+            onChange={(v) => onChange({ approver_value: v === 0 ? '' : String(v) })}
+            clearValue=""
+          />
         )}
         {node.approver_type === 'user' && (
-          <select value={node.approver_value} onChange={e => onChange({ approver_value: e.target.value })}
-            className="w-full px-2.5 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none focus:border-purple-500/50">
-            <option value="">请选择审批人</option>
-            {users.map(u => (
-              <option key={u.id} value={String(u.id)}>
-                {u.name || u.username}{u.department_name ? `（${u.department_name}）` : ''}
-              </option>
-            ))}
-          </select>
+          <SearchableSelect
+            options={[{ id: '', label: '请选择审批人' }, ...users.map(u => ({ id: String(u.id), label: `${u.name || u.username}${u.department_name ? `（${u.department_name}）` : ''}` }))]}
+            value={node.approver_value}
+            onChange={(v) => onChange({ approver_value: v === 0 ? '' : String(v) })}
+            clearValue=""
+          />
         )}
-        {(node.approver_type === 'leader' || node.approver_type === 'dept_manager') && (
-          <div className="text-[11px] text-gray-500 px-2">
-            {approverType?.desc}，在发起审批时动态解析，无需手动指定
+        {(node.approver_type === 'leader' || node.approver_type === 'dept_manager' || node.approver_type === 'dept_or_leader') && (
+          <div className="text-[11px] text-gray-500 px-1 flex items-center gap-1.5">
+            {approverType && <approverType.icon size={11} />}
+            {approverType?.desc}
           </div>
         )}
       </div>
 
       {/* 删除 */}
       <button onClick={onRemove}
-        className="p-1 text-gray-600 hover:text-rose-400 shrink-0 mt-0.5">
+        className="p-1 text-gray-600 hover:text-rose-400 shrink-0 mt-0.5 transition-colors">
         <X size={14} />
       </button>
     </div>

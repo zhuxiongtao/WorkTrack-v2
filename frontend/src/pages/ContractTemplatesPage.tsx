@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { useToast } from '../contexts/ToastContext'
 import ContractDocEditor from '../components/ContractDocEditor'
+import SearchableSelect from '../components/SearchableSelect'
 
 interface Template {
   id: number
@@ -245,16 +246,15 @@ function TemplateEditorModal({ template, onClose, onSaved }: TemplateEditorModal
           </div>
           <div style={{ width: '160px', flexShrink: 0 }}>
             <label className="block text-[11px] text-gray-500 uppercase tracking-wider mb-1">合同类型</label>
-            <select
+            <SearchableSelect
+              options={[
+                { id: '', label: '选择类型' },
+                ...['服务合同', '采购合同', '销售合同', '保密协议', '合作协议', '劳动合同', '租赁合同', '其他'].map(c => ({ id: c, label: c })),
+              ]}
               value={category}
-              onChange={e => setCategory(e.target.value)}
-              className="w-full form-input text-sm"
-            >
-              <option value="">选择类型</option>
-              {['服务合同', '采购合同', '销售合同', '保密协议', '合作协议', '劳动合同', '租赁合同', '其他'].map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
+              onChange={(v) => setCategory(v === 0 ? '' : String(v))}
+              clearValue=""
+            />
           </div>
           <div className="flex-1">
             <label className="block text-[11px] text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-1">

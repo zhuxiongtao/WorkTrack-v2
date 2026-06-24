@@ -17,6 +17,14 @@ export interface FieldOptions {
   contract_period?: string[]
 }
 
+export interface ContractOption {
+  id: number
+  title: string
+  customer_name?: string
+  sign_date?: string
+  project_id?: number | null
+}
+
 /** 通道选项（来自通道管理） */
 export interface ChannelOption {
   id: number
@@ -57,12 +65,40 @@ export function getCurrencyMeta(code: string) {
   return CURRENCY_OPTIONS.find(c => c.code === code) || CURRENCY_OPTIONS[0]
 }
 
+const DEFAULT_AI_SCENARIOS = [
+  '智能客服 / 客服机器人',
+  '知识库问答（RAG）',
+  '文档处理与分析',
+  '代码辅助 / Copilot',
+  '内容生成与创作',
+  '数据分析与报告',
+  '企业搜索增强',
+  '工作流自动化',
+  'AI Agent / 任务规划',
+  '多模态理解（图文/语音）',
+  '垂直行业大模型定制',
+  '模型评测与对比',
+]
+
+const DEFAULT_TECH_CAPABILITIES = [
+  '自建 AI 网关',
+  '具备访问海外模型的网络能力',
+  '聚合平台对外服务',
+  '私有化部署（K8s/Docker）',
+  '公有云（已有账户）',
+  '裸金属 / GPU 服务器',
+  '自建向量数据库 / 知识库',
+  'API 网关已有',
+  '混合云架构',
+  '无技术团队（纯 API 接入）',
+]
+
 export function useProjectFormOptions() {
   const { fetchWithAuth } = useAuth()
   const [customers, setCustomers] = useState<CustomerOption[]>([])
   const [options, setOptions] = useState<FieldOptions>({
-    product: [], project_scenario: [], sales_person: [], project_status: [],
-    cloud: ['AWS', '阿里云', '腾讯云', '华为云', 'Azure', 'GCP', '自建机房', '混合云'],
+    product: [], project_scenario: DEFAULT_AI_SCENARIOS, sales_person: [], project_status: [],
+    cloud: DEFAULT_TECH_CAPABILITIES,
     tech_support: [],
     contract_period: ['月度', '季度', '半年', '1年', '2年', '3年', '自定义'],
   })
@@ -70,12 +106,13 @@ export function useProjectFormOptions() {
   const [modelCatalog, setModelCatalog] = useState<ModelCatalogOption[]>([])
   const [modelCatalogRefreshedAt, setModelCatalogRefreshedAt] = useState<string | null>(null)
   const [meetings, setMeetings] = useState<MeetingOption[]>([])
+  const [contracts, setContracts] = useState<ContractOption[]>([])
   const [loading, setLoading] = useState(true)
 
   const loadAll = useCallback(async () => {
     setLoading(true)
     try {
-      const [custRes, optRes, meetingRes, chanRes, supRes, modelRes, modelStatusRes] = await Promise.all([
+      const [custRes, optRes, meetingRes, chanRes, supRes, modelRes, modelStatusRes, contractRes] = await Promise.all([
         fetchWithAuth('/api/v1/customers/selector').catch(() => null),
         fetchWithAuth('/api/v1/settings/field-options').catch(() => null),
         fetchWithAuth('/api/v1/meetings?simple=1').catch(() => null),
@@ -83,6 +120,7 @@ export function useProjectFormOptions() {
         fetchWithAuth('/api/v1/suppliers').catch(() => null),
         fetchWithAuth('/api/v1/models').catch(() => null),
         fetchWithAuth('/api/v1/models/refresh/status').catch(() => null),
+        fetchWithAuth('/api/v1/contracts').catch(() => null),
       ])
       if (custRes && custRes.ok) {
         const data = await custRes.json()
@@ -94,14 +132,24 @@ export function useProjectFormOptions() {
         const data = await optRes.json()
         setOptions(prev => ({
           product: data.product || [],
-          project_scenario: data.project_scenario || [],
+          project_scenario: (Array.isArray(data.project_scenario) && data.project_scenario.length > 0) ? data.project_scenario : DEFAULT_AI_SCENARIOS,
           sales_person: data.sales_person || [],
           tech_support: data.tech_support || data.sales_person || [],
           project_status: data.project_status || [],
-          // 云厂商/部署方式：API 给了就用，没给就保底（避免空数组导致下拉完全没预设）
-          cloud: (Array.isArray(data.cloud) && data.cloud.length > 0) ? data.cloud : prev.cloud,
+          cloud: (Array.isArray(data.cloud) && data.cloud.length > 0) ? data.cloud : DEFAULT_TECH_CAPABILITIES,
           contract_period: data.contract_period || prev.contract_period,
         }))
+      }
+      if (contractRes && contractRes.ok) {
+        const data = await contractRes.json()
+        const items = Array.isArray(data) ? data : (data.items || [])
+        setContracts(items.map((c: any) => ({
+          id: c.id,
+          title: c.title || c.name || `合同 #${c.id}`,
+          customer_name: c.customer_name || '',
+          sign_date: c.sign_date || '',
+          project_id: c.project_id ?? null,
+        })))
       }
       // 通道 + 供应商：组合出"通道 · 供应商 · 模型"的友好显示
       if (chanRes && chanRes.ok) {
@@ -152,6 +200,7 @@ export function useProjectFormOptions() {
     modelCatalog,
     modelCatalogRefreshedAt,
     meetings,
+    contracts,
     loading,
     reload: loadAll,
   }

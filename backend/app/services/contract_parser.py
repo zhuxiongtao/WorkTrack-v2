@@ -22,6 +22,7 @@ from app.services.ai_service import _get_active_provider, _get_active_provider_f
 from app.models.model_provider import TaskModelConfig, ModelProvider
 from app.exceptions import DocumentParseError
 from app.config import settings
+from app.utils.time import BEIJING_TZ, now
 
 logger = logging.getLogger("worktrack.contract")
 
@@ -695,7 +696,7 @@ def apply_parse_result(contract, parsed: dict) -> None:
     if "error" in parsed:
         contract.parse_status = "failed"
         contract.parse_error = parsed.get("error", "")[:500]
-        contract.parsed_at = datetime.now(timezone.utc)
+        contract.parsed_at = now()
         return
 
     try:
@@ -777,9 +778,9 @@ def apply_parse_result(contract, parsed: dict) -> None:
 
         contract.parse_status = "success"
         contract.parse_error = ""
-        contract.parsed_at = datetime.now(timezone.utc)
+        contract.parsed_at = now()
     except Exception as e:
         logger.exception("apply_parse_result 失败: %s", e)
         contract.parse_status = "failed"
         contract.parse_error = f"结果回填失败: {str(e)[:300]}"
-        contract.parsed_at = datetime.now(timezone.utc)
+        contract.parsed_at = now()

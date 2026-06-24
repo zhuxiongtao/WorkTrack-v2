@@ -1,4 +1,4 @@
-import { Crown, Lock, UserX, UserCheck, Shield } from 'lucide-react'
+import { Crown, Lock, UserX, UserCheck, Shield, Mail } from 'lucide-react'
 import type { UserData } from '../../services/types'
 
 interface UserTableRowProps {
@@ -11,6 +11,7 @@ interface UserTableRowProps {
   onSetStatus: (status: string) => void
   onDelete: () => void
   onResetPassword: () => void
+  onResendWelcome: () => void
   onManageRoles: () => void
   canEdit: boolean
   canDelete: boolean
@@ -20,7 +21,7 @@ interface UserTableRowProps {
 }
 
 export function UserTableRow({
-  user: u, isSelf, selected, onSelectChange, onEdit, onToggleActive, onSetStatus, onDelete, onResetPassword, onManageRoles,
+  user: u, isSelf, selected, onSelectChange, onEdit, onToggleActive, onSetStatus, onDelete, onResetPassword, onResendWelcome, onManageRoles,
   canEdit, canDelete, canManageRoles,
   getAvatarColor, formatTime,
 }: UserTableRowProps) {
@@ -160,6 +161,11 @@ export function UserTableRow({
           {canEdit && (
             <button onClick={onEdit} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-bg-hover text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors cursor-pointer" title="编辑个人资料">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+            </button>
+          )}
+          {canEdit && u.email && (
+            <button onClick={onResendWelcome} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-bg-hover text-gray-400 hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors cursor-pointer" title="重发欢迎邮件（生成新密码并发送）" disabled={isSelf}>
+              <Mail size={14} />
             </button>
           )}
           {canEdit && (

@@ -195,11 +195,38 @@ def search_images(query: str, db: Session, max_results: int = 5, user_id: int = 
 
 def search_and_summarize(query: str, db: Session, search_depth: str = "advanced", user_id: int = 0, force_tavily: bool = False) -> str:
     """执行搜索并将结果拼接为纯文本摘要，供 AI 进一步处理"""
-    results = search_web(query, db, search_depth=search_depth, max_results=5, user_id=user_id, force_tavily=force_tavily)
-    parts = []
+    text, _ = search_web_with_sources(query, db, search_depth=search_depth, user_id=user_id, force_tavily=force_tavily)
+    return text
+
+
+def search_web_with_sources(
+    query: str,
+    db: Session,
+    search_depth: str = "advanced",
+    max_results: int = 5,
+    user_id: int = 0,
+    force_tavily: bool = False,
+) -> tuple[str, list[dict]]:
+    """执行搜索，返回 (摘要文本, 来源列表)。
+
+    来源列表每条格式: {"url": ..., "title": ..., "domain": ...}
+    供调用方在显示结果时附上可点击的引用来源。
+    """
+    from urllib.parse import urlparse
+
+    results = search_web(query, db, search_depth=search_depth, max_results=max_results, user_id=user_id, force_tavily=force_tavily)
+    parts: list[str] = []
+    sources: list[dict] = []
     for r in results:
         if r["type"] == "answer":
             parts.append(f"[AI 摘要]\n{r['content']}")
         else:
             parts.append(f"[{r['title']}]({r['url']})\n{r['content']}")
-    return "\n\n---\n\n".join(parts)
+            url = r.get("url", "")
+            if url:
+                try:
+                    domain = urlparse(url).netloc.replace("www.", "")
+                except Exception:
+                    domain = ""
+                sources.append({"url": url, "title": r.get("title", "")[:120], "domain": domain})
+    return "\n\n---\n\n".join(parts), sources

@@ -12,6 +12,7 @@
 """
 import io
 from datetime import datetime, timezone
+from app.utils.time import BEIJING_TZ, now
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -237,7 +238,7 @@ def review_item(
         raise HTTPException(400, "review_status 须为 confirmed / disputed / pending")
     item.review_status = body.review_status
     item.review_note = body.review_note
-    item.updated_at = datetime.now(timezone.utc)
+    item.updated_at = now()
     db.add(item)
     db.commit()
     db.refresh(item)
@@ -259,13 +260,13 @@ def submit_review(
     if approval_engine.get_active_instance("bill_reconcile", s.id, db):
         raise HTTPException(400, "已有进行中的审批，请勿重复提交")
 
-    now = datetime.now(timezone.utc)
+    now_dt = now()
     total_diff = s.diff_supplier_count + s.diff_customer_count
 
     if total_diff == 0:
         # 无差异 → 直接通过
         s.status = "approved"
-        s.updated_at = now
+        s.updated_at = now_dt
         db.add(s)
         db.commit()
         return {"message": "无差异，已自动确认通过", "status": "approved", "approval_instance_id": None}
@@ -285,14 +286,14 @@ def submit_review(
     if instance is None:
         # 无审批模板 → 直接通过
         s.status = "approved"
-        s.updated_at = now
+        s.updated_at = now_dt
         db.add(s)
         db.commit()
         return {"message": "无审批模板配置，已直接确认", "status": "approved", "approval_instance_id": None}
 
     s.status = "pending_review"
     s.approval_instance_id = instance.id
-    s.updated_at = now
+    s.updated_at = now_dt
     db.add(s)
     db.commit()
     db.refresh(s)

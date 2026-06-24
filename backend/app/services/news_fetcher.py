@@ -2,6 +2,7 @@
 import re
 import logging
 from datetime import datetime, timezone, timedelta
+from app.utils.time import BEIJING_TZ, now
 from typing import Optional, Tuple
 from xml.etree import ElementTree as ET
 
@@ -210,7 +211,7 @@ def _insert_new_items(items: list[dict]) -> Tuple[int, int]:
 
 def _cleanup_old_news(retention_days: int = NEWS_RETENTION_DAYS) -> int:
     """删除 fetched_at 早于 retention_days 天的旧条目"""
-    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    cutoff = now() - timedelta(days=retention_days)
     with Session(engine) as db:
         old_items = db.exec(
             select(NewsCache).where(NewsCache.fetched_at < cutoff)

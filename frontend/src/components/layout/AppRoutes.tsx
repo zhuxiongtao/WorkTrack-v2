@@ -18,6 +18,9 @@ import ReconcilePage from '../../pages/ReconcilePage'
 import ApprovalsPage from '../../pages/ApprovalsPage'
 import ModelChangePage from '../../pages/ModelChangePage'
 import TeamManagementPage from '../../pages/TeamManagementPage'
+import FeedbackPage from '../../pages/FeedbackPage'
+import PaymentsPage from '../../pages/PaymentsPage'
+import SealsPage from '../../pages/SealsPage'
 
 interface AppRoutesProps {
   homePage: string
@@ -48,6 +51,9 @@ function AppRoutes({ homePage }: AppRoutesProps) {
       <Route path="/wiki/:spaceId" element={hasPermission('wiki:read')      ? <WikiPage />         : <Navigate to={homePage} replace />} />
       <Route path="/wiki/public/:spaceId/:pageId" element={<PublicWikiPage />} />
       <Route path="/shared"        element={hasPermission('share:read')     ? <SharedWithMePage /> : <Navigate to={homePage} replace />} />
+      <Route path="/feedback"      element={<FeedbackPage />} />
+      <Route path="/payments"      element={<PaymentsPage />} />
+      <Route path="/seals"         element={<SealsPage />} />
       <Route path="/ai"            element={hasPermission('ai:use')         ? <AIPage />           : <Navigate to={homePage} replace />} />
       <Route path="/settings"      element={<SettingsPage />} />
 

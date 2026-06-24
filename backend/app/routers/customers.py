@@ -26,6 +26,7 @@ logger = logging.getLogger("worktrack")
 router = APIRouter(prefix="/api/v1/customers", tags=["客户"])
 
 
+
 def _can_access_customer(customer: Customer, current_user: User, db: Session) -> bool:
     if customer.user_id == current_user.id:
         return True
@@ -210,11 +211,28 @@ def search_company(request: CompanySearchRequest, current_user: User = Depends(r
     3. 同一关键词 10 分钟内重复搜索走进程内缓存
     """
     from app.auth import get_visible_user_ids
-    from app.services.cache import cached_call
+    from app.services.cache import cached_call, invalidate
 
     kw = (request.keyword or "").strip()
     if not kw:
         return {"results": []}
+
+    api_cache_key = f"search_company_api:u{current_user.id}:{kw.lower()}"
+
+    # 诊断/重试模式：清掉两层缓存，实时跑并回传 provider 逐个尝试结果
+    if request.refresh:
+        invalidate(api_cache_key)
+        invalidate(f"search_company:u{current_user.id}:{kw.lower()}")
+        diag: dict = {}
+        try:
+            results = search_company_names(kw, db, current_user.id, diag=diag)
+        except Exception as e:
+            write_log("error", "ai", f"公司搜索失败(诊断): {str(e)[:150]}", details=str(e), db=db)
+            diag["fatal"] = f"{type(e).__name__}: {str(e)[:200]}"
+            results = []
+        if not results and diag.get("reason"):
+            write_log("warning", "ai", f"公司搜索无结果: {diag['reason']}", details=str(diag), db=db)
+        return {"results": results, "source": "ai", "diagnostics": diag}
 
     # 阶段1：本地 customer.name 模糊匹配（带可见性过滤）
     visible_ids = get_visible_user_ids(current_user, db, module="customer")
@@ -232,8 +250,6 @@ def search_company(request: CompanySearchRequest, current_user: User = Depends(r
             return {"results": results, "source": "local"}
 
     # 阶段2：调 service（内部 LRU 缓存 10 分钟 + LLM/Tavily）
-    cache_key = f"search_company_api:u{current_user.id}:{kw.lower()}"
-
     def _compute():
         try:
             return search_company_names(kw, db, current_user.id)
@@ -241,7 +257,7 @@ def search_company(request: CompanySearchRequest, current_user: User = Depends(r
             write_log("error", "ai", f"公司搜索失败: {str(e)[:150]}", details=str(e), db=db)
             return [{"_error": f"公司搜索失败: {str(e)[:200]}"}]
 
-    results, _hit = cached_call(cache_key, ttl=600, factory=_compute)
+    results, _hit = cached_call(api_cache_key, ttl=600, factory=_compute)
     return {"results": results, "source": "ai"}
 
 
@@ -256,8 +272,8 @@ def fetch_company_info_endpoint(request: CompanyInfoRequest, current_user: User 
             customer = db.get(Customer, request.customer_id)
             if customer and _can_access_customer(customer, current_user, db):
                 for field in ("name", "industry", "core_products", "business_scope",
-                              "scale", "profile", "recent_news", "logo_url",
-                              "website", "ai_initiatives", "ai_evidence"):
+                              "scale", "profile", "recent_news", "recent_news_evidence",
+                              "logo_url", "website", "ai_initiatives", "ai_evidence"):
                     val = info.get(field)
                     # 防御：list/dict 等非标类型转 str（避免后续 .strip() 报错）
                     if isinstance(val, (list, dict)):
@@ -282,11 +298,13 @@ def refresh_customer_news(customer_id: int, current_user: User = Depends(require
     if not customer or not _can_access_customer(customer, current_user, db):
         raise HTTPException(status_code=404, detail="客户不存在")
     try:
-        news = refresh_company_news(customer.name, db, current_user.id)
+        import json as _json
+        news, sources = refresh_company_news(customer.name, db, current_user.id)
         customer.recent_news = news
+        customer.recent_news_evidence = _json.dumps(sources, ensure_ascii=False) if sources else None
         db.add(customer)
         db.commit()
-        return {"recent_news": news}
+        return {"recent_news": news, "recent_news_evidence": customer.recent_news_evidence}
     except Exception as e:
         write_log("error", "ai", f"刷新客户动态失败: {str(e)[:150]}", details=str(e), db=db)
         raise HTTPException(status_code=502, detail=f"刷新客户动态失败: {str(e)[:200]}")
@@ -388,10 +406,17 @@ def get_company_logo(
         import time as _time
         from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
         sources = [
-            (f"https://{domain}/favicon.ico", "image/x-icon"),
-            (f"https://icons.duckduckgo.com/ip3/{domain}.ico", "image/x-icon"),
-            (f"https://www.google.com/s2/favicons?domain={domain}&sz=64", "image/png"),
+            # 直连原站 apple-touch-icon，通常 180x180 高清（不含 HTML 错误页风险）
+            (f"https://{domain}/apple-touch-icon.png", "image/png"),
+            (f"https://{domain}/apple-touch-icon-precomposed.png", "image/png"),
+            # Clearbit：国际知名公司覆盖极好，logo 质量最高
             (f"https://logo.clearbit.com/{domain}?size=80", "image/png"),
+            # DuckDuckGo：全球覆盖广，对中文站点也有索引
+            (f"https://icons.duckduckgo.com/ip3/{domain}.ico", "image/x-icon"),
+            # favicon.im：第三方聚合，兜底
+            (f"https://favicon.im/{domain}?larger=true", "image/png"),
+            # 直连原站 favicon（最后兜底，部分中文站返回 HTML 错误页，已有 content-type 校验）
+            (f"https://{domain}/favicon.ico", "image/x-icon"),
         ]
 
         def _try_one(args):
@@ -401,13 +426,16 @@ def get_company_logo(
                     r = c.get(url)
                     if r.status_code == 200 and len(r.content) >= 50:
                         ct = (r.headers.get("content-type") or default_ct).split(";")[0].strip()
+                        # 严格校验 content-type，拒绝 HTML 错误页伪装成图片
+                        if not ct.startswith("image/"):
+                            return None
                         return r.content, ct
             except Exception:
                 return None
             return None
 
         try:
-            with ThreadPoolExecutor(max_workers=4) as ex:
+            with ThreadPoolExecutor(max_workers=6) as ex:
                 futures = {ex.submit(_try_one, s): s for s in sources}
                 try:
                     # 轮询:每 0.2s 检查一次,任一源成功就返回 + 取消其余
@@ -430,7 +458,7 @@ def get_company_logo(
         return None
 
     cache_key = f"company_logo:{domain}"
-    result, _hit = cached_call(cache_key, ttl=86400, factory=_fetch)
+    result, _hit = cached_call(cache_key, ttl=86400, factory=_fetch, skip_none=True)
     if not result:
         raise HTTPException(status_code=404, detail="logo not found")
     content, content_type = result

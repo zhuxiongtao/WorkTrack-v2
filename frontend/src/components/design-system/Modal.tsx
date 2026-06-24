@@ -85,14 +85,14 @@ export function Modal({
 }: ModalProps) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn"
+      className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-4 bg-black/60 backdrop-blur-sm animate-fadeIn"
       onClick={onClose}
     >
       <div
-        className={`w-full ${SIZE_CLASS[size]} max-h-[90vh] flex flex-col rounded-2xl border shadow-2xl animate-scaleIn overflow-hidden`}
+        className={`w-full ${SIZE_CLASS[size]} max-h-[88dvh] md:max-h-[90vh] flex flex-col rounded-t-2xl md:rounded-2xl border shadow-2xl animate-slideUp md:animate-scaleIn overflow-hidden`}
         style={{
-          borderColor: `${TONES[tone][500]}33`, // 边框：tone 色 20% 透明
-          background: 'var(--bg-card)',         // 主体：主题色卡片
+          borderColor: `${TONES[tone][500]}33`,
+          background: 'var(--bg-card)',
         }}
         onClick={(e) => e.stopPropagation()}
       >

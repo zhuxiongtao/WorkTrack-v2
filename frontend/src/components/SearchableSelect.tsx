@@ -12,6 +12,7 @@ interface SearchableSelectProps {
   searchPlaceholder?: string
   multiple?: boolean
   className?: string
+  clearValue?: SelectValue  // value emitted when cleared in single mode, default 0
 }
 
 export default function SearchableSelect({
@@ -23,6 +24,7 @@ export default function SearchableSelect({
   searchPlaceholder = '输入关键词搜索...',
   multiple = false,
   className = '',
+  clearValue = 0,
 }: SearchableSelectProps) {
   const [open, setOpen] = useState(false)
   const [keyword, setKeyword] = useState('')
@@ -85,7 +87,7 @@ export default function SearchableSelect({
 
   const handleClear = (e: React.MouseEvent) => {
     e.stopPropagation()
-    onChange(multiple ? [] : 0)
+    onChange(multiple ? [] : clearValue)
   }
 
   const hasValue = multiple ? idSet.size > 0 : !!value

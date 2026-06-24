@@ -5,6 +5,7 @@ import {
   Target, Activity, Users, Calendar, Edit3, Building2,
 } from 'lucide-react'
 import { PageHeader, IconBox, EmptyState } from '../components/design-system'
+import SearchableSelect from '../components/SearchableSelect'
 import TeamViewSwitcher from '../components/TeamViewSwitcher'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -671,7 +672,7 @@ export default function ProjectCostPage() {
                 </div>
 
                 {/* 指标条 */}
-                <div className="grid grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <MetricBox label="商机" value={fmtAmt(selectedProject.opportunity_amount, selectedProject.currency)} tone="blue" />
                   <MetricBox label="成交" value={fmtAmt(selectedProject.deal_amount, selectedProject.currency)} tone="green" />
                   <MetricBox label="总成本" value={fmtAmt(selectedProject.total_cost, selectedProject.currency)} tone="orange" />
@@ -886,36 +887,31 @@ export default function ProjectCostPage() {
             <div className="space-y-3">
               <div>
                 <label className="text-[11px] text-gray-500 mb-1 block">项目 *</label>
-                <select
-                  value={addForm.project_id}
-                  onChange={e => setAddForm(f => ({ ...f, project_id: parseInt(e.target.value) }))}
-                  className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6] transition-colors"
-                >
-                  <option value={0}>选择项目</option>
-                  {projectList.map(p => <option key={p.project_id} value={p.project_id}>{p.project_name}</option>)}
-                </select>
+                <SearchableSelect
+                  options={[{ id: 0, label: '选择项目' }, ...projectList.map(p => ({ id: p.project_id, label: p.project_name }))]}
+                  value={addForm.project_id || 0}
+                  onChange={(v) => setAddForm(f => ({ ...f, project_id: (v as number) || 0 }))}
+                  clearValue={0}
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[11px] text-gray-500 mb-1 block">类别</label>
-                  <select
+                  <SearchableSelect
+                    options={CATEGORIES.map(c => ({ id: c, label: c }))}
                     value={addForm.category}
-                    onChange={e => setAddForm(f => ({ ...f, category: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6] transition-colors"
-                  >
-                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                    onChange={(v) => setAddForm(f => ({ ...f, category: v === 0 ? '' : String(v) }))}
+                    clearValue=""
+                  />
                 </div>
                 <div>
                   <label className="text-[11px] text-gray-500 mb-1 block">供应商</label>
-                  <select
-                    value={addForm.supplier_id}
-                    onChange={e => setAddForm(f => ({ ...f, supplier_id: parseInt(e.target.value) }))}
-                    className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6] transition-colors"
-                  >
-                    <option value={0}>选择供应商</option>
-                    {supplierList.filter(s => s.status === '合作中').map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
+                  <SearchableSelect
+                    options={[{ id: 0, label: '选择供应商' }, ...supplierList.filter(s => s.status === '合作中').map(s => ({ id: s.id, label: s.name }))]}
+                    value={addForm.supplier_id || 0}
+                    onChange={(v) => setAddForm(f => ({ ...f, supplier_id: (v as number) || 0 }))}
+                    clearValue={0}
+                  />
                 </div>
               </div>
               <div>
@@ -987,24 +983,21 @@ export default function ProjectCostPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[11px] text-gray-500 mb-1 block">类别</label>
-                  <select
+                  <SearchableSelect
+                    options={CATEGORIES.map(c => ({ id: c, label: c }))}
                     value={editForm.category}
-                    onChange={e => setEditForm(f => ({ ...f, category: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6] transition-colors"
-                  >
-                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                    onChange={(v) => setEditForm(f => ({ ...f, category: v === 0 ? '' : String(v) }))}
+                    clearValue=""
+                  />
                 </div>
                 <div>
                   <label className="text-[11px] text-gray-500 mb-1 block">供应商</label>
-                  <select
-                    value={editForm.supplier_id}
-                    onChange={e => setEditForm(f => ({ ...f, supplier_id: parseInt(e.target.value) }))}
-                    className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6] transition-colors"
-                  >
-                    <option value={0}>选择供应商</option>
-                    {supplierList.map(s => <option key={s.id} value={s.id}>{s.name}{s.status !== '合作中' ? ` (${s.status})` : ''}</option>)}
-                  </select>
+                  <SearchableSelect
+                    options={[{ id: 0, label: '选择供应商' }, ...supplierList.map(s => ({ id: s.id, label: s.status !== '合作中' ? `${s.name} (${s.status})` : s.name }))]}
+                    value={editForm.supplier_id || 0}
+                    onChange={(v) => setEditForm(f => ({ ...f, supplier_id: (v as number) || 0 }))}
+                    clearValue={0}
+                  />
                 </div>
               </div>
               <div>

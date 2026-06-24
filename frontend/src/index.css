@@ -24,8 +24,8 @@ html {
   --color-accent-purple: #A78BFA;
   --color-accent-green: #34D399;
   --color-accent-orange: #FBBF24;
-  --font-sans: 'Inter', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-sans: 'Inter', system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', 'Consolas', monospace;
 }
 
 /* ===== 深色模式 —— Void Indigo 极深蓝黑基底 ===== */
@@ -314,7 +314,7 @@ body {
   -webkit-font-smoothing: auto;
   -moz-osx-font-smoothing: grayscale;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
   font-size: 14px;
   line-height: 1.5;
 }
@@ -407,27 +407,27 @@ body {
     -webkit-text-size-adjust: 100%;
     -webkit-tap-highlight-color: transparent;
   }
-  input, select, textarea, button {
+  /* 防止 iOS 在 input focus 时自动缩放 */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="search"],
+  input[type="url"],
+  select,
+  textarea {
     font-size: 16px !important;
   }
-  .grid {
-    gap: 0.5rem !important;
-  }
+  /* 表格横向可滚动 */
   table {
     display: block;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
-  .fixed.inset-0 {
-    padding: 0 !important;
-    align-items: stretch !important;
-  }
-  .fixed.inset-0 > div {
-    max-height: 100vh !important;
-    max-height: 100dvh !important;
-    border-radius: 0 !important;
-    margin: 0 !important;
-    width: 100% !important;
+  /* 按钮最小点击区域 44px（iOS HIG 标准） */
+  button:not([data-no-min-touch]) {
+    min-height: 36px;
   }
 }
 
@@ -440,8 +440,13 @@ body {
   from { opacity: 0; transform: scale(0.96) translateY(8px); }
   to   { opacity: 1; transform: scale(1) translateY(0); }
 }
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
 .animate-fadeIn  { animation: fadeIn  0.22s ease-out both; }
 .animate-scaleIn { animation: scaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-slideUp { animation: slideUp 0.32s cubic-bezier(0.16, 1, 0.3, 1) both; }
 
 /* ===== 上下滚动 banner（ticker）===== */
 @keyframes scrollUp {

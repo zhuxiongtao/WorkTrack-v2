@@ -25,6 +25,7 @@ export default defineConfig({
   },
   server: {
     host: '0.0.0.0',
+    port: process.env.PORT ? parseInt(process.env.PORT) : undefined,
     allowedHosts: true,
     proxy: {
       // 用 127.0.0.1 而非 localhost：Windows 上 localhost 会先解析到 IPv6 ::1，

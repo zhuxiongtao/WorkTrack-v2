@@ -2,6 +2,7 @@
 
 from typing import Optional
 from datetime import datetime, timezone
+from app.utils.time import BEIJING_TZ, now
 from sqlmodel import SQLModel, Field
 
 
@@ -14,7 +15,7 @@ class Permission(SQLModel, table=True):
     module: str = Field(index=True, max_length=50)  # "project"
     action: str = Field(max_length=50)  # "create"
     description: str = Field(default="", max_length=200)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())
 
 
 class Role(SQLModel, table=True):
@@ -26,7 +27,7 @@ class Role(SQLModel, table=True):
     description: str = Field(default="", max_length=200)
     is_system: bool = Field(default=False)  # 预置系统角色不可删除
     user_id: Optional[int] = Field(default=None, foreign_key="user.id")  # NULL=系统预置
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())
 
 
 class RolePermission(SQLModel, table=True):

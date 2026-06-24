@@ -4,6 +4,7 @@ import re
 import time
 import secrets
 from datetime import datetime, timedelta, timezone
+from app.utils.time import BEIJING_TZ, now
 from typing import Optional
 
 from fastapi import Depends, HTTPException, status
@@ -80,8 +81,8 @@ def check_account_locked(user: User) -> Optional[str]:
         return "账号已被停用，请联系管理员"
     if not user.is_active:
         return "账号已被禁用，请联系管理员"
-    if user.locked_until and user.locked_until > datetime.now(timezone.utc):
-        remaining = int((user.locked_until - datetime.now(timezone.utc)).total_seconds() / 60) + 1
+    if user.locked_until and user.locked_until > now():
+        remaining = int((user.locked_until - now()).total_seconds() / 60) + 1
         return f"账号已被锁定，请 {remaining} 分钟后重试"
     return None
 
@@ -92,8 +93,8 @@ def record_login_failure(user: User, db: Session) -> None:
     lockout = settings.login_lockout_minutes
     user.failed_login_attempts += 1
     if user.failed_login_attempts >= max_attempts:
-        user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=lockout)
-    user.updated_at = datetime.now(timezone.utc)
+        user.locked_until = now() + timedelta(minutes=lockout)
+    user.updated_at = now()
     db.add(user)
     db.commit()
 
@@ -102,8 +103,8 @@ def record_login_success(user: User, db: Session) -> None:
     """登录成功后重置失败计数，更新最后登录时间"""
     user.failed_login_attempts = 0
     user.locked_until = None
-    user.last_login_at = datetime.now(timezone.utc)
-    user.updated_at = datetime.now(timezone.utc)
+    user.last_login_at = now()
+    user.updated_at = now()
     db.add(user)
     db.commit()
 
@@ -111,7 +112,7 @@ def record_login_success(user: User, db: Session) -> None:
 def bump_token_version(user: User, db: Session) -> None:
     """递增 token_version 使所有旧 Token 失效"""
     user.token_version += 1
-    user.updated_at = datetime.now(timezone.utc)
+    user.updated_at = now()
     db.add(user)
     db.commit()
 
@@ -123,7 +124,7 @@ ACCESS_TOKEN_EXPIRE_HOURS = 24 * 7  # 7 天
 
 
 def create_access_token(user_id: int, username: str, token_version: int = 1) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
+    expire = now() + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
     payload = {
         "sub": str(user_id),
         "username": username,
@@ -470,7 +471,7 @@ def check_share_access(target_type: str, target_id: int, current_user: User, db:
         expires = share.expires_at
         if expires.tzinfo is None:
             expires = expires.replace(tzinfo=timezone.utc)
-        if expires < datetime.now(timezone.utc):
+        if expires < now():
             return False
     
     return True

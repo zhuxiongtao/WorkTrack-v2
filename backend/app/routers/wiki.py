@@ -15,6 +15,7 @@ from app.schemas import (
     WikiPageVersionOut,
     WikiUserGroupCreate, WikiUserGroupOut, WikiUserGroupMemberAdd,
 )
+from app.utils.time import BEIJING_TZ, now
 
 router = APIRouter(prefix="/api/v1/wiki", tags=["Wiki"])
 
@@ -25,13 +26,13 @@ def _verify_share_access(space: WikiSpace, password: str | None) -> None:
     """校验公开空间的到期时间和提取密码，不通过则抛出 HTTPException"""
     from datetime import datetime, timezone
     if space.share_expires_at:
-        now = datetime.now(timezone.utc)
+        now_dt = now()
         expires = space.share_expires_at
         # 确保两个时间都是时区感知的
         if expires.tzinfo is None:
             expires = expires.replace(tzinfo=timezone.utc)
         # 直接比较两个时区感知的时间
-        if now > expires:
+        if now_dt > expires:
             raise HTTPException(status_code=status.HTTP_410_GONE, detail="该共享链接已到期失效")
     if space.share_password:
         if not password or not verify_password(password.strip(), space.share_password):
@@ -559,7 +560,7 @@ def update_page(page_id: int, data: WikiPageUpdate, current_user: User = Depends
     for k, v in update_data.items():
         setattr(page, k, v)
     page.updated_by = current_user.id
-    page.updated_at = datetime.now(timezone.utc)
+    page.updated_at = now()
     db.add(page)
     db.commit()
     db.refresh(page)

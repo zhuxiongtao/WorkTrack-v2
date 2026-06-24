@@ -11,9 +11,9 @@ from app.models.meeting_note import MeetingNote
 from app.models.weekly_summary import WeeklySummary
 from app.models.ai_prompt import AIPrompt
 from app.models.user import User
-from app.auth import get_current_user, require_permission
+from app.auth import get_current_user, require_permission, get_user_permissions
 from app.routers.settings import DEFAULT_PROMPTS
-from app.services.ai_service import _get_active_provider, _get_client, _extract_message_text
+from app.services.ai_service import _get_active_provider, _get_client, _extract_message_text, _record_usage_silent
 from app.utils.time import utc_now
 
 logger = logging.getLogger("worktrack")
@@ -505,6 +505,7 @@ def get_ai_insights(
             temperature=0.7,
             max_tokens=300,
         )
+        _record_usage_silent(db, response, current_user.id, getattr(provider_info[3], 'id', None), model, f"insight_{period}")
         text = _extract_message_text(response.choices[0].message)
         lines = [line.strip().lstrip("•").strip() for line in text.split("\n") if line.strip()]
         insights = lines[:3]
@@ -538,7 +539,16 @@ def get_overview(
     today = date.today()
     month_start = today.replace(day=1)
 
-    # ── 审批待办 ──────────────────────────────────────────────────
+    # 一次性获取权限集合，后续按需查询
+    perms = set(get_user_permissions(current_user, db))
+    can_contract = "contract:read" in perms
+    can_project = "project:read" in perms
+    can_customer = "customer:read" in perms
+    can_upstream = "upstream:read" in perms
+    can_model = "model:read" in perms
+    can_meeting = "meeting:read" in perms
+
+    # ── 审批待办（所有登录用户均可见自己的审批） ──────────────────
     pending_for_me = approval_engine.get_pending_for_user(current_user, db)
     my_pending = db.exec(
         select(ApprovalInstance).where(
@@ -548,87 +558,84 @@ def get_overview(
     ).all()
 
     # ── 合同 ──────────────────────────────────────────────────────
-    contracts = db.exec(select(Contract)).all()
+    contracts: list = []
     contract_status: dict[str, int] = {}
-    for c in contracts:
-        contract_status[c.status] = contract_status.get(c.status, 0) + 1
-    expiring_soon = sum(
-        1 for c in contracts
-        if c.end_date and 0 <= (c.end_date - today).days <= 30 and c.status == "生效中"
-    )
-    total_active_amount = sum(c.contract_amount or 0 for c in contracts if c.status == "生效中")
+    expiring_soon = 0
+    total_active_amount = 0.0
+    if can_contract:
+        contracts = db.exec(select(Contract)).all()
+        for c in contracts:
+            contract_status[c.status] = contract_status.get(c.status, 0) + 1
+        expiring_soon = sum(
+            1 for c in contracts
+            if c.end_date and 0 <= (c.end_date - today).days <= 30 and c.status == "生效中"
+        )
+        total_active_amount = sum(c.contract_amount or 0 for c in contracts if c.status == "生效中")
 
     # ── 项目 ──────────────────────────────────────────────────────
-    projects = db.exec(select(Project)).all()
+    projects: list = []
     project_status: dict[str, int] = {}
-    for p in projects:
-        project_status[p.status or "未知"] = project_status.get(p.status or "未知", 0) + 1
+    if can_project:
+        projects = db.exec(select(Project)).all()
+        for p in projects:
+            project_status[p.status or "未知"] = project_status.get(p.status or "未知", 0) + 1
 
     # ── 客户 ──────────────────────────────────────────────────────
-    total_customers = db.exec(select(func.count(Customer.id))).one() or 0
-    new_customers_month = db.exec(
-        select(func.count(Customer.id)).where(Customer.created_at >= month_start)
-    ).one() or 0
+    total_customers = 0
+    new_customers_month = 0
+    if can_customer:
+        total_customers = db.exec(select(func.count(Customer.id))).one() or 0
+        new_customers_month = db.exec(
+            select(func.count(Customer.id)).where(Customer.created_at >= month_start)
+        ).one() or 0
 
     # ── 供应商 ────────────────────────────────────────────────────
     supplier_status: dict[str, int] = {}
-    for s in db.exec(select(Supplier)).all():
-        supplier_status[s.status] = supplier_status.get(s.status, 0) + 1
+    if can_upstream:
+        for s in db.exec(select(Supplier)).all():
+            supplier_status[s.status] = supplier_status.get(s.status, 0) + 1
 
     # ── 通道 ──────────────────────────────────────────────────────
     channel_status: dict[str, int] = {}
-    for c in db.exec(select(Channel)).all():
-        channel_status[c.status] = channel_status.get(c.status, 0) + 1
+    if can_upstream:
+        for c in db.exec(select(Channel)).all():
+            channel_status[c.status] = channel_status.get(c.status, 0) + 1
 
     # ── 模型变更（进行中） ─────────────────────────────────────────
-    active_events = db.exec(
-        select(ModelChangeEvent)
-        .where(ModelChangeEvent.status == "active")
-        .order_by(ModelChangeEvent.id.desc())
-        .limit(5)
-    ).all()
     events_out = []
-    for e in active_events:
-        stages = db.exec(
-            select(ModelChangeStage)
-            .where(ModelChangeStage.event_id == e.id)
-            .order_by(ModelChangeStage.order)
+    if can_model:
+        active_events = db.exec(
+            select(ModelChangeEvent)
+            .where(ModelChangeEvent.status == "active")
+            .order_by(ModelChangeEvent.id.desc())
+            .limit(5)
         ).all()
-        cur = next((s for s in stages if s.status in ("in_progress", "awaiting_approval")), None)
-        events_out.append({
-            "id": e.id,
-            "title": e.title,
-            "risk_level": e.risk_level,
-            "effective_date": e.effective_date.isoformat() if e.effective_date else None,
-            "current_stage_name": cur.name if cur else None,
-            "current_stage_order": cur.order if cur else None,
-            "current_stage_status": cur.status if cur else None,
-        })
+        for e in active_events:
+            stages = db.exec(
+                select(ModelChangeStage)
+                .where(ModelChangeStage.event_id == e.id)
+                .order_by(ModelChangeStage.order)
+            ).all()
+            cur = next((s for s in stages if s.status in ("in_progress", "awaiting_approval")), None)
+            events_out.append({
+                "id": e.id,
+                "title": e.title,
+                "risk_level": e.risk_level,
+                "effective_date": e.effective_date.isoformat() if e.effective_date else None,
+                "current_stage_name": cur.name if cur else None,
+                "current_stage_order": cur.order if cur else None,
+                "current_stage_status": cur.status if cur else None,
+            })
 
-    # ── 个人：日报连续 + 本月会议 ─────────────────────────────────
-    recent_reports = db.exec(
-        select(DailyReport.report_date).where(
-            DailyReport.user_id == current_user.id,
-            DailyReport.report_date >= today - timedelta(days=60),
-        )
-    ).all()
-    report_set = {(_to_date(d)) for d in recent_reports}
-    streak = 0
-    for delta in range(60):
-        d = today - timedelta(days=delta)
-        if d.weekday() >= 5:
-            continue
-        if d in report_set:
-            streak += 1
-        else:
-            break
-
-    meetings_month = db.exec(
-        select(func.count(MeetingNote.id)).where(
-            MeetingNote.user_id == current_user.id,
-            MeetingNote.meeting_date >= month_start,
-        )
-    ).one() or 0
+    # ── 个人：本月会议 ────────────────────────────────────────────
+    meetings_month = 0
+    if can_meeting:
+        meetings_month = db.exec(
+            select(func.count(MeetingNote.id)).where(
+                MeetingNote.user_id == current_user.id,
+                MeetingNote.meeting_date >= month_start,
+            )
+        ).one() or 0
 
     return {
         "approvals": {
@@ -640,26 +647,33 @@ def get_overview(
             "status": contract_status,
             "expiring_soon": expiring_soon,
             "total_active_amount": round(total_active_amount, 2),
+            "visible": can_contract,
         },
         "projects": {
             "total": len(projects),
             "status": project_status,
+            "visible": can_project,
         },
         "customers": {
             "total": total_customers,
             "new_this_month": new_customers_month,
+            "visible": can_customer,
         },
         "suppliers": {
             "total": sum(supplier_status.values()),
             "active": supplier_status.get("合作中", 0),
+            "visible": can_upstream,
         },
         "channels": {
             "total": sum(channel_status.values()),
             "active": channel_status.get("合作中", 0),
+            "visible": can_upstream,
         },
         "model_changes": events_out,
+        "model_changes_visible": can_model,
         "personal": {
-            "report_streak": streak,
             "meetings_this_month": meetings_month,
+            "meetings_visible": can_meeting,
+            "customers_visible": can_customer,
         },
     }

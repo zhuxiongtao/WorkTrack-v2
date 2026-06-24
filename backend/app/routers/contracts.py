@@ -3,6 +3,7 @@ import uuid
 import logging
 from typing import Optional
 from datetime import date
+from app.utils.time import BEIJING_TZ, now
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, BackgroundTasks
 from sqlmodel import Session, select
@@ -12,7 +13,10 @@ from app.models.contract import Contract
 from app.models.customer import Customer
 from app.models.project import Project
 from app.models.user import User
-from app.auth import get_current_user, require_permission, get_visible_user_ids, check_data_access
+from app.models.seal import SealRequest
+from app.models.payment import PaymentRequest
+from app.models.approval import ApprovalInstance, ApprovalRecord
+from app.auth import get_current_user, require_permission, has_permission, get_visible_user_ids, check_data_access
 from app.schemas import ContractCreate, ContractUpdate, ContractOut
 from app.services.contract_parser import extract_text, extract_text_with_vision_fallback, parse_contract, apply_parse_result, UPLOAD_DIR, extract_text_from_docx, extract_text_from_legacy_doc
 from app.services.vector_store import index_document
@@ -72,7 +76,8 @@ def list_contracts(
 @router.post("", response_model=ContractOut, status_code=201)
 async def create_contract(
     title: str = Form(...),
-    customer_id: int = Form(...),
+    contract_type: str = Form(""),
+    customer_id: Optional[int] = Form(None),
     project_id: Optional[int] = Form(None),
     contract_no: str = Form(""),
     sign_date: Optional[date] = Form(None),
@@ -81,10 +86,11 @@ async def create_contract(
     party_a: str = Form(""),
     party_b: str = Form(""),
     contract_amount: Optional[float] = Form(None),
+    amount_unit: str = Form("万元"),
     currency: str = Form("CNY"),
     payment_terms: Optional[str] = Form(None),
     remarks: Optional[str] = Form(None),
-    # 来源：self_made（从模板创建）| external（上传对方合同）
+    seal_types_requested: str = Form(""),
     source: str = Form("external"),
     template_id: Optional[int] = Form(None),
     content_html: Optional[str] = Form(None),
@@ -93,9 +99,18 @@ async def create_contract(
     db: Session = Depends(get_session),
     background_tasks: BackgroundTasks = None,
 ):
-    customer = db.get(Customer, customer_id)
-    if not customer or customer.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="客户不存在")
+    if customer_id:
+        customer = db.get(Customer, customer_id)
+        if not customer:
+            raise HTTPException(status_code=404, detail="客户不存在")
+        can_access = (
+            customer.user_id == current_user.id
+            or current_user.is_admin
+            or has_permission(current_user, "customer:view_all", db)
+            or check_data_access(customer.user_id, current_user, db)
+        )
+        if not can_access:
+            raise HTTPException(status_code=404, detail="客户不存在")
 
     file_path = ""
     file_name = ""
@@ -118,6 +133,7 @@ async def create_contract(
     contract = Contract(
         user_id=current_user.id,
         title=title,
+        contract_type=contract_type,
         contract_no=contract_no,
         customer_id=customer_id,
         project_id=project_id,
@@ -127,9 +143,11 @@ async def create_contract(
         party_a=party_a,
         party_b=party_b,
         contract_amount=contract_amount,
+        amount_unit=amount_unit,
         currency=currency,
         payment_terms=payment_terms,
         remarks=remarks,
+        seal_types_requested=seal_types_requested,
         file_path=file_path,
         file_name=file_name,
         file_type=file_type,
@@ -150,6 +168,85 @@ async def create_contract(
     return contract
 
 
+@router.post("/archive", response_model=ContractOut, status_code=201)
+async def archive_historical_contract(
+    title: str = Form(...),
+    customer_id: Optional[int] = Form(None),
+    contract_no: str = Form(""),
+    contract_type: str = Form(""),
+    sign_date: Optional[date] = Form(None),
+    start_date: Optional[date] = Form(None),
+    end_date: Optional[date] = Form(None),
+    party_a: str = Form(""),
+    party_b: str = Form(""),
+    contract_amount: Optional[float] = Form(None),
+    amount_unit: str = Form("万元"),
+    currency: str = Form("CNY"),
+    remarks: Optional[str] = Form(None),
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_permission("contract:archive")),
+    db: Session = Depends(get_session),
+    background_tasks: BackgroundTasks = None,
+):
+    if customer_id:
+        customer = db.get(Customer, customer_id)
+        if not customer:
+            raise HTTPException(status_code=404, detail="客户不存在")
+        can_access = (
+            customer.user_id == current_user.id
+            or current_user.is_admin
+            or has_permission(current_user, "customer:view_all", db)
+            or check_data_access(customer.user_id, current_user, db)
+        )
+        if not can_access:
+            raise HTTPException(status_code=404, detail="客户不存在")
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="历史归档必须上传合同文件")
+    _validate_file_extension(file.filename)
+    ext = _get_file_type(file.filename)
+    unique_name = f"{uuid.uuid4().hex}{ext}"
+    save_path = os.path.join(UPLOAD_DIR, unique_name)
+    raw_content = await file.read()
+    with open(save_path, "wb") as fh:
+        fh.write(raw_content)
+
+    contract = Contract(
+        user_id=current_user.id,
+        title=title,
+        contract_no=contract_no,
+        contract_type=contract_type,
+        customer_id=customer_id,
+        sign_date=sign_date,
+        start_date=start_date,
+        end_date=end_date,
+        party_a=party_a,
+        party_b=party_b,
+        contract_amount=contract_amount,
+        amount_unit=amount_unit,
+        currency=currency,
+        remarks=remarks,
+        file_path=save_path,
+        file_name=file.filename,
+        file_type=ext,
+        file_size=len(raw_content),
+        source="external",
+        # 历史归档：直接生效，上传件即为签章留底
+        status="生效中",
+        is_historical=True,
+        signed_file_path=save_path,
+        signed_file_name=file.filename,
+        parse_status="parsing",
+        parse_error="",
+    )
+    db.add(contract)
+    db.commit()
+    db.refresh(contract)
+
+    background_tasks.add_task(_auto_parse_contract_safe, contract.id, current_user.id)
+    return contract
+
+
 def _auto_parse_contract_safe(contract_id: int, user_id: int):
     from app.database import engine
     from sqlmodel import Session as SqlSession
@@ -165,8 +262,8 @@ def _auto_parse_contract_safe(contract_id: int, user_id: int):
             if c2 and c2.parse_status == "parsing":
                 c2.parse_status = "failed"
                 c2.parse_error = f"后台任务异常: {str(e)[:300]}"
-                from datetime import datetime, timezone
-                c2.parsed_at = datetime.now(timezone.utc)
+                from datetime import datetime
+                c2.parsed_at = now()
                 db.add(c2)
                 db.commit()
         except Exception as e2:
@@ -183,27 +280,27 @@ def _auto_parse_contract(contract_id: int, user_id: int, db: Session):
             if contract:
                 contract.parse_status = "failed"
                 contract.parse_error = "文件不存在或路径为空"
-                from datetime import datetime, timezone
-                contract.parsed_at = datetime.now(timezone.utc)
+                from datetime import datetime
+                contract.parsed_at = now()
                 db.add(contract)
                 db.commit()
             return
         try:
             raw_text = extract_text_with_vision_fallback(contract.file_path, contract.file_type, db, user_id)
         except Exception as e:
-            from datetime import datetime, timezone
+            from datetime import datetime
             contract.parse_status = "failed"
             contract.parse_error = f"文本提取失败: {str(e)[:300]}"
-            contract.parsed_at = datetime.now(timezone.utc)
+            contract.parsed_at = now()
             db.add(contract)
             db.commit()
             write_log("warning", "contract", f"合同 #{contract_id} 文本提取失败: {str(e)[:200]}", db=db)
             return
         if not raw_text:
-            from datetime import datetime, timezone
+            from datetime import datetime
             contract.parse_status = "failed"
             contract.parse_error = "无法提取文件文本内容（可能是扫描件且未配置视觉模型）"
-            contract.parsed_at = datetime.now(timezone.utc)
+            contract.parsed_at = now()
             db.add(contract)
             db.commit()
             write_log("warning", "contract", f"合同 #{contract_id} 无法提取文字内容", db=db)
@@ -226,12 +323,12 @@ def _auto_parse_contract(contract_id: int, user_id: int, db: Session):
         write_log("info", "contract", f"后台解析合同 #{contract_id} {contract.parse_status}", db=db)
     except Exception as e:
         try:
-            from datetime import datetime, timezone
+            from datetime import datetime
             contract = db.get(Contract, contract_id)
             if contract:
                 contract.parse_status = "failed"
                 contract.parse_error = f"解析异常: {str(e)[:300]}"
-                contract.parsed_at = datetime.now(timezone.utc)
+                contract.parsed_at = now()
                 db.add(contract)
                 db.commit()
             write_log("warning", "contract", f"后台解析合同失败: {str(e)[:200]}", db=db)
@@ -279,15 +376,67 @@ def delete_contract(contract_id: int, current_user: User = Depends(require_permi
     contract = db.get(Contract, contract_id)
     if not contract:
         raise HTTPException(status_code=404, detail="合同不存在")
-    if contract.user_id is not None and not check_data_access(contract.user_id, current_user, db):
-        raise HTTPException(status_code=403, detail="无权删除该合同")
     if contract.file_path and os.path.exists(contract.file_path):
         try:
             os.remove(contract.file_path)
         except Exception as e:
             logger.error("删除合同文件失败: %s", e)
+    # 级联删除关联记录（避免 FK 约束报错）
+    instances = db.exec(select(ApprovalInstance).where(ApprovalInstance.target_type == "contract", ApprovalInstance.target_id == contract_id)).all()
+    for inst in instances:
+        for rec in db.exec(select(ApprovalRecord).where(ApprovalRecord.instance_id == inst.id)).all():
+            db.delete(rec)
+    db.flush()  # ApprovalRecord 必须先于 ApprovalInstance 落库（FK 约束）
+    for inst in instances:
+        db.delete(inst)
+    for row in db.exec(select(SealRequest).where(SealRequest.contract_id == contract_id)).all():
+        db.delete(row)
+    for row in db.exec(select(PaymentRequest).where(PaymentRequest.contract_id == contract_id)).all():
+        db.delete(row)
     db.delete(contract)
     db.commit()
+
+
+@router.get("/{contract_id}/approval-preview")
+def get_contract_approval_preview(
+    contract_id: int,
+    current_user: User = Depends(require_permission("contract:edit")),
+    db: Session = Depends(get_session),
+):
+    """预览合同提交审批后的节点和审批人（解析为真实姓名）"""
+    import json
+    from app.services import approval_engine
+    from sqlmodel import select as sq_select
+    from app.models.user import User as UserModel
+
+    contract = db.get(Contract, contract_id)
+    if not contract:
+        raise HTTPException(status_code=404, detail="合同不存在")
+
+    flow = approval_engine.match_flow("contract", contract, db)
+    if not flow:
+        return {"nodes": [], "no_flow": True}
+
+    nodes = json.loads(flow.nodes or "[]")
+    nodes.sort(key=lambda n: n.get("order", 0))
+
+    result = []
+    for n in nodes:
+        approver_ids = approval_engine.resolve_approvers(
+            n.get("approver_type", ""), str(n.get("approver_value", "")), current_user, db
+        )
+        names = []
+        if approver_ids:
+            users = db.exec(sq_select(UserModel).where(UserModel.id.in_(approver_ids))).all()
+            names = [u.name or u.username for u in users]
+        result.append({
+            "name": n.get("name", ""),
+            "order": n.get("order", 0),
+            "approver_type": n.get("approver_type", ""),
+            "approver_names": names,
+            "node_kind": n.get("node_kind", "approval"),
+        })
+    return {"nodes": result, "no_flow": False}
 
 
 @router.post("/{contract_id}/submit-approval")
@@ -298,7 +447,7 @@ def submit_contract_approval(
 ):
     """提交合同审批：按合同审批模板发起多级审批流。
     无匹配模板（如未达金额阈值）则直接生效。"""
-    from datetime import datetime, timezone
+    from datetime import datetime
     from app.services import approval_engine
 
     contract = db.get(Contract, contract_id)
@@ -319,7 +468,7 @@ def submit_contract_approval(
 
     if inst is None:
         contract.status = "生效中"
-        contract.updated_at = datetime.now(timezone.utc)
+        contract.updated_at = now()
         db.add(contract)
         db.commit()
         write_log("info", "contract", f"合同 #{contract_id} 无需审批，直接生效", db=db)
@@ -328,7 +477,7 @@ def submit_contract_approval(
     # 实例仍在审批中才置「审批中」；若节点被自动跳过而即时通过，引擎已回写状态
     if inst.status == "pending":
         contract.status = "审批中"
-        contract.updated_at = datetime.now(timezone.utc)
+        contract.updated_at = now()
         db.add(contract)
         db.commit()
     db.refresh(contract)
@@ -348,8 +497,6 @@ def revoke_contract_approval(
     contract = db.get(Contract, contract_id)
     if not contract:
         raise HTTPException(status_code=404, detail="合同不存在")
-    if not check_data_access(contract.user_id, current_user, db):
-        raise HTTPException(status_code=403, detail="无权操作该合同")
 
     inst = approval_engine.get_active_instance("contract", contract_id, db)
     if not inst:
@@ -556,8 +703,6 @@ async def upload_signed_contract(
     contract = db.get(Contract, contract_id)
     if not contract:
         raise HTTPException(status_code=404, detail="合同不存在")
-    if not check_data_access(contract.user_id, current_user, db):
-        raise HTTPException(status_code=403, detail="无权操作该合同")
 
     ALLOWED_SIGNED = {".pdf", ".jpg", ".jpeg", ".png"}
     ext = _get_file_type(file.filename or "")
@@ -577,7 +722,7 @@ async def upload_signed_contract(
     with open(save_path, "wb") as fh:
         fh.write(raw_content)
 
-    from app.utils.time import utc_now
+    from app.utils.time import now, utc_now
     contract.signed_file_path = save_path
     contract.signed_file_name = file.filename or unique_name
     contract.updated_at = utc_now()

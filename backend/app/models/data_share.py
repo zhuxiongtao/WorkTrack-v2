@@ -2,6 +2,7 @@
 
 from typing import Optional
 from datetime import datetime, timezone
+from app.utils.time import BEIJING_TZ, now
 from sqlmodel import SQLModel, Field
 
 
@@ -16,7 +17,7 @@ class DataShare(SQLModel, table=True):
     shared_to: int = Field(foreign_key="user.id")
     permission: str = Field(default="viewer", max_length=20)  # "viewer" | "commenter"
     expires_at: Optional[datetime] = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())
 
 
 class DataShareComment(SQLModel, table=True):
@@ -27,4 +28,4 @@ class DataShareComment(SQLModel, table=True):
     share_id: int = Field(foreign_key="data_share.id")
     user_id: int = Field(foreign_key="user.id")
     content: str
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())

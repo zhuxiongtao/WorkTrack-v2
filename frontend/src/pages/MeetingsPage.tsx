@@ -1002,14 +1002,15 @@ export default function MeetingsPage() {
                       emptyText="无匹配用户"
                     />
                   </div>
-                  <select
+                  <SearchableSelect
+                    options={[
+                      { id: 'viewer', label: '只读' },
+                      { id: 'editor', label: '可编辑' },
+                    ]}
                     value={shareLevel}
-                    onChange={(e) => setShareLevel(e.target.value)}
-                    className="px-2 py-2 rounded-lg bg-bg-input border border-border text-xs text-gray-300 outline-none focus:border-[#3B82F6] transition-colors"
-                  >
-                    <option value="viewer">只读</option>
-                    <option value="editor">可编辑</option>
-                  </select>
+                    onChange={(v) => setShareLevel(v === 0 ? '' : String(v))}
+                    clearValue=""
+                  />
                   <button onClick={handleAddShare} disabled={shareLoading || !shareUserId}
                     className="px-3 py-2 rounded-lg bg-[#3B82F6] text-[#fff] text-xs font-medium hover:bg-blue-600 disabled:opacity-50 transition-all">
                     {shareLoading ? <Loader2 size={12} className="animate-spin" /> : '添加'}
@@ -1165,18 +1166,12 @@ export default function MeetingsPage() {
                     {!editingId && !recording && !recordedBlob && (
                       <div className="flex items-center gap-1.5">
                         {audioDevices.length > 1 && (
-                          <select
+                          <SearchableSelect
+                            options={audioDevices.map((d) => ({ id: d.deviceId, label: d.label || `麦克风 ${d.deviceId.slice(0, 6)}` }))}
                             value={selectedDeviceId}
-                            onChange={(e) => updateDevicePreference(e.target.value)}
-                            className="text-[11px] px-2 py-1 rounded-md bg-bg-input border border-border text-gray-400 outline-none"
-                            title="选择麦克风"
-                          >
-                            {audioDevices.map((d) => (
-                              <option key={d.deviceId} value={d.deviceId}>
-                                {d.label || `麦克风 ${d.deviceId.slice(0, 6)}`}
-                              </option>
-                            ))}
-                          </select>
+                            onChange={(v) => updateDevicePreference(v === 0 ? '' : String(v))}
+                            clearValue=""
+                          />
                         )}
                         <button onClick={startRecording} className="flex items-center gap-1.5 text-xs text-red-400 hover:text-white px-2.5 py-1.5 rounded-lg hover:bg-red-500 transition-all border border-red-500/30 hover:border-red-500">
                           <Mic size={12} />开始录音

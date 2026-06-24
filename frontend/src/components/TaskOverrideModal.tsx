@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { X, Save, Loader2, Sparkles, Brain, FileText, RotateCcw, ListChecks, Layers } from 'lucide-react'
 import { useToast } from '../contexts/ToastContext'
+import SearchableSelect from './SearchableSelect'
 
 interface TaskModelConfig {
   task_type: string
@@ -188,27 +189,26 @@ export default function TaskOverrideModal({ taskType, taskLabel, current, onClos
           {/* 预设选择 */}
           <Section title="引用预设模板" icon={Layers} color="#A78BFA" hint="选中后自动填入下方字段，可继续微调">
             <div className="flex items-center gap-2">
-              <select
-                value={form.preset_id || ''}
-                onChange={(e) => {
-                  const v = e.target.value ? Number(e.target.value) : null
-                  if (!v) {
-                    setOverride('preset_id', null)
-                    return
-                  }
-                  const p = presets.find((x) => x.id === v)
-                  if (p) applyPreset(p)
-                  else setOverride('preset_id', v)
-                }}
-                disabled={!canEdit}
-                className="flex-1 px-3 py-2 rounded-lg bg-bg-input border border-border text-xs text-gray-700 dark:text-gray-300 outline-none focus:border-[#A78BFA]">
-                <option value="">不引用预设</option>
-                {presets.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.is_system ? '🔒 ' : '👤 '}{p.name}{p.description ? ` — ${p.description}` : ''}
-                  </option>
-                ))}
-              </select>
+              <div className="flex-1">
+                <SearchableSelect
+                  options={[
+                    { id: 0, label: '不引用预设' },
+                    ...presets.map((p) => ({ id: p.id, label: `${p.is_system ? '🔒 ' : '👤 '}${p.name}${p.description ? ` — ${p.description}` : ''}` })),
+                  ]}
+                  value={form.preset_id || 0}
+                  onChange={(v) => {
+                    if (!canEdit) return
+                    const num = v && v !== 0 ? (v as number) : null
+                    if (!num) {
+                      setOverride('preset_id', null)
+                      return
+                    }
+                    const p = presets.find((x) => x.id === num)
+                    if (p) applyPreset(p)
+                    else setOverride('preset_id', num)
+                  }}
+                />
+              </div>
               {form.preset_id && (
                 <button onClick={() => setOverride('preset_id', null)}
                   className="text-[11px] text-gray-500 hover:text-amber-400 flex items-center gap-0.5 shrink-0">
@@ -304,10 +304,12 @@ function SelectField({ label, value, options, onChange, onNull }: { label: strin
           <RotateCcw size={9} />继承
         </button>
       </div>
-      <select value={value || ''} onChange={(e) => onChange(e.target.value || null)}
-        className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-xs text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6]">
-        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
+      <SearchableSelect
+        options={options.map(o => ({ id: o.value, label: o.label }))}
+        value={value || ''}
+        onChange={(v) => onChange(v === 0 ? null : (String(v) || null))}
+        clearValue=""
+      />
     </div>
   )
 }

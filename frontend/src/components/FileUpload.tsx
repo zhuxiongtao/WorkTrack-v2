@@ -1,5 +1,6 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { X, FileText, Paperclip, Loader2 } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
 
 export interface FileInfo {
   name: string
@@ -28,7 +29,38 @@ function isImage(type: string): boolean {
   return type.startsWith('image/')
 }
 
+function AuthedImg({ url, alt, className, clickable }: { url: string; alt: string; className?: string; clickable?: boolean }) {
+  const { fetchWithAuth } = useAuth()
+  const [blobUrl, setBlobUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    let objectUrl = ''
+    fetchWithAuth(url)
+      .then((r) => r.blob())
+      .then((blob) => {
+        objectUrl = URL.createObjectURL(blob)
+        setBlobUrl(objectUrl)
+      })
+      .catch(() => {})
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl) }
+  }, [url, fetchWithAuth])
+
+  if (!blobUrl) return <div className={className} />
+  if (clickable) {
+    return (
+      <img
+        src={blobUrl}
+        alt={alt}
+        className={`${className} cursor-pointer`}
+        onClick={() => window.open(blobUrl, '_blank')}
+      />
+    )
+  }
+  return <img src={blobUrl} alt={alt} className={className} />
+}
+
 export default function FileUpload({ filesJson, onChange, disabled }: FileUploadProps) {
+  const { fetchWithAuth } = useAuth()
   const [uploading, setUploading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -49,7 +81,7 @@ export default function FileUpload({ filesJson, onChange, disabled }: FileUpload
       const formData = new FormData()
       formData.append('file', file)
 
-      const res = await fetch('/api/v1/files/upload', {
+      const res = await fetchWithAuth('/api/v1/files/upload', {
         method: 'POST',
         body: formData,
       })
@@ -100,6 +132,19 @@ export default function FileUpload({ filesJson, onChange, disabled }: FileUpload
     }
   }, [uploadFile])
 
+  const openFile = useCallback(async (url: string) => {
+    try {
+      const res = await fetchWithAuth(url)
+      const blob = await res.blob()
+      const objUrl = URL.createObjectURL(blob)
+      window.open(objUrl, '_blank')
+      setTimeout(() => URL.revokeObjectURL(objUrl), 60000)
+    } catch {
+      // fallback: try direct link
+      window.open(url, '_blank')
+    }
+  }, [fetchWithAuth])
+
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     // 仅处理粘贴图片
     const items = e.clipboardData?.items
@@ -131,25 +176,23 @@ export default function FileUpload({ filesJson, onChange, disabled }: FileUpload
               className="group relative flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-bg-hover border border-border text-xs"
             >
               {isImage(file.type) ? (
-                <a href={file.url} target="_blank" rel="noopener noreferrer">
-                  <img
-                    src={file.url}
-                    alt={file.name}
-                    className="w-8 h-8 rounded object-cover border border-border"
-                  />
-                </a>
+                <AuthedImg
+                  url={file.url}
+                  alt={file.name}
+                  className="w-8 h-8 rounded object-cover border border-border"
+                  clickable
+                />
               ) : (
                 <FileText size={16} className="text-gray-500 shrink-0" />
               )}
-              <a
-                href={file.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-300 hover:text-white truncate max-w-[120px]"
+              <button
+                type="button"
+                onClick={() => openFile(file.url)}
+                className="text-gray-300 hover:text-white truncate max-w-[120px] text-left"
                 title={file.name}
               >
                 {file.name}
-              </a>
+              </button>
               <span className="text-gray-600 text-[11px]">{formatSize(file.size)}</span>
               {!disabled && (
                 <button

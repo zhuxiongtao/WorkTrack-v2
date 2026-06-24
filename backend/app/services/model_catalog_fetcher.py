@@ -13,6 +13,7 @@ import os
 import re
 import time
 from datetime import datetime, timezone
+from app.utils.time import BEIJING_TZ, now
 from typing import Optional
 
 import httpx
@@ -436,7 +437,7 @@ def translate_existing_descriptions(only_english: bool = True) -> dict:
                         zh = res_map.get(i, "")
                         if zh:
                             row.description = zh
-                            row.updated_at = datetime.now(timezone.utc)
+                            row.updated_at = now()
                             db.add(row)
                             translated += 1
                     db.commit()
@@ -760,7 +761,7 @@ def _upsert_models(items: list[dict], db: Session) -> tuple[int, int]:
     - 未命中：插入新行，is_active 保持默认 False
     返回 (inserted, updated)
     """
-    now = datetime.now(timezone.utc)
+    now_dt = now()
     inserted = updated = 0
 
     for it in items:
@@ -800,8 +801,8 @@ def _upsert_models(items: list[dict], db: Session) -> tuple[int, int]:
             existing.description = description or existing.description
             existing.source_url = source_url or existing.source_url
             existing.confidence = confidence
-            existing.last_seen_at = now
-            existing.updated_at = now
+            existing.last_seen_at = now_dt
+            existing.updated_at = now_dt
             # 价格：只在有值时覆盖，不用 None 抹掉人工填写的价格
             if input_price is not None:
                 existing.input_price = input_price
@@ -829,9 +830,9 @@ def _upsert_models(items: list[dict], db: Session) -> tuple[int, int]:
                 cache_read_price=cache_read_price,
                 cache_write_price=cache_write_price,
                 is_active=False,
-                last_seen_at=now,
-                created_at=now,
-                updated_at=now,
+                last_seen_at=now_dt,
+                created_at=now_dt,
+                updated_at=now_dt,
             )
             db.add(row)
             inserted += 1
@@ -842,7 +843,7 @@ def _upsert_models(items: list[dict], db: Session) -> tuple[int, int]:
 
 def _deactivate_stale(db: Session, days: int = 90) -> int:
     from datetime import timedelta
-    threshold = datetime.now(timezone.utc) - timedelta(days=days)
+    threshold = now() - timedelta(days=days)
     rows = db.exec(
         select(ModelCatalog).where(
             ModelCatalog.is_active == True,
@@ -852,7 +853,7 @@ def _deactivate_stale(db: Session, days: int = 90) -> int:
     ).all()
     for r in rows:
         r.is_active = False
-        r.updated_at = datetime.now(timezone.utc)
+        r.updated_at = now()
         db.add(r)
     if rows:
         db.commit()
@@ -990,6 +991,6 @@ def _persist_status(status: dict) -> None:
 
 def refresh_and_record() -> dict:
     res = refresh_model_catalog_sync()
-    res["finished_at"] = datetime.now(timezone.utc).isoformat()
+    res["finished_at"] = now().isoformat()
     _persist_status(res)
     return res

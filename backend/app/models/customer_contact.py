@@ -1,5 +1,6 @@
 from typing import Optional
 from datetime import datetime, timezone
+from app.utils.time import BEIJING_TZ, now
 from sqlmodel import SQLModel, Field
 
 
@@ -11,4 +12,4 @@ class CustomerContact(SQLModel, table=True):
     email: str = ""
     position: str = ""
     is_primary: bool = False
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())

@@ -15,6 +15,7 @@ from app.models.approval import ApprovalFlow, ApprovalInstance, ApprovalRecord
 from app.auth import get_current_user
 from app.schemas.approval import ApprovalActionIn, ApprovalFlowCreate, ApprovalFlowUpdate
 from app.services import approval_engine
+from app.utils.time import BEIJING_TZ, now
 
 router = APIRouter(prefix="/api/v1/approvals", tags=["审批"])
 
@@ -37,7 +38,8 @@ def _instance_brief(inst: ApprovalInstance, db: Session, current_user: User, nam
     except (TypeError, ValueError):
         snap = []
     idx = inst.current_node_index
-    current_node = snap[idx]["name"] if 0 <= idx < len(snap) else ""
+    cur = snap[idx] if 0 <= idx < len(snap) else {}
+    current_node = cur.get("name", "")
     return {
         "id": inst.id,
         "flow_code": inst.flow_code,
@@ -46,6 +48,8 @@ def _instance_brief(inst: ApprovalInstance, db: Session, current_user: User, nam
         "target_id": inst.target_id,
         "status": inst.status,
         "current_node": current_node,
+        "current_node_kind": cur.get("node_kind", "approval"),
+        "current_action_label": cur.get("action_label", ""),
         "node_total": len(snap),
         "node_index": idx,
         "submitted_by": inst.submitted_by,
@@ -176,7 +180,7 @@ def update_flow(
         flow.trigger_condition = json.dumps(body.trigger_condition, ensure_ascii=False) if body.trigger_condition else None
     if body.nodes is not None:
         flow.nodes = json.dumps([n.model_dump() for n in body.nodes], ensure_ascii=False)
-    flow.updated_at = datetime.now(timezone.utc)
+    flow.updated_at = now()
     db.add(flow)
     db.commit()
     db.refresh(flow)
@@ -197,7 +201,7 @@ def toggle_flow(
     if not flow:
         raise HTTPException(404, "审批流不存在")
     flow.is_active = not flow.is_active
-    flow.updated_at = datetime.now(timezone.utc)
+    flow.updated_at = now()
     db.add(flow)
     db.commit()
     db.refresh(flow)
@@ -268,6 +272,8 @@ def _instance_detail(inst: ApprovalInstance, db: Session, current_user: User) ->
             "name": n.get("name", ""),
             "order": n.get("order", 0),
             "status": n.get("status", "pending"),
+            "node_kind": n.get("node_kind", "approval"),
+            "action_label": n.get("action_label", ""),
             "approver_ids": n.get("approver_ids", []),
             "approver_names": [name_map.get(a, f"用户{a}") for a in n.get("approver_ids", [])],
             "decided_by": n.get("decided_by"),

@@ -1,5 +1,6 @@
 from typing import Optional
 from datetime import datetime, timezone
+from app.utils.time import BEIJING_TZ, now
 from sqlalchemy import Column, JSON
 from sqlmodel import SQLModel, Field, Relationship
 
@@ -22,7 +23,7 @@ class ModelProvider(SQLModel, table=True):
     gcp_label_team: Optional[str] = Field(default=None)  # GCP 账单标签：team
     gcp_label_app: Optional[str] = Field(default=None)   # GCP 账单标签：app
     gcp_label_env: Optional[str] = Field(default=None)   # GCP 账单标签：environment
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())
     # 关联的模型列表
     models_rel: list["ProviderModel"] = Relationship(back_populates="provider", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
 
@@ -40,7 +41,7 @@ class ProviderModel(SQLModel, table=True):
         default=None,
         sa_column=Column("supported_task_types", JSON),
     )
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())
 
     # ===== P0: 模型默认参数 =====
     # 基础采样
@@ -136,5 +137,5 @@ class ModelParamPreset(SQLModel, table=True):
     json_schema: Optional[str] = Field(default=None)
     extra_params_json: Optional[str] = Field(default=None)
 
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())
+    updated_at: datetime = Field(default_factory=lambda: now())

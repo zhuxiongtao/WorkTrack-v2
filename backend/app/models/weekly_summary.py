@@ -1,5 +1,6 @@
 from typing import Optional
 from datetime import date, datetime, timezone
+from app.utils.time import BEIJING_TZ, now
 from sqlmodel import SQLModel, Field
 
 
@@ -11,4 +12,4 @@ class WeeklySummary(SQLModel, table=True):
     week_end: date
     summary_text: str = Field(default="")
     status: str = Field(default="draft", max_length=50) # "draft" (草稿) 或 "submitted" (已提交)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())

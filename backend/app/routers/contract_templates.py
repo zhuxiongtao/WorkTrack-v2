@@ -2,6 +2,7 @@ import os
 import uuid
 from typing import Optional
 from datetime import datetime, timezone
+from app.utils.time import BEIJING_TZ, now
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlmodel import Session, select
@@ -79,7 +80,7 @@ def update_template(
         tpl.content = content
     if is_active is not None:
         tpl.is_active = is_active
-    tpl.updated_at = datetime.now(timezone.utc)
+    tpl.updated_at = now()
     db.add(tpl)
     db.commit()
     db.refresh(tpl)

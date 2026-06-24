@@ -1,5 +1,6 @@
 from typing import Optional
 from datetime import datetime, timezone
+from app.utils.time import BEIJING_TZ, now
 from sqlmodel import SQLModel, Field
 
 
@@ -11,4 +12,4 @@ class ScheduledTask(SQLModel, table=True):
     action_type: str  # ai_summarize_daily / ai_analyze_project 等
     action_params: Optional[str] = None  # JSON 附加参数
     enabled: bool = True
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())

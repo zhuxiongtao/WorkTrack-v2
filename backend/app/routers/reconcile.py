@@ -21,6 +21,7 @@ from app.schemas.reconcile import (
 )
 from app.auth import require_permission
 from app.services import approval_engine
+from app.utils.time import BEIJING_TZ, now
 
 router = APIRouter(prefix="/api/v1/reconcile", tags=["对账核算"])
 
@@ -281,7 +282,7 @@ def submit_reconcile_review(
         raise HTTPException(400, str(e))
 
     from datetime import datetime, timezone
-    _now = datetime.now(timezone.utc)
+    _now = now()
 
     if instance is None:
         # 无审批模板 → 直接锁定

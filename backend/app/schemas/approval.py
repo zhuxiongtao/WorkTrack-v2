@@ -21,9 +21,11 @@ class ApprovalSubmitIn(BaseModel):
 class ApprovalNodeIn(BaseModel):
     """单个审批节点定义"""
     name: str                                           # 节点名称，如「法务审批」
-    approver_type: Literal["role", "leader", "dept_manager", "user"]
-    approver_value: str = ""                            # role code 或 user_id；leader/dept_manager 留空
+    approver_type: Literal["role", "leader", "dept_manager", "dept_or_leader", "user"]
+    approver_value: str = ""                            # role code 或 user_id；leader/dept_manager/dept_or_leader 留空
     order: int = 0
+    node_kind: Literal["approval", "execution"] = "approval"   # 审批意见 | 执行确认（出纳付款 / 盖章）
+    action_label: str = ""                              # 执行节点动作文案，如「确认付款」「确认盖章」
 
 
 class ApprovalFlowCreate(BaseModel):

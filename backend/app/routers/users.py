@@ -6,6 +6,7 @@ import string
 import logging
 from typing import Optional, List
 from datetime import datetime, timezone
+from app.utils.time import BEIJING_TZ, now
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel
 from sqlmodel import Session, select, func, or_
@@ -297,7 +298,7 @@ def list_users(
             return []
 
     # 状态筛选
-    now = datetime.now(timezone.utc)
+    now_dt = now()
     if status == "active":
         stmt = stmt.where(User.status == "active")
     elif status == "disabled":
@@ -308,7 +309,7 @@ def list_users(
         # 向后兼容：inactive = 旧版 is_active=False 的用户
         stmt = stmt.where(User.is_active == False)
     elif status == "locked":
-        stmt = stmt.where(User.locked_until.is_not(None), User.locked_until > now)
+        stmt = stmt.where(User.locked_until.is_not(None), User.locked_until > now_dt)
 
     # 排序
     stmt = stmt.order_by(User.id)
@@ -341,14 +342,14 @@ def get_user_stats(db: Session = Depends(get_session),
                    _admin: User = Depends(require_permission("user:read"))):
     """返回用户全量统计：总成员/活跃/离职/锁定制中/管理员/无部门"""
     from sqlalchemy import func as sql_func
-    now = datetime.now(timezone.utc)
+    now_dt = now()
     total = db.exec(select(sql_func.count(User.id))).one()
     active = db.exec(select(sql_func.count(User.id)).where(User.status == "active", User.is_active == True)).one()
     disabled = db.exec(select(sql_func.count(User.id)).where(or_((User.status == "disabled"), (User.is_active == False)))).one()
     resigned = db.exec(select(sql_func.count(User.id)).where(User.status == "resigned")).one()
     locked = db.exec(
         select(sql_func.count(User.id))
-        .where(User.locked_until != None, User.locked_until > now)
+        .where(User.locked_until != None, User.locked_until > now_dt)
     ).one()
     admin_count = db.exec(select(sql_func.count(User.id)).where(User.is_admin == True)).one()
     no_dept = db.exec(select(sql_func.count(User.id)).where(or_(User.department_id == None, User.department_id == 0))).one()
@@ -388,7 +389,7 @@ def batch_user_action(data: UserBatchAction, current_user: User = Depends(requir
         raise HTTPException(status_code=404, detail=f"用户不存在: {sorted(missing)}")
 
     affected = 0
-    now = datetime.now(timezone.utc)
+    now_dt = now()
     if data.action == "enable":
         for u in users:
             u.is_active = True
@@ -816,9 +817,10 @@ def create_user(data: UserCreate, db: Session = Depends(get_session),
     # 发送欢迎邮件（含用户名 + 初始密码）。邮件未配置/失败不阻断建号。
     welcome_email_sent = False
     try:
-        from app.services.email_service import is_email_configured, send_welcome_email
+        from app.services.email_service import is_email_configured, send_welcome_email, _get_frontend_url
         if is_email_configured():
-            login_url = (settings.cors_origins.split(",")[0] or "").strip()
+            base = _get_frontend_url() or (settings.cors_origins.split(",")[0] or "").strip()
+            login_url = f"{base.rstrip('/')}/login" if base else ""
             welcome_email_sent = send_welcome_email(
                 to=user.email, username=user.username, password=initial_password,
                 name=user.name, login_url=login_url,
@@ -980,6 +982,47 @@ def reset_user_password(user_id: int, data: ResetPasswordRequest,
     bump_token_version(user, db)
 
     return {"message": "密码已重置，用户需要重新登录"}
+
+
+# ===== 重发欢迎邮件 =====
+@router.post("/{user_id}/resend-welcome")
+def resend_welcome_email(user_id: int, db: Session = Depends(get_session),
+                         _admin: User = Depends(require_permission("user:edit"))):
+    """管理员为指定用户重新生成临时密码并重发欢迎邮件（覆盖原密码）。
+    邮件未配置时将临时密码直接返回给管理员，便于线下转交。"""
+    from app.services.email_service import is_email_configured, send_welcome_email as _send_welcome, _get_frontend_url
+    from app.config import settings as _cfg
+
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    if not user.email or not user.email.strip():
+        raise HTTPException(status_code=400, detail="该用户未设置邮箱，无法发送欢迎邮件")
+
+    new_password = generate_initial_password()
+    user.password_hash = hash_password(new_password)
+    user.must_change_password = True
+    bump_token_version(user, db)
+    db.add(user)
+    db.commit()
+
+    sent = False
+    try:
+        if is_email_configured():
+            base = _get_frontend_url() or (_cfg.cors_origins.split(",")[0] or "").strip()
+            login_url = f"{base.rstrip('/')}/login" if base else ""
+            sent = _send_welcome(to=user.email, username=user.username, password=new_password,
+                                 name=user.name or "", login_url=login_url)
+    except Exception:
+        logger.warning("重发欢迎邮件异常 user=%s", user.username, exc_info=True)
+
+    from app.routers.logs import write_log
+    write_log("info", "user", f"管理员重发欢迎邮件 → {user.username}（邮件{'已发出' if sent else '未配置/发送失败，密码已返回'}）", db=db)
+
+    result: dict = {"sent": sent}
+    if not sent:
+        result["initial_password"] = new_password
+    return result
 
 
 # ===== 删除用户 =====

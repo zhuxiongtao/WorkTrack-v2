@@ -7,6 +7,7 @@ import {
   Upload, FileSpreadsheet, Eye, ChevronDown, ChevronRight, Filter, Info, Send, ClipboardCheck,
 } from 'lucide-react'
 import { PageHeader, IconBox, EmptyState, SectionHeader, Modal, ModalFooter, SectionLabel, Field } from '../components/design-system'
+import SearchableSelect from '../components/SearchableSelect'
 import { useToast } from '../contexts/ToastContext'
 import { apiFetch, apiPost, apiPut, apiDelete } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -293,10 +294,12 @@ export default function ReconcilePage() {
         tone="purple"
         right={
           <div className="flex items-center gap-2">
-            <select value={period} onChange={e => setPeriod(e.target.value)}
-              className="px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none focus:border-purple-500/50">
-              {periods.length === 0 ? <option value={period}>{period}</option> : periods.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
+            <SearchableSelect
+              options={periods.length === 0 ? [{ id: period, label: period }] : periods.map(p => ({ id: p, label: p }))}
+              value={period}
+              onChange={(v) => setPeriod(v === 0 ? '' : String(v))}
+              clearValue=""
+            />
             {currentSummary && (
               <span className="inline-flex items-center px-2 py-1 text-[11px] font-bold rounded-md"
                 style={{ background: (SUMMARY_STATUS_COLORS[currentSummary.status] || SUMMARY_STATUS_COLORS['草稿']).bg, color: (SUMMARY_STATUS_COLORS[currentSummary.status] || SUMMARY_STATUS_COLORS['草稿']).text }}>
@@ -1024,11 +1027,12 @@ function SalesFormModal({ period, projects, projectMap, editing, onClose, onSave
     >
       <div className="grid grid-cols-2 gap-3">
         <Field label="项目" required>
-          <select value={form.project_id} onChange={e => setForm({ ...form, project_id: parseInt(e.target.value) })}
-            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 transition-all">
-            <option value={0}>请选择…</option>
-            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          <SearchableSelect
+            options={[{ id: 0, label: '请选择…' }, ...projects.map(p => ({ id: p.id, label: p.name }))]}
+            value={form.project_id || 0}
+            onChange={(v) => setForm({ ...form, project_id: (v as number) || 0 })}
+            clearValue={0}
+          />
         </Field>
         <Field label="对账月份" required>
           <input value={form.period} onChange={e => setForm({ ...form, period: e.target.value })}
@@ -1040,23 +1044,29 @@ function SalesFormModal({ period, projects, projectMap, editing, onClose, onSave
             className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 transition-all" />
         </Field>
         <Field label="开票状态">
-          <select value={form.invoice_status} onChange={e => setForm({ ...form, invoice_status: e.target.value })}
-            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 transition-all">
-            {SALES_STATUS.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
+          <SearchableSelect
+            options={SALES_STATUS.map(s => ({ id: s, label: s }))}
+            value={form.invoice_status}
+            onChange={(v) => setForm({ ...form, invoice_status: v === 0 ? '' : String(v) })}
+            clearValue=""
+          />
         </Field>
         <Field label="调用量">
           <input type="number" step="0.0001" value={form.call_volume} onChange={e => setForm({ ...form, call_volume: parseFloat(e.target.value) || 0 })}
             className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 transition-all" />
         </Field>
         <Field label="计费单位">
-          <select value={form.call_volume_unit} onChange={e => setForm({ ...form, call_volume_unit: e.target.value })}
-            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 transition-all">
-            <option value="per_1k_token">/ 1K tokens</option>
-            <option value="per_1m_token">/ 1M tokens（百万）</option>
-            <option value="per_request">/ 次</option>
-            <option value="per_month">/ 月</option>
-          </select>
+          <SearchableSelect
+            options={[
+              { id: 'per_1k_token', label: '/ 1K tokens' },
+              { id: 'per_1m_token', label: '/ 1M tokens（百万）' },
+              { id: 'per_request', label: '/ 次' },
+              { id: 'per_month', label: '/ 月' },
+            ]}
+            value={form.call_volume_unit}
+            onChange={(v) => setForm({ ...form, call_volume_unit: v === 0 ? '' : String(v) })}
+            clearValue=""
+          />
         </Field>
         <Field label="成交单价 ($)">
           <input type="number" step="0.0001" value={form.final_price} onChange={e => setForm({ ...form, final_price: parseFloat(e.target.value) || 0 })}
@@ -1149,41 +1159,49 @@ function SupplyFormModal({ period, channels, suppliers, channelMap, supplierMap,
     >
       <div className="grid grid-cols-2 gap-3">
         <Field label="通道" required>
-          <select value={form.channel_id} onChange={e => setForm({ ...form, channel_id: parseInt(e.target.value) })}
-            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/15 transition-all">
-            <option value={0}>请选择…</option>
-            {channels.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <SearchableSelect
+            options={[{ id: 0, label: '请选择…' }, ...channels.map(c => ({ id: c.id, label: c.name }))]}
+            value={form.channel_id || 0}
+            onChange={(v) => setForm({ ...form, channel_id: (v as number) || 0 })}
+            clearValue={0}
+          />
         </Field>
         <Field label="供应商" required>
-          <select value={form.supplier_id} onChange={e => setForm({ ...form, supplier_id: parseInt(e.target.value) })}
-            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/15 transition-all">
-            <option value={0}>请选择…</option>
-            {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
+          <SearchableSelect
+            options={[{ id: 0, label: '请选择…' }, ...suppliers.map(s => ({ id: s.id, label: s.name }))]}
+            value={form.supplier_id || 0}
+            onChange={(v) => setForm({ ...form, supplier_id: (v as number) || 0 })}
+            clearValue={0}
+          />
         </Field>
         <Field label="对账月份" required>
           <input value={form.period} onChange={e => setForm({ ...form, period: e.target.value })}
             className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/15 transition-all" />
         </Field>
         <Field label="付款状态">
-          <select value={form.bill_status} onChange={e => setForm({ ...form, bill_status: e.target.value })}
-            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/15 transition-all">
-            {SUPPLY_STATUS.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
+          <SearchableSelect
+            options={SUPPLY_STATUS.map(s => ({ id: s, label: s }))}
+            value={form.bill_status}
+            onChange={(v) => setForm({ ...form, bill_status: v === 0 ? '' : String(v) })}
+            clearValue=""
+          />
         </Field>
         <Field label="调用量">
           <input type="number" step="0.0001" value={form.call_volume} onChange={e => setForm({ ...form, call_volume: parseFloat(e.target.value) || 0 })}
             className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/15 transition-all" />
         </Field>
         <Field label="计费单位">
-          <select value={form.call_volume_unit} onChange={e => setForm({ ...form, call_volume_unit: e.target.value })}
-            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/15 transition-all">
-            <option value="per_1k_token">/ 1K tokens</option>
-            <option value="per_1m_token">/ 1M tokens（百万）</option>
-            <option value="per_request">/ 次</option>
-            <option value="per_month">/ 月</option>
-          </select>
+          <SearchableSelect
+            options={[
+              { id: 'per_1k_token', label: '/ 1K tokens' },
+              { id: 'per_1m_token', label: '/ 1M tokens（百万）' },
+              { id: 'per_request', label: '/ 次' },
+              { id: 'per_month', label: '/ 月' },
+            ]}
+            value={form.call_volume_unit}
+            onChange={(v) => setForm({ ...form, call_volume_unit: v === 0 ? '' : String(v) })}
+            clearValue=""
+          />
         </Field>
         <Field label="成本单价 ($)">
           <input type="number" step="0.0001" value={form.cost_price} onChange={e => setForm({ ...form, cost_price: parseFloat(e.target.value) || 0 })}
@@ -1267,24 +1285,28 @@ function DiffFormModal({ period, projects, channels, editing, onClose, onSaved }
             className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 transition-all" />
         </Field>
         <Field label="差异类型">
-          <select value={form.diff_type} onChange={e => setForm({ ...form, diff_type: e.target.value })}
-            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 transition-all">
-            {DIFF_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
+          <SearchableSelect
+            options={DIFF_TYPES.map(t => ({ id: t, label: t }))}
+            value={form.diff_type}
+            onChange={(v) => setForm({ ...form, diff_type: v === 0 ? '' : String(v) })}
+            clearValue=""
+          />
         </Field>
         <Field label="关联项目">
-          <select value={form.project_id || ''} onChange={e => setForm({ ...form, project_id: e.target.value ? parseInt(e.target.value) : null })}
-            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 transition-all">
-            <option value="">无</option>
-            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          <SearchableSelect
+            options={[{ id: 0, label: '无' }, ...projects.map(p => ({ id: p.id, label: p.name }))]}
+            value={form.project_id || 0}
+            onChange={(v) => setForm({ ...form, project_id: v && v !== 0 ? (v as number) : null })}
+            clearValue={0}
+          />
         </Field>
         <Field label="关联通道">
-          <select value={form.channel_id || ''} onChange={e => setForm({ ...form, channel_id: e.target.value ? parseInt(e.target.value) : null })}
-            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 transition-all">
-            <option value="">无</option>
-            {channels.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <SearchableSelect
+            options={[{ id: 0, label: '无' }, ...channels.map(c => ({ id: c.id, label: c.name }))]}
+            value={form.channel_id || 0}
+            onChange={(v) => setForm({ ...form, channel_id: v && v !== 0 ? (v as number) : null })}
+            clearValue={0}
+          />
         </Field>
         <Field label="销售调用量">
           <input type="number" step="0.0001" value={form.sales_call_volume} onChange={e => setForm({ ...form, sales_call_volume: parseFloat(e.target.value) || 0 })}
@@ -1312,10 +1334,12 @@ function DiffFormModal({ period, projects, channels, editing, onClose, onSaved }
             className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 transition-all" />
         </Field>
         <Field label="状态">
-          <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}
-            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 transition-all">
-            {DIFF_STATUS.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
+          <SearchableSelect
+            options={DIFF_STATUS.map(s => ({ id: s, label: s }))}
+            value={form.status}
+            onChange={(v) => setForm({ ...form, status: v === 0 ? '' : String(v) })}
+            clearValue=""
+          />
         </Field>
       </div>
       <ModalFooter onClose={onClose} saving={saving} onSave={save} tone="orange" saveText={editing ? '保存修改' : '创建差异记录'} />
@@ -1709,10 +1733,12 @@ function TokenTab() {
       <div className="flex items-center gap-4 flex-wrap pt-1">
         <div className="flex items-center gap-2">
           <label className="text-xs text-gray-500">对账月份</label>
-          <select value={period} onChange={e => setPeriod(e.target.value)}
-            className="px-2 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white focus:outline-none">
-            {periods.map(p => <option key={p} value={p}>{p}</option>)}
-          </select>
+          <SearchableSelect
+            options={periods.map(p => ({ id: p, label: p }))}
+            value={period}
+            onChange={(v) => setPeriod(v === 0 ? '' : String(v))}
+            clearValue=""
+          />
         </div>
         {statusInfo && (
           <div className={`flex items-center gap-1.5 text-sm font-semibold ${statusInfo.color}`}>

@@ -237,15 +237,17 @@ def _build_project_summary(db: Session, project: Project) -> ProjectProfitSummar
 
 
 def _sync_project_cost(db: Session, project_id: int):
-    """同步回写 project.cost_amount = 汇总成本"""
-    total = db.exec(
+    """同步回写 project.cost_amount = 汇总成本（元）"""
+    total_yuan = db.exec(
         select(func.sum(ProjectCost.amount)).where(ProjectCost.project_id == project_id)
     ).one() or 0
     project = db.get(Project, project_id)
     if project:
-        project.cost_amount = round(total, 2)
+        project.cost_amount = round(total_yuan, 2)
         if project.deal_amount and project.deal_amount > 0:
-            project.gross_margin = round((1 - total / project.deal_amount) * 100, 2)
+            # deal_amount 按用户选择的单位存储，换算为元再计算毛利率
+            deal_yuan = project.deal_amount * 10000 if project.deal_amount_unit == '万元' else project.deal_amount
+            project.gross_margin = round((1 - total_yuan / deal_yuan) * 100, 2)
         else:
             project.gross_margin = None
         db.add(project)

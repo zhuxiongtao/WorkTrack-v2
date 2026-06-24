@@ -66,6 +66,7 @@ class ChangePasswordRequest(BaseModel):
 class UpdateProfileRequest(BaseModel):
     name: Optional[str] = None
     email: Optional[str] = None
+    job_title: Optional[str] = None
 
 
 class TokenResponse(BaseModel):
@@ -163,6 +164,8 @@ def update_profile(req: UpdateProfileRequest, current_user: User = Depends(get_c
         current_user.name = req.name
     if req.email is not None:
         current_user.email = req.email
+    if req.job_title is not None:
+        current_user.job_title = req.job_title
     db.add(current_user)
     db.commit()
     db.refresh(current_user)
@@ -171,6 +174,7 @@ def update_profile(req: UpdateProfileRequest, current_user: User = Depends(get_c
         "username": current_user.username,
         "name": current_user.name,
         "email": current_user.email,
+        "job_title": current_user.job_title,
         "is_admin": current_user.is_admin,
     }
 
@@ -180,6 +184,7 @@ def update_profile(req: UpdateProfileRequest, current_user: User = Depends(get_c
 def me(current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
     from app.auth import get_user_permissions, _get_all_role_ids
     from app.models.rbac import Role
+    from app.models.department import Department
     all_role_ids = _get_all_role_ids(current_user.id, db)
     role_codes = list(db.exec(select(Role.code).where(Role.id.in_(all_role_ids))).all()) if all_role_ids else []
     perms = get_user_permissions(current_user, db)
@@ -188,6 +193,18 @@ def me(current_user: User = Depends(get_current_user), db: Session = Depends(get
         perms.append("ai:use")
     if current_user.can_manage_models and "ai:manage_own" not in perms:
         perms.append("ai:manage_own")
+    # 部门名称
+    dept_name = None
+    if current_user.department_id:
+        dept = db.get(Department, current_user.department_id)
+        if dept:
+            dept_name = dept.name
+    # 领导名称
+    leader_name = None
+    if current_user.leader_id:
+        leader = db.get(User, current_user.leader_id)
+        if leader:
+            leader_name = leader.name
     return {
         "id": current_user.id,
         "username": current_user.username,
@@ -202,6 +219,12 @@ def me(current_user: User = Depends(get_current_user), db: Session = Depends(get
         "must_change_password": current_user.must_change_password,
         "permissions": perms,
         "roles": role_codes,
+        "job_title": current_user.job_title,
+        "department_id": current_user.department_id,
+        "department_name": dept_name,
+        "leader_id": current_user.leader_id,
+        "leader_name": leader_name,
+        "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
     }
 
 
@@ -273,7 +296,7 @@ def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_sessio
         if not email_service.is_email_configured():
             raise HTTPException(503, "系统邮件服务未配置，请联系管理员")
         token = email_service.create_password_reset_token(user.id)
-        frontend_base = settings.frontend_url if hasattr(settings, "frontend_url") else ""
+        frontend_base = email_service._get_frontend_url() or (settings.cors_origins.split(",")[0] or "").strip()
         email_service.send_password_reset_email(req.email, token, frontend_base)
     return {"message": "如果该邮箱已注册，重置邮件将在几分钟内发出"}
 

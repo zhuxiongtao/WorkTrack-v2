@@ -1,11 +1,37 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
-import { X, Briefcase, DollarSign, Cloud, FileText, Tag, Plus, Calendar, ChevronDown, Activity, Wrench } from 'lucide-react'
+import { X, Briefcase, DollarSign, Cloud, FileText, Calendar, ChevronDown, Activity, Wrench, Cpu, ScrollText } from 'lucide-react'
 import { useProjectFormOptions, getCurrencyMeta, CURRENCY_OPTIONS } from '../../hooks/useProjectFormOptions'
+import { useAuth } from '../../contexts/AuthContext'
 import { CustomerCombobox } from './CustomerCombobox'
 import SearchableSelect from '../SearchableSelect'
 import FileUpload from '../FileUpload'
 import { ErrorBoundary } from '../ErrorBoundary'
 import { useUnsavedGuard } from '../../hooks/useUnsavedGuard'
+import { useUsersSimpleQuery } from '../../hooks/useUserManagementQueries'
+
+function UnitToggle({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-border/60 shrink-0 text-xs">
+      {(['万元', '元'] as const).map((u) => (
+        <button
+          key={u}
+          type="button"
+          onClick={() => onChange(u)}
+          className={`px-2.5 py-2 transition-colors ${value === u ? 'bg-accent-blue text-white' : 'bg-white dark:bg-bg-input text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-bg-hover'}`}
+        >{u}</button>
+      ))}
+    </div>
+  )
+}
+
+const MCV_UNITS = ['万 tokens/月', '百万 tokens/月', '亿 tokens/月', '万次/月', '百万次/月', 'QPS（并发峰值）', '自定义']
+function parseMcv(raw: string): { num: string; unit: string } {
+  if (!raw) return { num: '', unit: '万 tokens/月' }
+  for (const u of MCV_UNITS) {
+    if (raw.endsWith(u)) return { num: raw.slice(0, -u.length).trim(), unit: u }
+  }
+  return { num: raw, unit: '自定义' }
+}
 
 export interface ProjectFormState {
   name: string
@@ -14,8 +40,9 @@ export interface ProjectFormState {
   termination_date: string
   currency: string
   opportunity_amount: string
+  opportunity_amount_unit: string
   deal_amount: string
-  selectedProducts: string[]
+  deal_amount_unit: string
   selectedClouds: string[]
   selectedUpstreamChannels: string[]
   selectedModels: string[]
@@ -23,9 +50,12 @@ export interface ProjectFormState {
   usage_scenario: string
   sales_person: string
   tech_support_person: string
+  tech_support_user_id: number | null
   status: string
-  monthly_call_volume: string
+  monthly_call_volume_num: string
+  monthly_call_volume_unit: string
   selectedMeetingIds: number[]
+  selectedContractIds: number[]
   progress: string
   files_json: string | null
 }
@@ -39,8 +69,9 @@ const initialState: ProjectFormState = {
   termination_date: '',
   currency: 'CNY',
   opportunity_amount: '',
+  opportunity_amount_unit: '万元',
   deal_amount: '',
-  selectedProducts: [],
+  deal_amount_unit: '万元',
   selectedClouds: [],
   selectedUpstreamChannels: [],
   selectedModels: [],
@@ -48,9 +79,12 @@ const initialState: ProjectFormState = {
   usage_scenario: '',
   sales_person: '',
   tech_support_person: '',
+  tech_support_user_id: null,
   status: STATUS_DEFAULT,
-  monthly_call_volume: '',
+  monthly_call_volume_num: '',
+  monthly_call_volume_unit: '万 tokens/月',
   selectedMeetingIds: [],
+  selectedContractIds: [],
   progress: '',
   files_json: null,
 }
@@ -64,12 +98,13 @@ interface ProjectFormModalProps {
 }
 
 export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, isSubmitting }: ProjectFormModalProps) {
-  const { customers, options, channels, modelCatalog, modelCatalogRefreshedAt, meetings, loading } = useProjectFormOptions()
+  const { customers, options, channels, modelCatalog, modelCatalogRefreshedAt, meetings, contracts, loading } = useProjectFormOptions()
+  const { user } = useAuth()
+  const { data: allUsers = [] } = useUsersSimpleQuery()
   const [form, setForm] = useState<ProjectFormState>(initialState)
   const [formInitial, setFormInitial] = useState<string>('')
   const [activeSection, setActiveSection] = useState<string>('basic')
   const [showCustomScenario, setShowCustomScenario] = useState(false)
-  const [showCustomUpstream, setShowCustomUpstream] = useState(false)
 
   // 检测表单是否被修改
   const isDirty = isOpen && JSON.stringify(form) !== formInitial
@@ -82,7 +117,10 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
   useEffect(() => {
     if (!isOpen) return
     if (editingProject) {
-      const isManualCustomer = editingProject.customer_id == null && !!editingProject.customer_name
+      const mcv = parseMcv(editingProject.monthly_call_volume || '')
+      const linkedContractIds = contracts
+        .filter(c => c.project_id === editingProject.id)
+        .map(c => c.id)
       const initial: ProjectFormState = {
         name: editingProject.name || '',
         customer: { id: editingProject.customer_id || 0, name: editingProject.customer_name || '' },
@@ -90,8 +128,9 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
         termination_date: editingProject.termination_date || '',
         currency: editingProject.currency || 'CNY',
         opportunity_amount: editingProject.opportunity_amount?.toString() || '',
+        opportunity_amount_unit: (editingProject as any).opportunity_amount_unit || '万元',
         deal_amount: editingProject.deal_amount?.toString() || '',
-        selectedProducts: editingProject.product ? editingProject.product.split(',').filter(Boolean) : [],
+        deal_amount_unit: (editingProject as any).deal_amount_unit || '万元',
         selectedClouds: editingProject.cloud_provider ? editingProject.cloud_provider.split(',').filter(Boolean) : [],
         selectedUpstreamChannels: editingProject.upstream_channels ? editingProject.upstream_channels.split(',').filter(Boolean) : [],
         selectedModels: editingProject.models ? editingProject.models.split(',').filter(Boolean) : [],
@@ -99,21 +138,25 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
         usage_scenario: editingProject.usage_scenario || '',
         sales_person: editingProject.sales_person || '',
         tech_support_person: editingProject.tech_support_person || '',
+        tech_support_user_id: editingProject.tech_support_user_id ?? null,
         status: editingProject.status || STATUS_DEFAULT,
-        monthly_call_volume: editingProject.monthly_call_volume || '',
+        monthly_call_volume_num: mcv.num,
+        monthly_call_volume_unit: mcv.unit,
         selectedMeetingIds: editingProject.meeting_ids || [],
+        selectedContractIds: linkedContractIds,
         progress: editingProject.progress || '',
         files_json: editingProject.files_json || null,
       }
       setForm(initial)
       setFormInitial(JSON.stringify(initial))
-      setShowCustomScenario(!!editingProject.usage_scenario && !options.project_scenario.includes(editingProject.usage_scenario))
+      setShowCustomScenario(!!editingProject.project_scenario && !options.project_scenario.includes(editingProject.project_scenario))
     } else {
-      setForm(initialState)
-      setFormInitial(JSON.stringify(initialState))
+      const newInitial = { ...initialState, sales_person: user?.name || '' }
+      setForm(newInitial)
+      setFormInitial(JSON.stringify(newInitial))
       setShowCustomScenario(false)
     }
-  }, [isOpen, editingProject, options.project_scenario])
+  }, [isOpen, editingProject, options.project_scenario, contracts, user])
 
   // 上游通道 → 模型建议（基于模型目录，仅作为提示，不自动写入表单，避免覆盖用户编辑意图）
   // 用户仍可手动选择或自定义模型名
@@ -124,18 +167,18 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
     form.selectedUpstreamChannels.forEach((name) => {
       const ch = channels.find((c) => c.name === name)
       if (!ch?.model_type) return
-      // 命中模型目录里同 provider 同 modality/region 的项
+      // 命中模型目录里同 provider 的项，id 用 m.name（与 SearchableSelect option id 一致）
       modelCatalog
         .filter((m) => m.provider && ch.supplier_name && m.provider.toLowerCase() === ch.supplier_name.toLowerCase())
         .forEach((m) => {
-          const key = `${m.name}@${m.version_id || ''}`
-          if (!seen.has(key)) {
-            seen.add(key)
-            out.push(`${m.name}${m.version_id ? ` ${m.version_id}` : ''}`)
+          if (!seen.has(m.name)) {
+            seen.add(m.name)
+            out.push(m.name)
           }
         })
-      // 即使没命中目录，也把 model_type 本身作为建议（兼容历史数据）
-      if (ch.model_type && !out.includes(ch.model_type)) {
+      // 没命中目录时降级到 model_type（兼容历史数据）
+      if (!seen.has(ch.model_type)) {
+        seen.add(ch.model_type)
         out.push(ch.model_type)
       }
     })
@@ -150,6 +193,9 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
 
   const handleSubmit = async () => {
     if (!form.name.trim()) { return }
+    const mcvRaw = form.monthly_call_volume_num.trim()
+      ? `${form.monthly_call_volume_num.trim()} ${form.monthly_call_volume_unit}`
+      : null
     const body: any = {
       name: form.name.trim(),
       customer_id: form.customer?.id || null,
@@ -158,8 +204,9 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
       termination_date: form.termination_date || null,
       currency: form.currency,
       opportunity_amount: form.opportunity_amount ? parseFloat(form.opportunity_amount) : null,
+      opportunity_amount_unit: form.opportunity_amount_unit,
       deal_amount: form.deal_amount ? parseFloat(form.deal_amount) : null,
-      product: form.selectedProducts.join(',') || null,
+      deal_amount_unit: form.deal_amount_unit,
       cloud_provider: form.selectedClouds.join(',') || null,
       upstream_channels: form.selectedUpstreamChannels.join(',') || null,
       models: form.selectedModels.join(',') || null,
@@ -167,11 +214,13 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
       usage_scenario: form.usage_scenario || null,
       sales_person: form.sales_person || null,
       tech_support_person: form.tech_support_person || null,
+      tech_support_user_id: form.tech_support_user_id,
       status: form.status,
-      monthly_call_volume: form.monthly_call_volume || null,
+      monthly_call_volume: mcvRaw,
       progress: form.progress || null,
       files_json: form.files_json,
       meeting_ids: form.selectedMeetingIds,
+      contract_ids: form.selectedContractIds,
     }
     await onSubmit(body)
   }
@@ -179,10 +228,10 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
   if (!isOpen) return null
 
   const sections = [
-    { id: 'basic', title: '项目概况', icon: Briefcase, desc: '名称 · 客户 · 时间 · 产品' },
+    { id: 'basic', title: '项目概况', icon: Briefcase, desc: '名称 · 客户 · 时间' },
     { id: 'business', title: '商务 & 团队', icon: DollarSign, desc: '金额 · 币种 · 销售 · 状态' },
-    { id: 'maas', title: 'MaaS 配置', icon: Cloud, desc: '上游通道 · 模型 · 场景 · 调用量' },
-    { id: 'relation', title: '协作 & 附件', icon: FileText, desc: '关联会议 · 进展 · 附件' },
+    { id: 'maas', title: 'MaaS 配置', icon: Cpu, desc: '通道 · 模型 · 场景 · 调用量 · 技术能力' },
+    { id: 'relation', title: '协作 & 附件', icon: FileText, desc: '合同 · 会议 · 进展 · 附件' },
   ]
 
   return (
@@ -244,7 +293,7 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
             {/* 右侧分节内容 */}
             <div className="px-6 py-5 space-y-6 max-md:px-4">
               {activeSection === 'basic' && (
-                <Section icon={Briefcase} title="项目概况" desc="项目名称、客户、生效与终止时间、涉及产品">
+                <Section icon={Briefcase} title="项目概况" desc="项目名称、客户、生效与终止时间">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField label="项目名称" required colSpan={2}>
                       <input
@@ -281,25 +330,6 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
                         className="w-full px-3 py-2 rounded-lg bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-sm outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all"
                       />
                     </FormField>
-
-                    <FormField label="涉及产品" colSpan={2} hint="可多选" icon={Tag}>
-                      <SearchableSelect
-                        multiple
-                        options={options.product.map((p, i) => ({ id: i, label: p, value: p }))}
-                        value={form.selectedProducts}
-                        onChange={(v) => updateField('selectedProducts', v as string[])}
-                        placeholder="选择涉及的产品 / 解决方案"
-                      />
-                      {form.selectedProducts.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1.5">
-                          {form.selectedProducts.map(p => (
-                            <span key={p} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-accent-blue/10 text-accent-blue text-[11px] font-semibold">
-                              {p}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </FormField>
                   </div>
                 </Section>
               )}
@@ -311,24 +341,29 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
                       <CurrencySelector value={form.currency} onChange={(v) => updateField('currency', v)} />
                     </FormField>
 
-                    <FormField label={`商机金额 (${currency.unit})`}>
-                      <AmountInput value={form.opportunity_amount} onChange={(v) => updateField('opportunity_amount', v)} currency={currency} />
+                    <FormField label="商机金额">
+                      <div className="flex gap-2">
+                        <AmountInput value={form.opportunity_amount} onChange={(v) => updateField('opportunity_amount', v)} currency={currency} />
+                        <UnitToggle value={form.opportunity_amount_unit} onChange={(v) => updateField('opportunity_amount_unit', v)} />
+                      </div>
                     </FormField>
 
-                    <FormField label={`成交价格 (${currency.unit})`}>
-                      <AmountInput value={form.deal_amount} onChange={(v) => updateField('deal_amount', v)} currency={currency} />
+                    <FormField label="成交价格">
+                      <div className="flex gap-2">
+                        <AmountInput value={form.deal_amount} onChange={(v) => updateField('deal_amount', v)} currency={currency} />
+                        <UnitToggle value={form.deal_amount_unit} onChange={(v) => updateField('deal_amount_unit', v)} />
+                      </div>
                     </FormField>
 
                     <FormField label="销售负责人" icon={Briefcase}>
                       {options.sales_person.length > 0 ? (
-                        <select
+                        <SearchableSelect
+                          options={[{ id: '', label: '不指定' }, ...options.sales_person.map(s => ({ id: s, label: s }))]}
                           value={form.sales_person}
-                          onChange={(e) => updateField('sales_person', e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-sm outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all cursor-pointer"
-                        >
-                          <option value="">不指定</option>
-                          {options.sales_person.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
+                          onChange={(v) => updateField('sales_person', v === '' || v === 0 ? '' : String(v))}
+                          placeholder="选择销售负责人"
+                          clearValue=""
+                        />
                       ) : (
                         <input
                           type="text"
@@ -341,49 +376,40 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
                     </FormField>
 
                     <FormField label="技术支持" icon={Wrench} hint="负责项目交付、问题排查">
-                      {(() => {
-                        const tsList = (options.tech_support && options.tech_support.length > 0)
-                          ? options.tech_support
-                          : options.sales_person
-                        return tsList.length > 0 ? (
-                          <select
-                            value={form.tech_support_person}
-                            onChange={(e) => updateField('tech_support_person', e.target.value)}
-                            className="w-full px-3 py-2 rounded-lg bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-sm outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all cursor-pointer"
-                          >
-                            <option value="">不指定</option>
-                            {tsList.map(s => <option key={s} value={s}>{s}</option>)}
-                          </select>
-                        ) : (
-                          <input
-                            type="text"
-                            value={form.tech_support_person}
-                            onChange={(e) => updateField('tech_support_person', e.target.value)}
-                            placeholder="输入技术支持姓名"
-                            className="w-full px-3 py-2 rounded-lg bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-sm outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all"
-                          />
-                        )
-                      })()}
+                      <SearchableSelect
+                        options={[
+                          { id: 0, label: '不指定' },
+                          ...allUsers.map(u => ({ id: u.id, label: u.name || u.username }))
+                        ]}
+                        value={form.tech_support_user_id ?? 0}
+                        onChange={(v) => {
+                          const uid = v === 0 || v === '' ? null : Number(v)
+                          const uname = uid ? (allUsers.find(u => u.id === uid)?.name || '') : ''
+                          setForm(prev => ({ ...prev, tech_support_user_id: uid, tech_support_person: uname }))
+                        }}
+                        placeholder="选择技术支持人员"
+                        clearValue={0}
+                      />
                     </FormField>
 
                     <FormField label="项目状态">
-                      <select
+                      <SearchableSelect
+                        options={[
+                          { id: '', label: '未设置' },
+                          ...(options.project_status.length > 0 ? options.project_status : [STATUS_DEFAULT, '已签约', '已暂停', '已结束', '已流失']).map(s => ({ id: s, label: s }))
+                        ]}
                         value={form.status}
-                        onChange={(e) => updateField('status', e.target.value)}
-                        className="w-full px-3 py-2 rounded-lg bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-sm outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all cursor-pointer"
-                      >
-                        <option value="">未设置</option>
-                        {(options.project_status.length > 0 ? options.project_status : [STATUS_DEFAULT, '已签约', '已暂停', '已结束', '已流失']).map(s => (
-                          <option key={s} value={s}>{s}</option>
-                        ))}
-                      </select>
+                        onChange={(v) => updateField('status', v === '' || v === 0 ? '' : String(v))}
+                        placeholder="选择项目状态"
+                        clearValue=""
+                      />
                     </FormField>
                   </div>
                 </Section>
               )}
 
               {activeSection === 'maas' && (
-                <Section icon={Cloud} title="MaaS 配置" desc="上游供应商通道、模型、客户使用场景">
+                <Section icon={Cpu} title="MaaS 配置" desc="上游供应商通道、模型、场景、调用量、客户技术能力">
                   <ErrorBoundary sectionName="MaaS 配置">
                     <div className="space-y-4">
                     <FormField label="上游供应商通道" hint="来自「业务管理 → 通道管理」合作中的通道（多选）" icon={Cloud}>
@@ -461,26 +487,27 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
                     </FormField>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <FormField label="项目场景" hint="业务场景分类">
+                      <FormField label="项目场景" hint="AI 应用场景分类">
                         <>
-                          <select
+                          <SearchableSelect
+                            options={[
+                              { id: '', label: '不指定' },
+                              ...options.project_scenario.map(s => ({ id: s, label: s })),
+                              { id: '__custom__', label: '— 自定义 —' },
+                            ]}
                             value={showCustomScenario ? '__custom__' : form.project_scenario}
-                            onChange={(e) => {
-                              const v = e.target.value
+                            onChange={(v) => {
                               if (v === '__custom__') {
                                 setShowCustomScenario(true)
                                 updateField('project_scenario', '')
                               } else {
                                 setShowCustomScenario(false)
-                                updateField('project_scenario', v)
+                                updateField('project_scenario', v === 0 ? '' : String(v))
                               }
                             }}
-                            className="w-full px-3 py-2 rounded-lg bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-sm outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all cursor-pointer"
-                          >
-                            <option value="">不指定</option>
-                            {options.project_scenario.map(s => <option key={s} value={s}>{s}</option>)}
-                            <option value="__custom__">— 自定义 —</option>
-                          </select>
+                            placeholder="选择 AI 应用场景"
+                            clearValue=""
+                          />
                           {showCustomScenario && (
                             <input
                               type="text"
@@ -493,18 +520,29 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
                         </>
                       </FormField>
 
-                      <FormField label="预计月调用量" hint="如：1M tokens / 50 万次" icon={Activity}>
-                        <input
-                          type="text"
-                          value={form.monthly_call_volume}
-                          onChange={(e) => updateField('monthly_call_volume', e.target.value)}
-                          placeholder="如：1M tokens / 50 万次 / QPS 100"
-                          className="w-full px-3 py-2 rounded-lg bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-sm outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all"
-                        />
+                      <FormField label="预计月调用量" icon={Activity}>
+                        <div className="flex gap-2">
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={form.monthly_call_volume_num}
+                            onChange={(e) => updateField('monthly_call_volume_num', e.target.value)}
+                            placeholder="数值"
+                            className="w-24 shrink-0 px-3 py-2 rounded-lg bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-sm outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all"
+                          />
+                          <SearchableSelect
+                            className="flex-1"
+                            options={MCV_UNITS.map(u => ({ id: u, label: u }))}
+                            value={form.monthly_call_volume_unit}
+                            onChange={(v) => updateField('monthly_call_volume_unit', v === 0 || v === '' ? '万 tokens/月' : String(v))}
+                            clearValue="万 tokens/月"
+                          />
+                        </div>
                       </FormField>
                     </div>
 
-                    <FormField label="客户使用场景" hint="详细描述客户的业务场景与诉求（自由文本）">
+                    <FormField label="项目背景与需求" hint="客户的业务诉求、技术约束与关键指标（自由文本）">
                       <textarea
                         value={form.usage_scenario}
                         onChange={(e) => updateField('usage_scenario', e.target.value)}
@@ -514,7 +552,7 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
                       />
                     </FormField>
 
-                    <FormField label="云厂商 / 部署方式" hint="底层基础设施（与上游通道不同）" icon={Cloud}>
+                    <FormField label="客户技术能力" hint="客户已具备的 AI 基础设施与技术条件（多选）" icon={Cpu}>
                       <ChannelChips
                         options={options.cloud}
                         selected={form.selectedClouds}
@@ -527,8 +565,20 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
               )}
 
               {activeSection === 'relation' && (
-                <Section icon={FileText} title="协作 & 附件" desc="关联会议、进展记录、附件">
+                <Section icon={FileText} title="协作 & 附件" desc="关联合同、关联会议、进展记录、附件">
                   <div className="space-y-4">
+                    <FormField label="关联合同" hint="将已有合同与本项目关联（多选）" icon={ScrollText}>
+                      <SearchableSelect
+                        multiple
+                        options={contracts
+                          .filter(c => c.project_id == null || c.project_id === editingProject?.id)
+                          .map(c => ({ id: c.id, label: c.title, sub: c.sign_date || '' }))}
+                        value={form.selectedContractIds}
+                        onChange={(v) => updateField('selectedContractIds', v as number[])}
+                        placeholder="搜索并选择合同"
+                      />
+                    </FormField>
+
                     <FormField label="关联会议" hint="可关联多个相关会议纪要" icon={FileText}>
                       <SearchableSelect
                         multiple
@@ -567,7 +617,7 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
           <div className="text-[11px] text-gray-500 dark:text-gray-400">
             {form.name ? <span className="font-semibold text-gray-700 dark:text-gray-300">「{form.name}」</span> : '尚未填写项目名称'}
             {form.customer && <span> · 客户：{form.customer.name}</span>}
-            {form.deal_amount && <span> · {currency.symbol} {form.deal_amount} {currency.unit}</span>}
+            {form.deal_amount && <span> · {currency.symbol} {form.deal_amount} {form.deal_amount_unit}</span>}
           </div>
           <div className="flex items-center gap-2">
             <button

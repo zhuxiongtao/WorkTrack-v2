@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Share2, X, User, Calendar, Send, Trash2 } from 'lucide-react'
+import SearchableSelect from './SearchableSelect'
 
 interface ShareDialogProps {
   targetType: 'report' | 'meeting' | 'project' | 'customer' | 'contract'
@@ -144,16 +145,15 @@ export default function ShareDialog({ targetType, targetId, targetTitle, open, o
           {/* 新建分享表单 */}
           <div className="space-y-3">
             <label className="text-xs text-gray-400">分享给</label>
-            <select
+            <SearchableSelect
+              options={[
+                { id: '', label: '选择用户...' },
+                ...users.map(u => ({ id: u.id, label: `${u.name} (@${u.username})` })),
+              ]}
               value={selectedUserId}
-              onChange={e => setSelectedUserId(e.target.value ? Number(e.target.value) : '')}
-              className="w-full bg-bg-hover border border-border rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-[#3B82F6]/50"
-            >
-              <option value="">选择用户...</option>
-              {users.map(u => (
-                <option key={u.id} value={u.id}>{u.name} (@{u.username})</option>
-              ))}
-            </select>
+              onChange={(v) => setSelectedUserId(v && v !== 0 ? (v as number) : '')}
+              clearValue=""
+            />
 
             <div className="flex gap-3">
               <div className="flex-1">

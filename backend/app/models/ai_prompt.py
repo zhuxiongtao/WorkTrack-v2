@@ -1,5 +1,6 @@
 from typing import Optional
 from datetime import datetime, timezone
+from app.utils.time import BEIJING_TZ, now
 from sqlmodel import SQLModel, Field
 
 
@@ -10,4 +11,4 @@ class AIPrompt(SQLModel, table=True):
     task_type: str = Field(index=True, max_length=50)
     system_prompt: str = Field(default="", max_length=2000)
     user_prompt_template: str = Field(default="", max_length=2000)
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: now())

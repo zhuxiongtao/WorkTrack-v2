@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Plus, X, Save, Trash2, Loader2, Key, Globe, Cpu, Settings2, ListChecks, Sparkles, Brain, Eye, EyeOff, Mic, MessageSquare, Search, ChevronDown, Home, RotateCcw, Edit3, Server, User, Package, MapPin, Activity, Cloud, Palette, Upload, Copy, Terminal, Zap, Pencil, AlertTriangle, Sliders, Layers, Megaphone, RefreshCw, CheckCircle2, Power, Mail, Send } from 'lucide-react'
+import { Plus, X, Save, Trash2, Loader2, Key, Globe, Cpu, Settings2, ListChecks, Sparkles, Brain, Eye, EyeOff, Mic, MessageSquare, Search, ChevronDown, Home, RotateCcw, Edit3, User, Package, MapPin, Activity, Cloud, Palette, Upload, Copy, Terminal, Zap, Pencil, AlertTriangle, Sliders, Layers, Megaphone, RefreshCw, CheckCircle2, Power, Mail, Send, Briefcase, Building2, Users, Calendar } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useSearchParams } from 'react-router-dom'
@@ -7,6 +7,7 @@ import ModelDetailDrawer from '../components/ModelDetailDrawer'
 import TaskOverrideModal from '../components/TaskOverrideModal'
 import { IconBox, StatusBadge, SectionHeader, TASK_GROUP_ICONS, SUBTASK_ICONS } from '../components/design-system'
 import RichTextEditor from '../components/RichTextEditor'
+import SearchableSelect from '../components/SearchableSelect'
 
 interface Provider {
   id: number
@@ -563,12 +564,12 @@ export default function SettingsPage() {
     ...(canEditSettings ? [{ key: 'system', label: '系统配置', icon: Settings2, desc: '字段选项管理' }] : []),
     ...(canEditSettings ? [{ key: 'announcement', label: '系统公告', icon: Megaphone, desc: '全频道公告与 AI 资讯' }] : []),
     { key: 'account', label: '个人账户', icon: User, desc: '个人信息、首页与密码' },
-    { key: 'about', label: '关于', icon: Server, desc: '系统运行状态' },
   ]
 
   // ===== 个人账户状态 =====
   const [profileName, setProfileName] = useState(user?.name || '')
   const [profileEmail, setProfileEmail] = useState(user?.email || '')
+  const [profileJobTitle, setProfileJobTitle] = useState(user?.job_title || '')
   const [profileSaving, setProfileSaving] = useState(false)
   const [oldPassword, setOldPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -602,7 +603,7 @@ export default function SettingsPage() {
   })
 
   // 品牌自定义
-  const [branding, setBranding] = useState({ logo_url: '', site_title: 'WorkTrack' })
+  const [branding, setBranding] = useState({ logo_url: '', site_title: 'WorkTrack', frontend_url: '' })
   const [brandLogoFile, setBrandLogoFile] = useState<File | null>(null)
   const [brandLogoPreview, setBrandLogoPreview] = useState('')
   const [brandSaving, setBrandSaving] = useState(false)
@@ -611,7 +612,7 @@ export default function SettingsPage() {
   const loadBranding = useCallback(() => {
     fetch('/api/v1/settings/branding')
       .then(res => res.json())
-      .then(data => setBranding({ logo_url: data.logo_url || '', site_title: data.site_title || 'WorkTrack' }))
+      .then(data => setBranding({ logo_url: data.logo_url || '', site_title: data.site_title || 'WorkTrack', frontend_url: data.frontend_url || '' }))
       .catch(() => {})
   }, [])
 
@@ -946,20 +947,12 @@ export default function SettingsPage() {
     } finally { setSearchProviderSaving(false) }
   }
 
-  // ===== 系统信息 =====
-  const [systemInfo, setSystemInfo] = useState<Record<string, string> | null>(null)
-  useEffect(() => {
-    fetch('/api/v1/settings/system-info')
-      .then((r) => r.json())
-      .then((d) => setSystemInfo(d))
-      .catch(() => {})
-  }, [])
-
   // ===== AI 提示词 =====
   const [aiPrompts, setAiPrompts] = useState<Record<string, { label: string; desc: string; system_prompt: string; user_prompt_template: string; variables: string[]; customized: boolean; source: string; global_system_prompt?: string; global_user_prompt_template?: string }>>({})
   const [editingPrompt, setEditingPrompt] = useState<string | null>(null)
   const [promptForm, setPromptForm] = useState({ system_prompt: '', user_prompt_template: '' })
   const [promptSaving, setPromptSaving] = useState(false)
+  const [promptScope, setPromptScope] = useState<Record<string, string>>({})
   const [aiReq, setAiReq] = useState('')
   const [aiGenerating, setAiGenerating] = useState(false)
 
@@ -982,8 +975,7 @@ export default function SettingsPage() {
   const savePrompt = async (taskType: string) => {
     setPromptSaving(true)
     try {
-      const scopeEl = document.getElementById(`prompt-scope-${taskType}`) as HTMLSelectElement | null
-      const scope = scopeEl?.value || 'user'
+      const scope = promptScope[taskType] || 'user'
       const url = scope === 'global' && isAdmin
         ? `/api/v1/settings/ai-prompts/global/${taskType}`
         : `/api/v1/settings/ai-prompts/${taskType}`
@@ -1300,13 +1292,13 @@ export default function SettingsPage() {
                             {/* 类型选择器 */}
                             <div className="flex items-center gap-2">
                               <span className="text-[11px] text-gray-500 shrink-0">添加类型:</span>
-                              <select value={addModelType} onChange={(e) => setAddModelType(e.target.value)}
-                                className="flex-1 px-2 py-1 rounded bg-bg-input border border-border text-[11px] text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6]">
-                                <option value="auto">自动推断</option>
-                                {MODEL_TYPE_OPTIONS.map((opt) => (
-                                  <option key={opt.key} value={opt.key}>{opt.label}</option>
-                                ))}
-                              </select>
+                              <SearchableSelect
+                                className="flex-1"
+                                options={[{ id: 'auto', label: '自动推断' }, ...MODEL_TYPE_OPTIONS.map(opt => ({ id: opt.key, label: opt.label }))]}
+                                value={addModelType}
+                                onChange={(v) => setAddModelType(v === 0 ? '' : String(v))}
+                                clearValue=""
+                              />
                             </div>
                           </div>
                           <div className="overflow-y-auto max-h-52">
@@ -1501,42 +1493,40 @@ export default function SettingsPage() {
                             }} />{rt.label}
                           </span>
                           {/* 供应商 + 模型合并 select，按供应商分组 */}
-                          <select
+                          <SearchableSelect
+                            className="flex-1 min-w-[180px] max-w-[340px]"
+                            options={[
+                              { id: '', label: '选择模型…' },
+                              ...getActiveProviders().flatMap((p) => {
+                                const pModels = providerModels[p.id] || []
+                                const filtered = isMultimodal
+                                  ? pModels.filter((m) => modelSupports(m, tk))
+                                  : (group.compatibleTypes.length > 0
+                                    ? pModels.filter((m) => modelSupportsAnyOf(m, group.compatibleTypes))
+                                    : pModels)
+                                return filtered.map((m) => ({
+                                  id: `${p.id}|${m.model_name}`,
+                                  label: m.model_name,
+                                  sub: `${p.name} · ${TYPE_LABEL[m.model_type] || m.model_type}`,
+                                }))
+                              }),
+                            ]}
                             value={combinedValue}
-                            onChange={(e) => {
-                              const v = e.target.value
-                              if (!v) {
+                            onChange={(v) => {
+                              const val = v === 0 ? '' : String(v)
+                              if (!val) {
                                 if (isMultimodal) saveTaskConfig(tk, null, '')
                                 else saveTaskConfig(group.taskKeys, null, '')
                               } else {
-                                const sep = v.indexOf('|')
-                                const pid = Number(v.slice(0, sep))
-                                const mn = v.slice(sep + 1)
+                                const sep = val.indexOf('|')
+                                const pid = Number(val.slice(0, sep))
+                                const mn = val.slice(sep + 1)
                                 if (isMultimodal) saveTaskConfig(tk, pid, mn)
                                 else saveTaskConfig(group.taskKeys, pid, mn)
                               }
                             }}
-                            className="flex-1 min-w-[180px] max-w-[340px] px-2 py-1 rounded-md bg-bg-input border border-border text-[11px] text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6] truncate">
-                            <option value="">选择模型…</option>
-                            {getActiveProviders().map((p) => {
-                              const pModels = providerModels[p.id] || []
-                              const filtered = isMultimodal
-                                ? pModels.filter((m) => modelSupports(m, tk))
-                                : (group.compatibleTypes.length > 0
-                                  ? pModels.filter((m) => modelSupportsAnyOf(m, group.compatibleTypes))
-                                  : pModels)
-                              if (filtered.length === 0) return null
-                              return (
-                                <optgroup key={p.id} label={p.name}>
-                                  {filtered.map((m) => (
-                                    <option key={`${p.id}|${m.model_name}`} value={`${p.id}|${m.model_name}`}>
-                                      {m.model_name} · {TYPE_LABEL[m.model_type] || m.model_type}
-                                    </option>
-                                  ))}
-                                </optgroup>
-                              )
-                            })}
-                          </select>
+                            clearValue=""
+                          />
                           {/* 类型不匹配警告 / 已配置状态 */}
                           {cfg?.model_name && !providerDeleted && !modelDeleted && (
                             typeMismatch ? (
@@ -1689,14 +1679,15 @@ export default function SettingsPage() {
                       {isAdmin && (
                         <div className="flex items-center gap-2 mb-2">
                           <label className="text-xs text-gray-400">编辑范围：</label>
-                          <select
-                            id={`prompt-scope-${taskType}`}
-                            defaultValue="user"
-                            className="px-2 py-1 rounded bg-bg-input border border-border text-xs text-gray-700 dark:text-gray-300"
-                          >
-                            <option value="user">个人提示词（仅影响自己）</option>
-                            <option value="global">全局默认（影响所有新用户）</option>
-                          </select>
+                          <SearchableSelect
+                            options={[
+                              { id: 'user', label: '个人提示词（仅影响自己）' },
+                              { id: 'global', label: '全局默认（影响所有新用户）' },
+                            ]}
+                            value={promptScope[taskType] || 'user'}
+                            onChange={(v) => setPromptScope(prev => ({ ...prev, [taskType]: v === 0 ? 'user' : String(v) }))}
+                            clearValue=""
+                          />
                         </div>
                       )}
                       <div>
@@ -1851,6 +1842,17 @@ export default function SettingsPage() {
               />
               <p className="text-[11px] text-gray-600 mt-1.5">将在侧边栏顶部和浏览器标签页显示</p>
             </div>
+            {/* 前端地址 */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-2">前端访问地址</label>
+              <input
+                value={branding.frontend_url}
+                onChange={(e) => setBranding({ ...branding, frontend_url: e.target.value })}
+                className="w-full px-3 py-2.5 rounded-lg bg-bg-input border border-border text-sm text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6] transition-colors"
+                placeholder="https://worktrack.example.com"
+              />
+              <p className="text-[11px] text-gray-600 mt-1.5">用于邮件中拼接登录链接和密码重置链接，如 https://worktrack.example.com</p>
+            </div>
           </div>
           {/* 保存 */}
           <div className="flex items-center gap-3 mt-5 pt-4 border-t border-border">
@@ -1880,7 +1882,7 @@ export default function SettingsPage() {
                   const saveRes = await fetch('/api/v1/settings/branding', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ site_title: branding.site_title, logo_url: logoUrl }),
+                    body: JSON.stringify({ site_title: branding.site_title, logo_url: logoUrl, frontend_url: branding.frontend_url }),
                   })
                   if (!saveRes.ok) {
                     const err = await saveRes.json()
@@ -1903,7 +1905,7 @@ export default function SettingsPage() {
               <Save size={14} />{brandSaving ? '保存中...' : '保存品牌设置'}
             </button>
             <button
-              onClick={() => { setBranding({ logo_url: '', site_title: 'WorkTrack' }); setBrandLogoFile(null); setBrandLogoPreview('') }
+              onClick={() => { setBranding({ logo_url: '', site_title: 'WorkTrack', frontend_url: '' }); setBrandLogoFile(null); setBrandLogoPreview('') }
               }
               className="px-4 py-2 rounded-lg bg-bg-hover text-xs text-gray-400 hover:text-white border border-border transition-colors"
             >
@@ -2266,6 +2268,104 @@ export default function SettingsPage() {
       {/* ==================== 个人账户 ==================== */}
       {activeTab === 'account' && (
         <>
+          {/* 个人资料概览 */}
+          <div className="mb-10">
+            <div className="rounded-xl bg-bg-card border border-border overflow-hidden">
+              {/* 顶部渐变横幅 */}
+              <div className="h-20 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 relative">
+                <div className="absolute -bottom-8 left-5">
+                  <div className="w-16 h-16 rounded-full bg-bg-card border-2 border-border overflow-hidden flex items-center justify-center shadow-lg">
+                    {user?.avatar ? (
+                      <img src={user.avatar} alt="头像" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-xl font-bold text-accent-blue">{(user?.name || user?.username || '?')[0].toUpperCase()}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              {/* 基本信息 */}
+              <div className="pt-10 pb-4 px-5 max-md:px-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{user?.name || user?.username || '未设置'}</h2>
+                    <p className="text-sm text-gray-500">@{user?.username || ''}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {user?.is_admin && (
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-500/10 text-red-500 border border-red-500/20">管理员</span>
+                    )}
+                    {(user?.roles || []).map((r: string) => {
+                      const roleLabels: Record<string, string> = { admin: '管理员', dept_leader: '部门领导', sales: '销售', tech: '技术', operations: '运营', business: '商务', finance: '财务', legal: '法务', boss: '老板', cashier: '出纳', seal_keeper: '印章管理员', user: '普通用户' }
+                      if (r === 'admin' && user?.is_admin) return null
+                      return (
+                        <span key={r} className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-500/10 text-blue-500 border border-blue-500/20">{roleLabels[r] || r}</span>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+              {/* 详细信息网格 */}
+              <div className="border-t border-border px-5 max-md:px-4 py-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                  {user?.job_title && (
+                    <div className="flex items-center gap-2">
+                      <Briefcase size={14} className="text-gray-400 shrink-0" />
+                      <div>
+                        <p className="text-[11px] text-gray-500">职位</p>
+                        <p className="text-sm text-gray-800 dark:text-gray-200">{user.job_title}</p>
+                      </div>
+                    </div>
+                  )}
+                  {user?.department_name && (
+                    <div className="flex items-center gap-2">
+                      <Building2 size={14} className="text-gray-400 shrink-0" />
+                      <div>
+                        <p className="text-[11px] text-gray-500">部门</p>
+                        <p className="text-sm text-gray-800 dark:text-gray-200">{user.department_name}</p>
+                      </div>
+                    </div>
+                  )}
+                  {user?.leader_name && (
+                    <div className="flex items-center gap-2">
+                      <Users size={14} className="text-gray-400 shrink-0" />
+                      <div>
+                        <p className="text-[11px] text-gray-500">汇报上级</p>
+                        <p className="text-sm text-gray-800 dark:text-gray-200">{user.leader_name}</p>
+                      </div>
+                    </div>
+                  )}
+                  {user?.email && (
+                    <div className="flex items-center gap-2">
+                      <Mail size={14} className="text-gray-400 shrink-0" />
+                      <div>
+                        <p className="text-[11px] text-gray-500">邮箱</p>
+                        <p className="text-sm text-gray-800 dark:text-gray-200 truncate max-w-[160px]">{user.email}</p>
+                      </div>
+                    </div>
+                  )}
+                  {user?.last_login_at && (
+                    <div className="flex items-center gap-2">
+                      <Activity size={14} className="text-gray-400 shrink-0" />
+                      <div>
+                        <p className="text-[11px] text-gray-500">最近登录</p>
+                        <p className="text-sm text-gray-800 dark:text-gray-200">{new Date(user.last_login_at).toLocaleDateString('zh-CN')}</p>
+                      </div>
+                    </div>
+                  )}
+                  {user?.created_at && (
+                    <div className="flex items-center gap-2">
+                      <Calendar size={14} className="text-gray-400 shrink-0" />
+                      <div>
+                        <p className="text-[11px] text-gray-500">注册时间</p>
+                        <p className="text-sm text-gray-800 dark:text-gray-200">{new Date(user.created_at).toLocaleDateString('zh-CN')}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* 个人信息 */}
           <div className="mb-10">
             <h3 className="text-base font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
@@ -2343,6 +2443,15 @@ export default function SettingsPage() {
                     placeholder="user@example.com"
                   />
                 </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1.5">职位</label>
+                  <input
+                    value={profileJobTitle}
+                    onChange={(e) => setProfileJobTitle(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-700 dark:text-gray-300 outline-none focus:border-accent-blue"
+                    placeholder="如：产品经理、工程师"
+                  />
+                </div>
                 <button
                   onClick={async () => {
                     setAccountMsg(null)
@@ -2350,7 +2459,7 @@ export default function SettingsPage() {
                     try {
                       const res = await fetchWithAuth('/api/v1/auth/me', {
                         method: 'PUT',
-                        body: JSON.stringify({ name: profileName, email: profileEmail || null }),
+                        body: JSON.stringify({ name: profileName, email: profileEmail || null, job_title: profileJobTitle || null }),
                       })
                       if (!res.ok) {
                         const e = await res.json()
@@ -2383,20 +2492,21 @@ export default function SettingsPage() {
             <div className="p-5 max-md:p-4 rounded-xl bg-bg-card border border-border">
               <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                 <span className="text-sm text-gray-400">默认首页:</span>
-                <select
+                <SearchableSelect
+                  options={[
+                    ...(hasPermission('report:read') ? [{ id: '/reports', label: '日报周报' }] : []),
+                    ...(hasPermission('project:read') ? [{ id: '/projects', label: '项目管理' }] : []),
+                    ...(hasPermission('meeting:read') ? [{ id: '/meetings', label: '会议纪要' }] : []),
+                    ...(hasPermission('dashboard:read') ? [{ id: '/dashboard', label: '数据看板' }] : []),
+                    ...(hasPermission('ai:use') ? [{ id: '/ai', label: 'AI 中心' }] : []),
+                    ...(hasPermission('wiki:read') ? [{ id: '/wiki', label: 'AI 笔记' }] : []),
+                    ...(hasPermission('customer:read') ? [{ id: '/customers', label: '客户管理' }] : []),
+                    ...(hasPermission('monitor:read') ? [{ id: '/monitor', label: '运维监控' }] : []),
+                  ]}
                   value={homePage}
-                  onChange={(e) => setHomePage(e.target.value)}
-                  className="px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-700 dark:text-gray-300 outline-none focus:border-[#3B82F6]"
-                >
-                  {hasPermission('report:read') && <option value="/reports">日报周报</option>}
-                  {hasPermission('project:read') && <option value="/projects">项目管理</option>}
-                  {hasPermission('meeting:read') && <option value="/meetings">会议纪要</option>}
-                  {hasPermission('dashboard:read') && <option value="/dashboard">数据看板</option>}
-                  {hasPermission('ai:use') && <option value="/ai">AI 中心</option>}
-                  {hasPermission('wiki:read') && <option value="/wiki">AI 笔记</option>}
-                  {hasPermission('customer:read') && <option value="/customers">客户管理</option>}
-                  {hasPermission('monitor:read') && <option value="/monitor">运维监控</option>}
-                </select>
+                  onChange={(v) => setHomePage(v === 0 ? '' : String(v))}
+                  clearValue=""
+                />
                 <button
                   onClick={handleSaveHomePage}
                   disabled={homePageSaving}
@@ -2495,32 +2605,6 @@ export default function SettingsPage() {
         </>
       )}
 
-      {/* ==================== 关于 ==================== */}
-      {activeTab === 'about' && (
-        <>
-      
-      {/* 系统状态 */}
-      <div>
-        <h3 className="text-base font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2"><Server size={18} className="text-gray-400" /> 系统信息</h3>
-        <div className="p-4 max-md:p-3 rounded-xl bg-bg-card border border-border space-y-2">
-          {systemInfo ? (
-            <>
-              <div className="flex justify-between text-sm gap-2"><span className="text-gray-500 shrink-0">数据库</span><span className="text-gray-700 dark:text-gray-300 text-right">{systemInfo.database_type || '未知'}</span></div>
-              <div className="flex justify-between text-sm gap-2"><span className="text-gray-500 shrink-0">数据库地址</span><span className="text-gray-700 dark:text-gray-300 font-mono text-xs text-right truncate max-w-[60%]">{systemInfo.database_url || '-'}</span></div>
-              <div className="flex justify-between text-sm gap-2"><span className="text-gray-500 shrink-0">向量存储</span><span className="text-gray-700 dark:text-gray-300">{systemInfo.vector_store || 'ChromaDB'}</span></div>
-              <div className="flex justify-between text-sm gap-2"><span className="text-gray-500 shrink-0">向量存储大小</span><span className="text-gray-700 dark:text-gray-300">{systemInfo.vector_store_size || '-'}</span></div>
-              <div className="flex justify-between text-sm gap-2"><span className="text-gray-500 shrink-0">已配置供应商</span><span className="text-gray-700 dark:text-gray-300">{systemInfo.total_providers || '0'} 个</span></div>
-              <div className="flex justify-between text-sm gap-2"><span className="text-gray-500 shrink-0">启用供应商</span><span className="text-gray-700 dark:text-gray-300">{systemInfo.active_providers || '0'} 个</span></div>
-              <div className="flex justify-between text-sm gap-2"><span className="text-gray-500 shrink-0">用户总数</span><span className="text-gray-700 dark:text-gray-300">{systemInfo.total_users || '0'} 人（管理员 {systemInfo.admin_users || '0'} 人）</span></div>
-              <div className="flex justify-between text-sm gap-2"><span className="text-gray-500 shrink-0">服务运行时间</span><span className="text-gray-700 dark:text-gray-300">{systemInfo.uptime || '-'}</span></div>
-            </>
-          ) : (
-            <div className="text-center py-4 text-gray-500 text-sm">加载中...</div>
-          )}
-        </div>
-      </div>
-      </>
-      )}
 
       {/* 弹窗 */}
       {showForm && (
@@ -2695,15 +2779,19 @@ export default function SettingsPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-gray-400 mb-1.5">Thinking Mode</label>
-                  <select value={presetForm.thinking_mode} onChange={(e) => setPresetForm({ ...presetForm, thinking_mode: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-xs text-gray-700 dark:text-gray-300 outline-none focus:border-[#A78BFA]">
-                    <option value="">不设置</option>
-                    <option value="off">关闭</option>
-                    <option value="low">低</option>
-                    <option value="medium">中</option>
-                    <option value="high">高</option>
-                    <option value="auto">自动</option>
-                  </select>
+                  <SearchableSelect
+                    options={[
+                      { id: '', label: '不设置' },
+                      { id: 'off', label: '关闭' },
+                      { id: 'low', label: '低' },
+                      { id: 'medium', label: '中' },
+                      { id: 'high', label: '高' },
+                      { id: 'auto', label: '自动' },
+                    ]}
+                    value={presetForm.thinking_mode}
+                    onChange={(v) => setPresetForm({ ...presetForm, thinking_mode: v === 0 ? '' : String(v) })}
+                    clearValue=""
+                  />
                 </div>
                 <div>
                   <label className="block text-xs text-gray-400 mb-1.5">Thinking Budget</label>
@@ -2715,12 +2803,16 @@ export default function SettingsPage() {
               </div>
               <div>
                 <label className="block text-xs text-gray-400 mb-1.5">Response Format</label>
-                <select value={presetForm.response_format} onChange={(e) => setPresetForm({ ...presetForm, response_format: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-xs text-gray-700 dark:text-gray-300 outline-none focus:border-[#A78BFA]">
-                  <option value="">不设置</option>
-                  <option value="text">纯文本</option>
-                  <option value="json_object">JSON 对象</option>
-                </select>
+                <SearchableSelect
+                  options={[
+                    { id: '', label: '不设置' },
+                    { id: 'text', label: '纯文本' },
+                    { id: 'json_object', label: 'JSON 对象' },
+                  ]}
+                  value={presetForm.response_format}
+                  onChange={(v) => setPresetForm({ ...presetForm, response_format: v === 0 ? '' : String(v) })}
+                  clearValue=""
+                />
               </div>
             </div>
             <div className="sticky bottom-0 bg-bg-card border-t border-border px-5 py-3 flex items-center justify-end gap-2">

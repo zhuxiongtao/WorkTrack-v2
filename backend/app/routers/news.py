@@ -2,6 +2,7 @@
 import json
 import logging
 from datetime import datetime, timezone, timedelta
+from app.utils.time import BEIJING_TZ, now
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -61,7 +62,7 @@ def get_news_feed(
             raise HTTPException(status_code=400, detail="date 格式错误，应为 YYYY-MM-DD")
     else:
         # 默认最近 7 天
-        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+        cutoff = now() - timedelta(days=7)
         q = q.where(NewsCache.pub_date >= cutoff)
 
     items = db.exec(
@@ -127,7 +128,7 @@ def update_announcement(
     if len(data.content) > 50000:
         raise HTTPException(status_code=400, detail="公告内容超过 50000 字符上限")
 
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = now().isoformat()
 
     pairs = [
         (ANNOUNCEMENT_KEY, data.content),

@@ -118,6 +118,18 @@ export async function resetUserPassword(
   return res.json()
 }
 
+export async function resendWelcomeEmail(
+  fetchWithAuth: FetchWithAuth,
+  id: number,
+): Promise<{ sent: boolean; initial_password?: string }> {
+  const res = await fetchWithAuth(`/api/v1/users/${id}/resend-welcome`, { method: 'POST' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: '发送失败' }))
+    throw new Error(err.detail || '重发欢迎邮件失败')
+  }
+  return res.json()
+}
+
 export async function deleteUser(
   fetchWithAuth: FetchWithAuth,
   id: number,

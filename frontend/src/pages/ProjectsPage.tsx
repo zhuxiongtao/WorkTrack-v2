@@ -10,9 +10,9 @@ import { ProjectCard, ProjectRow, formatAmount } from '../components/projects/Pr
 import { PageHeader } from '../components/design-system'
 
 interface Project {
-  id: number; name: string; opportunity_amount: number | null; deal_amount: number | null; currency: string; customer_name: string; customer_id: number | null
+  id: number; name: string; opportunity_amount: number | null; opportunity_amount_unit: string; deal_amount: number | null; deal_amount_unit: string; currency: string; customer_name: string; customer_id: number | null
   product: string | null; project_scenario: string | null
-  sales_person: string | null; tech_support_person: string | null; status: string; progress: string | null
+  sales_person: string | null; tech_support_person: string | null; tech_support_user_id: number | null; status: string; progress: string | null
   analysis: string | null
   cloud_provider: string | null
   files_json?: string | null
@@ -30,7 +30,7 @@ interface Project {
 
 interface LinkedContract {
   id: number; title: string; contract_no: string; status: string
-  contract_amount: number | null; currency: string
+  contract_amount: number | null; amount_unit: string; currency: string
   sign_date: string | null; start_date: string | null; end_date: string | null
   party_a: string; party_b: string
 }
@@ -81,7 +81,7 @@ export default function ProjectsPage() {
   const [selectedMeetingIds, setSelectedMeetingIds] = useState<Set<number>>(new Set())
   const [costSummary, setCostSummary] = useState<CostSummary | null>(null)
 
-  // 快捷跟进
+  // 快捷跟进（旧 progress 文本方式，保留兼容）
   const [quickProgressOpen, setQuickProgressOpen] = useState(false)
   const [quickText, setQuickText] = useState('')
   const [quickDate, setQuickDate] = useState(new Date().toISOString().slice(0, 10))
@@ -89,6 +89,16 @@ export default function ProjectsPage() {
   const [analyzingId, setAnalyzingId] = useState<number | null>(null)
   const [analysisOpen, setAnalysisOpen] = useState(false)
   const [submittingCharter, setSubmittingCharter] = useState(false)
+
+  // 结构化跟进记录（Phase 2）
+  interface FollowUpItem { id: number; user_id: number; user_name: string; track: string; content: string; created_at: string }
+  const [followUps, setFollowUps] = useState<FollowUpItem[]>([])
+  const [followUpsLoading, setFollowUpsLoading] = useState(false)
+  const [followUpInputOpen, setFollowUpInputOpen] = useState(false)
+  const [followUpTrack, setFollowUpTrack] = useState<'sales' | 'tech'>('sales')
+  const [followUpText, setFollowUpText] = useState('')
+  const [followUpSaving, setFollowUpSaving] = useState(false)
+  const [followUpActiveTab, setFollowUpActiveTab] = useState<'all' | 'sales' | 'tech'>('all')
 
   // 客户列表（用于关联选择）
   const [customers, setCustomers] = useState<{ id: number; name: string }[]>([])
@@ -169,6 +179,19 @@ export default function ProjectsPage() {
     }
   }
 
+  const loadFollowUps = async (pid: number) => {
+    setFollowUpsLoading(true)
+    try {
+      const res = await fetch(`/api/v1/projects/${pid}/follow-ups`)
+      if (res.ok) setFollowUps(await res.json())
+      else setFollowUps([])
+    } catch {
+      setFollowUps([])
+    } finally {
+      setFollowUpsLoading(false)
+    }
+  }
+
   // 挂载触发监听
   useEffect(() => {
     loadProjects()
@@ -206,9 +229,22 @@ export default function ProjectsPage() {
     loadLinkedMeetings(p.id)
     loadLinkedContracts(p.id)
     loadCostSummary(p.id)
+    loadFollowUps(p.id)
+    setFollowUpInputOpen(false)
+    setFollowUpText('')
+    setFollowUpActiveTab('all')
   }
 
-  const closeDetail = () => { setModalProject(null); setQuickProgressOpen(false); setQuickText(''); setQuickDate(new Date().toISOString().slice(0, 10)); setCostSummary(null) }
+  const closeDetail = () => {
+    setModalProject(null)
+    setQuickProgressOpen(false)
+    setQuickText('')
+    setQuickDate(new Date().toISOString().slice(0, 10))
+    setCostSummary(null)
+    setFollowUps([])
+    setFollowUpInputOpen(false)
+    setFollowUpText('')
+  }
 
   const handleQuickProgress = async () => {
     if (!quickText.trim() || !modalProject) return
@@ -235,6 +271,33 @@ export default function ProjectsPage() {
       analyzeProject(modalProject.id)
     } catch { /* ignore */ }
     finally { setQuickSaving(false) }
+  }
+
+  const handleFollowUpSubmit = async () => {
+    if (!followUpText.trim() || !modalProject) return
+    setFollowUpSaving(true)
+    try {
+      const res = await fetch(`/api/v1/projects/${modalProject.id}/follow-ups`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ track: followUpTrack, content: followUpText.trim() }),
+      })
+      if (res.ok) {
+        setFollowUpText('')
+        setFollowUpInputOpen(false)
+        loadFollowUps(modalProject.id)
+        showToast('跟进记录已保存', 'success')
+      }
+    } catch { /* ignore */ }
+    finally { setFollowUpSaving(false) }
+  }
+
+  const handleFollowUpDelete = async (followUpId: number) => {
+    if (!modalProject) return
+    const ok = await showConfirm('确认删除这条跟进记录？')
+    if (!ok) return
+    await fetch(`/api/v1/projects/${modalProject.id}/follow-ups/${followUpId}`, { method: 'DELETE' })
+    loadFollowUps(modalProject.id)
   }
 
   const analyzeProject = async (projectId: number) => {
@@ -574,8 +637,8 @@ export default function ProjectsPage() {
                     <th className="text-left px-4 py-2.5 font-medium whitespace-nowrap">状态</th>
                     <th className="text-right px-4 py-2.5 font-medium whitespace-nowrap">商机</th>
                     <th className="text-right px-4 py-2.5 font-medium whitespace-nowrap">成交</th>
-                    <th className="text-left px-4 py-2.5 font-medium whitespace-nowrap">产品 / 模型</th>
-                    <th className="text-left px-4 py-2.5 font-medium whitespace-nowrap">调用量 / 时间节点</th>
+                    <th className="text-left px-4 py-2.5 font-medium whitespace-nowrap">模型 / 技术栈</th>
+                    <th className="text-left px-4 py-2.5 font-medium whitespace-nowrap">AI 分析</th>
                     <th className="text-left px-4 py-2.5 font-medium whitespace-nowrap">合同</th>
                   </tr>
                 </thead>
@@ -644,14 +707,18 @@ export default function ProjectsPage() {
             <div className="p-4 md:p-6 space-y-4">
               {/* ② 财务利润专区（MaaS 核心） */}
               {(() => {
-                const op = formatAmount(modalProject.opportunity_amount, modalProject.currency)
-                const deal = formatAmount(modalProject.deal_amount, modalProject.currency)
-                const cost = formatAmount(modalProject.cost_amount, modalProject.currency)
+                const op = formatAmount(modalProject.opportunity_amount, modalProject.currency, modalProject.opportunity_amount_unit)
+                const deal = formatAmount(modalProject.deal_amount, modalProject.currency, modalProject.deal_amount_unit)
+                // cost_amount 始终是元（API 账单累计），固定显示 '元'
+                const cost = formatAmount(modalProject.cost_amount, modalProject.currency, '元')
                 const hasAny = op.hasValue || deal.hasValue || cost.hasValue || modalProject.gross_margin != null
                 if (!hasAny) return null
-                const grossProfit = modalProject.deal_amount != null && modalProject.cost_amount != null
-                  ? modalProject.deal_amount - modalProject.cost_amount : null
-                const gp = formatAmount(grossProfit, modalProject.currency)
+                // 毛利额：deal 转换为元后计算
+                const dealYuan = modalProject.deal_amount == null ? null
+                  : modalProject.deal_amount_unit === '万元' ? modalProject.deal_amount * 10000 : modalProject.deal_amount
+                const grossProfit = dealYuan != null && modalProject.cost_amount != null
+                  ? dealYuan - modalProject.cost_amount : null
+                const gp = formatAmount(grossProfit, modalProject.currency, '元')
                 return (
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
                     {op.hasValue && (
@@ -721,10 +788,8 @@ export default function ProjectsPage() {
                         return (
                           <div key={i} className="flex items-start gap-1.5 min-w-0">
                             <Icon size={11} className="text-gray-400 dark:text-gray-500 mt-0.5 shrink-0" />
-                            <div className="min-w-0">
-                              <span className="text-[11px] text-gray-400 dark:text-gray-500">{it.label} </span>
-                              <span className="text-xs text-gray-700 dark:text-gray-200 break-words">{it.value}</span>
-                            </div>
+                            <span className="text-[11px] text-gray-400 dark:text-gray-500 shrink-0 w-[4em]">{it.label}</span>
+                            <span className="text-xs text-gray-700 dark:text-gray-200 break-words min-w-0 flex-1">{it.value}</span>
                           </div>
                         )
                       })}
@@ -880,149 +945,123 @@ export default function ProjectsPage() {
                 )}
               </div>
 
-              {/* Hero: 跟进记录 */}
+              {/* 双轨跟进记录 */}
               <div className="rounded-xl bg-bg-input border border-border overflow-hidden">
+                {/* 标题栏 */}
                 <div className="px-4 py-3 border-b border-border flex items-center gap-2 bg-bg-card/50">
-                  <Activity size={14} className="text-[#3B82F6]" />
+                  <GitBranch size={14} className="text-[#3B82F6]" />
                   <span className="text-xs font-medium text-gray-300">跟进记录</span>
+                  <span className="text-[11px] text-gray-600 bg-bg-card/50 px-1.5 py-0.5 rounded-full">{followUps.length}</span>
+                  {/* 筛选 Tab */}
+                  <div className="ml-2 flex rounded-md overflow-hidden border border-border/60 text-[11px]">
+                    {(['all', 'sales', 'tech'] as const).map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setFollowUpActiveTab(t)}
+                        className={`px-2 py-0.5 transition-colors ${followUpActiveTab === t ? 'bg-[#3B82F6] text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                      >{t === 'all' ? '全部' : t === 'sales' ? '销售' : '技术'}</button>
+                    ))}
+                  </div>
                   <button
-                    onClick={() => { setQuickProgressOpen(!quickProgressOpen); setQuickText(''); setQuickDate(new Date().toISOString().slice(0, 10)) }}
-                    className={`ml-auto flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-lg border transition-colors ${quickProgressOpen ? 'bg-[#3B82F6]/10 text-[#3B82F6] border-[#3B82F6]/30' : 'text-gray-500 border-transparent hover:text-gray-300 hover:border-border'}`}
+                    onClick={() => { setFollowUpInputOpen(!followUpInputOpen); setFollowUpText('') }}
+                    className={`ml-auto flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-lg border transition-colors ${followUpInputOpen ? 'bg-[#3B82F6]/10 text-[#3B82F6] border-[#3B82F6]/30' : 'text-gray-500 border-transparent hover:text-gray-300 hover:border-border'}`}
                   >
-                    <Plus size={11} />{quickProgressOpen ? '收起' : '新增'}
+                    <Plus size={11} />{followUpInputOpen ? '收起' : '新增'}
                   </button>
                 </div>
 
-                {/* 快捷输入 */}
-                {quickProgressOpen && (
-                  <div className="px-4 py-3 border-b border-border bg-bg-input/50">
-                    <div className="flex items-center gap-3 mb-2">
-                      <label className="text-[11px] text-gray-500 flex-shrink-0">日期</label>
-                      <input
-                        type="date"
-                        value={quickDate}
-                        onChange={(e) => setQuickDate(e.target.value)}
-                        className="px-2 py-1 rounded-md bg-bg-card border border-border text-xs text-gray-300 outline-none focus:border-[#3B82F6]"
-                      />
+                {/* 新增输入区 */}
+                {followUpInputOpen && (
+                  <div className="px-4 py-3 border-b border-border bg-bg-input/50 space-y-2">
+                    {/* 轨道选择 */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-gray-500 shrink-0">轨道</span>
+                      <div className="flex rounded-md overflow-hidden border border-border/60 text-[11px]">
+                        {(['sales', 'tech'] as const).map((t) => (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => setFollowUpTrack(t)}
+                            className={`px-3 py-1 transition-colors ${followUpTrack === t ? (t === 'sales' ? 'bg-[#3B82F6] text-white' : 'bg-emerald-600 text-white') : 'text-gray-500 hover:text-gray-300'}`}
+                          >{t === 'sales' ? '销售跟进' : '技术跟进'}</button>
+                        ))}
+                      </div>
                     </div>
                     <textarea
-                      value={quickText}
-                      onChange={(e) => setQuickText(e.target.value)}
-                      placeholder="记录本次跟进内容..."
-                      className="w-full h-20 p-3 rounded-lg bg-bg-card border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6] resize-none placeholder-gray-600"
+                      value={followUpText}
+                      onChange={(e) => setFollowUpText(e.target.value)}
+                      placeholder={followUpTrack === 'sales' ? '记录商务进展、客户动态、报价谈判...' : '记录技术对接、问题排查、交付进度...'}
+                      rows={3}
+                      className="w-full p-3 rounded-lg bg-bg-card border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6] resize-none placeholder-gray-600"
                       autoFocus
                     />
-                    <div className="flex items-center justify-between mt-2">
-                      <span className="text-[11px] text-gray-600">新记录将追加到现有进展之后</span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => { setQuickProgressOpen(false); setQuickText(''); setQuickDate(new Date().toISOString().slice(0, 10)) }}
-                          className="text-xs px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition-colors"
-                        >取消</button>
-                        <button
-                          onClick={handleQuickProgress}
-                          disabled={quickSaving || !quickText.trim()}
-                          className="flex items-center gap-1.5 text-xs px-4 py-1.5 rounded-lg bg-[#3B82F6] text-[#fff] hover:bg-blue-600 disabled:opacity-50 transition-all"
-                        >
-                          {quickSaving && <Loader2 size={11} className="animate-spin" />}
-                          {quickSaving ? '保存中...' : '保存'}
-                        </button>
-                      </div>
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => { setFollowUpInputOpen(false); setFollowUpText('') }}
+                        className="text-xs px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition-colors"
+                      >取消</button>
+                      <button
+                        onClick={handleFollowUpSubmit}
+                        disabled={followUpSaving || !followUpText.trim()}
+                        className="flex items-center gap-1.5 text-xs px-4 py-1.5 rounded-lg bg-[#3B82F6] text-white hover:bg-blue-600 disabled:opacity-50 transition-all"
+                      >
+                        {followUpSaving && <Loader2 size={11} className="animate-spin" />}
+                        {followUpSaving ? '保存中...' : '保存'}
+                      </button>
                     </div>
                   </div>
                 )}
 
+                {/* 跟进记录列表 */}
                 <div className="p-4 max-h-96 overflow-y-auto">
-                  {modalProject.progress ? (
-                    (() => {
-                      // 按 --- 分割条目，每段格式: 📌 日期\n内容
-                      const entries = modalProject.progress.split(/\n?---\n?/).reduce<{date: string; content: string}[]>((acc, block) => {
-                        const trimmed = block.trim()
-                        if (!trimmed) return acc
-                        const match = trimmed.match(/^📌\s*(.+)/)
-                        if (match) {
-                          const lines = trimmed.split('\n')
-                          acc.push({ date: match[1].trim(), content: lines.slice(1).join('\n').trim() })
-                        } else {
-                          acc.push({ date: '', content: trimmed })
-                        }
-                        return acc
-                      }, [])
-                      // 反转使最新在上
-                      entries.reverse()
-                      const dotColors = [
-                        { dot: '#3B82F6', bg: '#3B82F6', soft: '#3B82F610', border: '#3B82F630' },
-                        { dot: '#8B5CF6', bg: '#8B5CF6', soft: '#8B5CF610', border: '#8B5CF630' },
-                        { dot: '#10B981', bg: '#10B981', soft: '#10B98110', border: '#10B98130' },
-                        { dot: '#F59E0B', bg: '#F59E0B', soft: '#F59E0B10', border: '#F59E0B30' },
-                        { dot: '#EC4899', bg: '#EC4899', soft: '#EC489910', border: '#EC489930' },
-                      ]
-                      return (
-                        <div className="relative pl-6">
-                          {/* 时间线竖线 */}
-                          <div className="absolute left-[11px] top-1 bottom-1 w-0.5 rounded-full bg-gradient-to-b from-[#3B82F6]/40 via-[#8B5CF6]/20 to-transparent" />
-                          <div className="space-y-4">
-                            {entries.map((entry, i) => {
-                              const color = dotColors[i % dotColors.length]
-                              const isEmpty = !entry.content
-                              return (
-                                <div key={i} className="relative group/timeline">
-                                  {/* 时间点 */}
-                                  <div
-                                    className={`absolute -left-6 top-1.5 w-[13px] h-[13px] rounded-full border-2 flex items-center justify-center transition-transform group-hover/timeline:scale-125 ${
-                                      isEmpty ? 'border-gray-700 bg-bg-card' : ''
-                                    }`}
-                                    style={isEmpty ? {} : { borderColor: color.dot, backgroundColor: color.soft }}
-                                  >
-                                    <div
-                                      className="w-[5px] h-[5px] rounded-full"
-                                      style={{ backgroundColor: isEmpty ? '#4B5563' : color.bg }}
-                                    />
+                  {followUpsLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-gray-500 py-2">
+                      <Loader2 size={13} className="animate-spin" />加载中...
+                    </div>
+                  ) : (() => {
+                    const filtered = followUps.filter(f => followUpActiveTab === 'all' || f.track === followUpActiveTab)
+                    if (filtered.length === 0) {
+                      return <p className="text-sm text-gray-600 italic">暂无{followUpActiveTab === 'all' ? '' : followUpActiveTab === 'sales' ? '销售' : '技术'}跟进记录</p>
+                    }
+                    return (
+                      <div className="relative pl-6">
+                        <div className="absolute left-[11px] top-1 bottom-1 w-0.5 rounded-full bg-gradient-to-b from-[#3B82F6]/40 via-[#10B981]/20 to-transparent" />
+                        <div className="space-y-4">
+                          {filtered.map((f) => {
+                            const isSales = f.track === 'sales'
+                            const dot = isSales ? '#3B82F6' : '#10B981'
+                            const soft = isSales ? '#3B82F610' : '#10B98110'
+                            const border = isSales ? '#3B82F630' : '#10B98130'
+                            const dt = new Date(f.created_at).toLocaleDateString('zh-CN')
+                            return (
+                              <div key={f.id} className="relative group/fu">
+                                <div className="absolute -left-6 top-1.5 w-[13px] h-[13px] rounded-full border-2 flex items-center justify-center transition-transform group-hover/fu:scale-125" style={{ borderColor: dot, backgroundColor: soft }}>
+                                  <div className="w-[5px] h-[5px] rounded-full" style={{ backgroundColor: dot }} />
+                                </div>
+                                <div className="rounded-xl border overflow-hidden" style={{ backgroundColor: soft, borderColor: border }}>
+                                  <div className="flex items-center gap-2 px-3 py-2 border-b border-black/10">
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${isSales ? 'bg-[#3B82F6]/20 text-[#60A5FA]' : 'bg-emerald-500/20 text-emerald-300'}`}>
+                                      {isSales ? '销售' : '技术'}
+                                    </span>
+                                    <span className="text-[11px] font-mono" style={{ color: dot }}>📅 {dt}</span>
+                                    {f.user_name && <span className="text-[11px] text-gray-500">· {f.user_name}</span>}
+                                    <button
+                                      onClick={() => handleFollowUpDelete(f.id)}
+                                      className="ml-auto opacity-0 group-hover/fu:opacity-100 text-gray-600 hover:text-red-400 transition-all"
+                                    ><Trash2 size={10} /></button>
                                   </div>
-                                  {/* 卡片内容 */}
-                                  <div
-                                    className={`rounded-xl border overflow-hidden transition-colors ${
-                                      isEmpty
-                                        ? 'bg-bg-input/30 border-border/50'
-                                        : ''
-                                    }`}
-                                    style={isEmpty ? {} : { backgroundColor: color.soft, borderColor: color.border }}
-                                  >
-                                    {/* 日期条 */}
-                                    <div className="flex items-center justify-between px-3 py-2 border-b border-bg-card/30">
-                                      {entry.date ? (
-                                        <span className="text-[11px] font-mono font-medium" style={{ color: color.dot }}>
-                                          📅 {entry.date}
-                                        </span>
-                                      ) : (
-                                        <span className="text-[11px] text-gray-600 font-mono">无日期</span>
-                                      )}
-                                      <span className="text-[11px] text-gray-600 bg-bg-card/50 px-1.5 py-0.5 rounded">
-                                        #{entries.length - i}
-                                      </span>
-                                    </div>
-                                    {/* 内容 */}
-                                    {entry.content && (
-                                      <div className="px-3 py-2.5">
-                                        <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{entry.content}</p>
-                                      </div>
-                                    )}
-                                    {isEmpty && (
-                                      <div className="px-3 py-2">
-                                        <p className="text-sm text-gray-600 italic leading-relaxed whitespace-pre-wrap">{entry.content || '(空记录)'}</p>
-                                      </div>
-                                    )}
+                                  <div className="px-3 py-2.5">
+                                    <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{f.content}</p>
                                   </div>
                                 </div>
-                              )
-                            })}
-                          </div>
+                              </div>
+                            )
+                          })}
                         </div>
-                      )
-                    })()
-                  ) : (
-                    <p className="text-sm text-gray-600 italic">暂无跟进记录，点击右上角「新增」记录第一条</p>
-                  )}
+                      </div>
+                    )
+                  })()}
                 </div>
               </div>
 
@@ -1042,7 +1081,7 @@ export default function ProjectsPage() {
                 ) : (
                   <div className="space-y-1">
                     {linkedContracts.map((c) => {
-                      const amt = c.contract_amount != null ? formatAmount(c.contract_amount, c.currency) : null
+                      const amt = c.contract_amount != null ? formatAmount(c.contract_amount, c.currency, c.amount_unit) : null
                       return (
                         <button
                           key={c.id}

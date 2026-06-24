@@ -1,5 +1,6 @@
 from typing import Optional
 from datetime import datetime, timezone
+from app.utils.time import BEIJING_TZ, now
 from sqlmodel import SQLModel, Field
 
 
@@ -15,4 +16,4 @@ class ModelUsageLog(SQLModel, table=True):
     cache_read_tokens: int = Field(default=0)   # OpenAI cached_tokens / Anthropic cache_read_input_tokens
     cache_write_tokens: int = Field(default=0)  # Anthropic cache_creation_input_tokens
     total_tokens: int = Field(default=0)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+    created_at: datetime = Field(default_factory=lambda: now(), index=True)

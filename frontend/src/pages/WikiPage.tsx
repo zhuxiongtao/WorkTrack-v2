@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import SearchableSelect from '../components/SearchableSelect'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Plus, Trash2, ChevronRight, ChevronDown, FileText, FolderOpen,
@@ -8,12 +10,25 @@ import {
   Sparkles, Send, ArrowRightLeft, CornerDownLeft, Building2, Search, UserPlus,
   Crown, ArrowUpRight
 } from 'lucide-react'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useTheme } from '../contexts/ThemeContext'
 import RichTextEditor from '../components/RichTextEditor'
 import TocPanel from '../components/TocPanel'
 import type { DepartmentTreeNode } from '../services/types'
+
+/**
+ * 将 AI 返回的 Markdown 文本转为安全的富文本 HTML，供 TipTap 插入 / 文档追加使用。
+ * AI 输出多为 Markdown（列表、加粗、标题等），过去直接插入或仅做 \n→<br/> 替换，
+ * 导致编辑器里出现 `- **xx**` 这类未渲染的原始语法。此处统一走 marked 解析 + DOMPurify 净化。
+ */
+function aiMarkdownToHtml(content: string): string {
+  if (!content) return ''
+  const html = (marked.parse(content, { async: false }) as string || '').trim()
+  return DOMPurify.sanitize(html)
+}
 
 interface WikiSpace {
   id: number
@@ -939,7 +954,8 @@ export default function WikiPage() {
   // 100% 满足需求：直接替换选中正文 (Notion AI 同款，调用 TipTap 原生命令，实现 100% 成功替换与完美高可读性)
   const handleReplaceSelectionInline = (content: string) => {
     if (editorInstanceRef.current) {
-      editorInstanceRef.current.chain().focus().insertContent(content).run()
+      // AI 结果为 Markdown，先转 HTML 再插入，避免编辑器内出现未渲染的原始语法
+      editorInstanceRef.current.chain().focus().insertContent(aiMarkdownToHtml(content)).run()
       setInlineAiActive(false)
       setShowAiToolbar(false)
       showToast('已成功将选定段落替换覆盖为 AI 生成成果', 'success')
@@ -952,7 +968,8 @@ export default function WikiPage() {
   const handleInsertBelowInline = (content: string) => {
     if (editorInstanceRef.current) {
       const editor = editorInstanceRef.current
-      const insertHtml = `<p></p><p>${content.replace(/\n/g, '<br/>')}</p>`
+      // AI 结果为 Markdown，先转 HTML（保留列表/加粗/标题等结构）再插入
+      const insertHtml = `<p></p>${aiMarkdownToHtml(content)}`
       // 在当前鼠标划词选择的结束锚点（selection.to）处直接插入 HTML 段落
       editor.chain().focus().insertContentAt(editor.state.selection.to, insertHtml).run()
       setInlineAiActive(false)
@@ -1029,7 +1046,8 @@ export default function WikiPage() {
 
   // 一键插入文档末尾（保留富文本样式块）
   const handleAppendToDoc = (content: string) => {
-    const formattedHtml = `<p></p><div style="background-color: rgba(59, 130, 246, 0.05); border: 1px solid rgba(59, 130, 246, 0.15); padding: 16px; border-radius: 12px; margin: 16px 0;"><p style="font-weight: bold; color: rgb(37, 99, 235); font-size: 11px; margin-bottom: 4px; display: flex; align-items: center; gap: 4px;">✨ AI 写作智囊协作生成：</p><p style="margin: 0; line-height: 1.6;">${content.replace(/\n/g, '<br/>')}</p></div><p></p>`
+    // AI 结果为 Markdown，转 HTML 后再包裹样式块，保留列表/加粗/标题等结构
+    const formattedHtml = `<p></p><div style="background-color: rgba(59, 130, 246, 0.05); border: 1px solid rgba(59, 130, 246, 0.15); padding: 16px; border-radius: 12px; margin: 16px 0;"><p style="font-weight: bold; color: rgb(37, 99, 235); font-size: 11px; margin-bottom: 4px; display: flex; align-items: center; gap: 4px;">✨ AI 写作智囊协作生成：</p><div style="line-height: 1.6;">${aiMarkdownToHtml(content)}</div></div><p></p>`
     setEditorContent(prev => prev + formattedHtml)
     showToast('AI 内容已无损追加到当前文档末尾', 'success')
   }
@@ -1040,7 +1058,14 @@ export default function WikiPage() {
       showToast('未检测到您划词选中的内容，无法替换', 'warning')
       return
     }
-    setEditorContent(prev => prev.replace(selectedText, content))
+    // AI 结果为 Markdown，转为渲染后的 HTML 再替换
+    const html = aiMarkdownToHtml(content)
+    // 优先走 TipTap 实例替换当前选区（结构正确且即时生效）；否则回退到对 HTML 字符串做替换
+    if (editorInstanceRef.current && editorInstanceRef.current.state.selection.empty === false) {
+      editorInstanceRef.current.chain().focus().insertContent(html).run()
+    } else {
+      setEditorContent(prev => prev.replace(selectedText, html))
+    }
     setSelectedText(content) // 将选中参考更新
     showToast('已用 AI 写作结果替换选中正文', 'success')
   }
@@ -1297,7 +1322,7 @@ export default function WikiPage() {
         })()}
 
         {/* 新建空间对话框 */}
-        {showSpaceDialog && (
+        {showSpaceDialog && createPortal(
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center px-4 max-md:px-0" onClick={() => setShowSpaceDialog(false)}>
             <div className="bg-bg-card rounded-2xl max-md:rounded-none p-6 max-md:p-4 w-full max-w-md max-md:max-w-full max-md:h-full max-md:overflow-y-auto border border-gray-200 dark:border-border/50 shadow-2xl animate-scaleIn" onClick={e => e.stopPropagation()}>
               <h2 className="text-base font-bold mb-4 flex items-center gap-1.5 text-gray-900 dark:text-gray-100">
@@ -1357,10 +1382,10 @@ export default function WikiPage() {
               </div>
             </div>
           </div>
-        )}
+        , document.body)}
 
         {/* 编辑空间对话框 */}
-        {showEditSpaceDialog && (
+        {showEditSpaceDialog && createPortal(
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center px-4 max-md:px-0" onClick={() => { setShowEditSpaceDialog(false); setEditingSpace(null) }}>
             <div className="bg-bg-card rounded-2xl max-md:rounded-none p-6 max-md:p-4 w-full max-w-md max-md:max-w-full max-md:h-full max-md:overflow-y-auto border border-gray-200 dark:border-border/50 shadow-2xl animate-scaleIn" onClick={e => e.stopPropagation()}>
               <h2 className="text-base font-bold mb-4 flex items-center gap-1.5 text-gray-900 dark:text-gray-100">
@@ -1420,10 +1445,10 @@ export default function WikiPage() {
               </div>
             </div>
           </div>
-        )}
+        , document.body)}
 
         {/* 删除确认空间 */}
-        {showDeleteConfirm && (
+        {showDeleteConfirm && createPortal(
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center px-4 max-md:px-0" onClick={() => setShowDeleteConfirm(null)}>
             <div className="bg-bg-card rounded-2xl max-md:rounded-none p-6 max-md:p-4 w-full max-w-sm max-md:max-w-full border border-gray-200 dark:border-border/40 shadow-2xl animate-scaleIn" onClick={e => e.stopPropagation()}>
               <h2 className="text-base font-bold mb-2 text-gray-900 dark:text-gray-100">确认删除吗？</h2>
@@ -1438,7 +1463,7 @@ export default function WikiPage() {
               </div>
             </div>
           </div>
-        )}
+        , document.body)}
       </div>
     )
   }
@@ -2116,26 +2141,30 @@ export default function WikiPage() {
                     {/* 分享访问范围选择 */}
                     <div>
                       <label className="block text-[11px] font-bold text-gray-600 dark:text-gray-400 mb-1.5">共享访问范围</label>
-                      <select
+                      <SearchableSelect
+                        options={[
+                          { id: 'space', label: '整知识库空间所有文档' },
+                          { id: 'descendants', label: '当前页及所有子文档' },
+                          { id: 'single', label: '仅当前文档页面' },
+                        ]}
                         value={shareScope}
-                        onChange={e => setShareScope(e.target.value as any)}
-                        style={{ colorScheme: resolvedTheme }}
-                        className="w-full px-2.5 py-2 rounded-xl bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-xs text-gray-700 dark:text-gray-200 outline-none focus:border-accent-blue font-semibold cursor-pointer"
-                      >
-                        <option value="space" className="bg-white dark:bg-bg-input text-gray-800 dark:text-gray-200">整知识库空间所有文档</option>
-                        <option value="descendants" className="bg-white dark:bg-bg-input text-gray-800 dark:text-gray-200">当前页及所有子文档</option>
-                        <option value="single" className="bg-white dark:bg-bg-input text-gray-800 dark:text-gray-200">仅当前文档页面</option>
-                      </select>
+                        onChange={(v) => setShareScope((v === 0 ? 'space' : String(v)) as any)}
+                        clearValue=""
+                      />
                     </div>
 
                     {/* 链接有效期配置 */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 border-t border-gray-150 dark:border-border/10 pt-3">
                       <div>
                         <label className="block text-[11px] font-bold text-gray-600 dark:text-gray-400 mb-1.5">链接有效期</label>
-                        <select
+                        <SearchableSelect
+                          options={[
+                            { id: 'permanent', label: '永久有效' },
+                            { id: 'custom', label: '设置到期时间' },
+                          ]}
                           value={expireMode}
-                          onChange={async (e) => {
-                            const val = e.target.value as 'permanent' | 'custom'
+                          onChange={async (v) => {
+                            const val = (v === 0 ? 'permanent' : String(v)) as 'permanent' | 'custom'
                             setExpireMode(val)
                             let nextExpire = shareExpiresAt
                             if (val === 'permanent') {
@@ -2144,12 +2173,8 @@ export default function WikiPage() {
                             }
                             await syncShareConfig(isSpacePublic, usePassword, sharePassword, val, nextExpire)
                           }}
-                          style={{ colorScheme: resolvedTheme }}
-                          className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-xs text-gray-700 dark:text-gray-200 outline-none focus:border-accent-blue font-semibold cursor-pointer"
-                        >
-                          <option value="permanent" className="bg-white dark:bg-bg-input text-gray-800 dark:text-gray-200">永久有效</option>
-                          <option value="custom" className="bg-white dark:bg-bg-input text-gray-800 dark:text-gray-200">设置到期时间</option>
-                        </select>
+                          clearValue=""
+                        />
                       </div>
 
                       {expireMode === 'custom' ? (
@@ -2347,16 +2372,18 @@ export default function WikiPage() {
                   {/* 底部：权限选择 */}
                   <div className="flex items-center gap-3 px-3 py-2.5 border-t border-gray-200/60 dark:border-border/40 bg-white dark:bg-bg-card">
                     <span className="text-[11px] font-bold text-gray-600 dark:text-gray-400 shrink-0">赋予角色</span>
-                    <select
-                      value={selectedPermission}
-                      onChange={e => setSelectedPermission(e.target.value as any)}
-                      style={{ colorScheme: resolvedTheme }}
-                      className="flex-1 h-8 px-2.5 rounded-lg bg-gray-50 dark:bg-bg-input border border-gray-200 dark:border-border/60 text-xs text-gray-700 dark:text-gray-200 outline-none focus:border-accent-blue cursor-pointer font-bold"
-                    >
-                      <option value="viewer">查看者 (只读)</option>
-                      <option value="editor">编辑者 (可写)</option>
-                      <option value="admin">管理员 (统筹)</option>
-                    </select>
+                    <div className="flex-1">
+                      <SearchableSelect
+                        options={[
+                          { id: 'viewer', label: '查看者 (只读)' },
+                          { id: 'editor', label: '编辑者 (可写)' },
+                          { id: 'admin', label: '管理员 (统筹)' },
+                        ]}
+                        value={selectedPermission}
+                        onChange={(v) => setSelectedPermission((v === 0 ? 'viewer' : String(v)) as any)}
+                        clearValue=""
+                      />
+                    </div>
                   </div>
                 </div>
               </div>

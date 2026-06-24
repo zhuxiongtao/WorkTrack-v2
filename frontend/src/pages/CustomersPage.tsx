@@ -6,11 +6,13 @@ import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
 import RichTextEditor from '../components/RichTextEditor'
 import { PageHeader, EmptyState } from '../components/design-system'
+import SearchableSelect from '../components/SearchableSelect'
 
 interface Customer {
   id: number; name: string; industry: string | null; status: string; contact: string | null
   core_products: string | null; business_scope: string | null
   scale: string | null; profile: string | null; recent_news: string | null
+  recent_news_evidence: string | null
   logo_url: string | null; website: string | null
   ai_initiatives: string | null
   ai_evidence: string | null
@@ -30,6 +32,7 @@ interface CompanyInfo {
   scale?: string
   profile?: string
   recent_news?: string
+  recent_news_evidence?: string
   logo_url?: string
   website?: string
   ai_initiatives?: string
@@ -138,21 +141,74 @@ function AIInitiativeBlock({ text, evidence, compact = false }: { text: string; 
   )
 }
 
+interface NewsSourceItem { url: string; title: string; domain: string }
+
+function parseNewsSources(raw: string | null | undefined): NewsSourceItem[] {
+  if (!raw) return []
+  try {
+    const data = JSON.parse(raw)
+    if (Array.isArray(data)) return data.filter((x) => x && x.url)
+  } catch { /* ignore */ }
+  return []
+}
+
+// 最新动态带来源链接的渲染组件
+function RecentNewsBlock({ text, sources }: { text: string; sources: NewsSourceItem[] }) {
+  if (!text) return null
+  return (
+    <div>
+      <p className="text-sm text-gray-300 leading-relaxed">{text}</p>
+      {sources.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-1.5 items-center">
+          <span className="text-[10px] text-gray-500">来源：</span>
+          {sources.map((s, i) => (
+            <a
+              key={i}
+              href={s.url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-[11px] text-[#3B82F6]/80 hover:text-[#3B82F6] hover:bg-[#3B82F6]/10 px-1.5 py-0.5 rounded transition-colors"
+              title={s.title || s.url}
+            >
+              <Globe size={9} className="shrink-0" />
+              <span className="truncate max-w-[120px]">{s.domain || s.url}</span>
+              <ExternalLink size={8} className="shrink-0" />
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // 多源采集进度条（4 阶段可视化）
-function StageProgress({ current }: { current: StageKey | null }) {
+function StageProgress({ current, elapsed }: { current: StageKey | null; elapsed: number }) {
   if (!current) return null
   const idx = STAGE_LIST.findIndex((s) => s.key === current)
+  const isDone = current === 'done'
   return (
     <div className="rounded-lg bg-[#8B5CF6]/5 border border-[#8B5CF6]/25 px-3 py-2.5">
-      <div className="flex items-center gap-1.5 mb-2">
-        <Loader2 size={12} className="animate-spin text-[#A78BFA]" />
-        <span className="text-[11px] text-[#A78BFA] font-medium">多源采集中...</span>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          {isDone
+            ? <CheckCircle2 size={12} className="text-emerald-400" />
+            : <Loader2 size={12} className="animate-spin text-[#A78BFA]" />}
+          <span className="text-[11px] text-[#A78BFA] font-medium">
+            {isDone ? '采集完成' : '多源采集中...'}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 text-[10px] text-gray-500">
+          {!isDone && <span className="text-gray-600">预计约 30s</span>}
+          <span className={isDone ? 'text-emerald-400' : 'text-[#A78BFA]/70 tabular-nums'}>
+            {isDone ? `共用时 ${elapsed}s` : `已用 ${elapsed}s`}
+          </span>
+        </div>
       </div>
       <div className="flex items-center gap-1">
         {STAGE_LIST.map((s, i) => {
           const Icon = s.icon
-          const done = i < idx
-          const active = i === idx
+          const done = isDone || i < idx
+          const active = !isDone && i === idx
           return (
             <div key={s.key} className="flex items-center gap-1 flex-1">
               <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] flex-1 justify-center
@@ -165,7 +221,7 @@ function StageProgress({ current }: { current: StageKey | null }) {
                 <span className="whitespace-nowrap">{s.label}</span>
               </div>
               {i < STAGE_LIST.length - 1 && (
-                <div className={`h-px w-2 shrink-0 ${i < idx ? 'bg-[#8B5CF6]/40' : 'bg-gray-700'}`} />
+                <div className={`h-px w-2 shrink-0 ${i < idx || isDone ? 'bg-[#8B5CF6]/40' : 'bg-gray-700'}`} />
               )}
             </div>
           )
@@ -243,7 +299,7 @@ export default function CustomersPage() {
   const [memberList, setMemberList] = useState<any[]>([])
   const [selectedUserId, setSelectedUserId] = useState<number | string>('')
   
-  const [form, setForm] = useState({ name: '', industry: '', status: '潜在', core_products: '', business_scope: '', scale: '', profile: '', recent_news: '', logo_url: '', website: '', ai_initiatives: '', ai_evidence: '' })
+  const [form, setForm] = useState({ name: '', industry: '', status: '潜在', core_products: '', business_scope: '', scale: '', profile: '', recent_news: '', recent_news_evidence: '', logo_url: '', website: '', ai_initiatives: '', ai_evidence: '' })
   const [saving, setSaving] = useState(false)
   const [search, setSearch] = useState('')
   const [selectedIndustry, setSelectedIndustry] = useState<string>('')
@@ -335,7 +391,7 @@ export default function CustomersPage() {
   }, [expandedCustomerId])
 
   const resetForm = () => {
-    setForm({ name: '', industry: '', status: '潜在', core_products: '', business_scope: '', scale: '', profile: '', recent_news: '', logo_url: '', website: '', ai_initiatives: '', ai_evidence: '' })
+    setForm({ name: '', industry: '', status: '潜在', core_products: '', business_scope: '', scale: '', profile: '', recent_news: '', recent_news_evidence: '', logo_url: '', website: '', ai_initiatives: '', ai_evidence: '' })
     setEditingId(null)
     setCompanyKeyword('')
     setCompanyResults([])
@@ -347,6 +403,7 @@ export default function CustomersPage() {
       name: c.name, industry: c.industry || '', status: c.status,
       core_products: c.core_products || '', business_scope: c.business_scope || '',
       scale: c.scale || '', profile: c.profile || '', recent_news: c.recent_news || '',
+      recent_news_evidence: c.recent_news_evidence || '',
       logo_url: c.logo_url || '', website: c.website || '',
       ai_initiatives: c.ai_initiatives || '',
       ai_evidence: c.ai_evidence || '',
@@ -395,7 +452,7 @@ export default function CustomersPage() {
       setShowForm(false)
       resetForm()
       loadCustomers()
-      showToast(editingId ? '客户信息已更新' : '客户创建成功', 'success')
+      showToast('客户信息已保存', 'success')
     } catch {
       showToast('保存请求失败', 'error')
     } finally { setSaving(false) }
@@ -431,7 +488,7 @@ export default function CustomersPage() {
     showToast('客户已删除', 'success')
   }
 
-  const handleSearchCompany = async () => {
+  const handleSearchCompany = async (refresh = false) => {
     if (!companyKeyword.trim() || companyKeyword.trim().length < 2) return
     setSearchingCompany(true)
     setCompanyResults([])
@@ -439,17 +496,26 @@ export default function CustomersPage() {
       const res = await fetch('/api/v1/customers/search-company', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keyword: companyKeyword.trim() }),
+        body: JSON.stringify({ keyword: companyKeyword.trim(), refresh }),
       })
       const data = await res.json()
-      if (data.results?.length > 0) {
-        setCompanyResults(data.results)
+      const errItem = Array.isArray(data.results) ? data.results.find((r: any) => r?._error) : null
+      const valid = Array.isArray(data.results) ? data.results.filter((r: any) => r && !r._error) : []
+      if (valid.length > 0) {
+        setCompanyResults(valid)
         setShowCompanyDropdown(true)
+      } else if (refresh) {
+        // 诊断模式：展示真实原因（Provider 被跳过 / API 报错 / 解析为空）
+        const reason = data.diagnostics?.reason || data.diagnostics?.fatal || errItem?._error
+          || '未找到匹配的公司，且未取得诊断信息，请查看后台运行日志。'
+        showToast(`诊断结果：${reason}`, 'error')
       } else {
-        showToast('未找到匹配的公司，请尝试更具体的关键词', 'info')
+        // 普通搜索无结果 → 自动发起一次绕过缓存的诊断，告诉用户真实原因
+        showToast('未找到匹配公司，正在诊断原因…', 'info')
+        await handleSearchCompany(true)
       }
     } catch {
-      showToast('公司搜索失败，请检查 AI 模型配置', 'error')
+      showToast('公司搜索请求失败，请检查网络或后端服务', 'error')
     } finally {
       setSearchingCompany(false)
     }
@@ -463,11 +529,20 @@ export default function CustomersPage() {
   }
 
   const [fetchStage, setFetchStage] = useState<StageKey | null>(null)
+  const [fetchElapsed, setFetchElapsed] = useState(0)
   const stageTimersRef = useRef<ReturnType<typeof setTimeout>[]>([])
+  const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const clearStageTimers = () => {
     stageTimersRef.current.forEach(clearTimeout)
     stageTimersRef.current = []
+  }
+
+  const stopElapsedTimer = () => {
+    if (elapsedTimerRef.current) {
+      clearInterval(elapsedTimerRef.current)
+      elapsedTimerRef.current = null
+    }
   }
 
   const handleFetchCompanyInfo = async () => {
@@ -475,7 +550,11 @@ export default function CustomersPage() {
     setFetchingCompanyInfo(true)
     setCompanyInfo(null)
     setFetchStage('tavily')
+    setFetchElapsed(0)
     clearStageTimers()
+    stopElapsedTimer()
+    // 每秒更新已用时
+    elapsedTimerRef.current = setInterval(() => setFetchElapsed((s) => s + 1), 1000)
     // 按时间切换阶段（兜底，避免后端卡住时 UI 一直停留在 tavily）
     stageTimersRef.current = [
       setTimeout(() => setFetchStage('site'), 3500),
@@ -492,8 +571,9 @@ export default function CustomersPage() {
       })
       const data = await res.json()
       clearStageTimers()
+      stopElapsedTimer()
       setFetchStage('done')
-      setTimeout(() => setFetchStage(null), 1500)
+      setTimeout(() => setFetchStage(null), 2000)
       if (data && Object.keys(data).length > 0) {
         setCompanyInfo(data)
         // 自动填充表单
@@ -505,6 +585,7 @@ export default function CustomersPage() {
           scale: data.scale || prev.scale || '',
           profile: data.profile || prev.profile || '',
           recent_news: data.recent_news || prev.recent_news || '',
+          recent_news_evidence: data.recent_news_evidence || prev.recent_news_evidence || '',
           logo_url: data.logo_url || prev.logo_url || '',
           website: data.website || prev.website || '',
           ai_initiatives: data.ai_initiatives || prev.ai_initiatives || '',
@@ -520,6 +601,7 @@ export default function CustomersPage() {
       }
     } catch {
       clearStageTimers()
+      stopElapsedTimer()
       setFetchStage(null)
       showToast('公司信息获取失败，请检查 AI 模型配置', 'error')
     } finally {
@@ -533,7 +615,11 @@ export default function CustomersPage() {
       const res = await fetch(`/api/v1/customers/${customerId}/refresh-news`, { method: 'POST' })
       const data = await res.json()
       if (data.recent_news) {
-        setCustomers((prev) => prev.map((c) => c.id === customerId ? { ...c, recent_news: data.recent_news } : c))
+        setCustomers((prev) => prev.map((c) => c.id === customerId ? {
+          ...c,
+          recent_news: data.recent_news,
+          recent_news_evidence: data.recent_news_evidence ?? c.recent_news_evidence,
+        } : c))
       }
     } catch {
       showToast('刷新动态失败，请检查 AI 模型配置', 'error')
@@ -580,20 +666,15 @@ export default function CustomersPage() {
         right={
           <>
             {memberList.length > 1 && (
-              <div className="relative">
-                <select
-                  value={selectedUserId}
-                  onChange={e => setSelectedUserId(e.target.value)}
-                  style={{ colorScheme: 'dark' }}
-                  className="appearance-none pl-3 pr-7 py-2 rounded-xl bg-bg-card border border-border text-xs text-gray-300 outline-none focus:border-[#3B82F6]/50 cursor-pointer transition-colors hover:border-gray-500"
-                >
-                  <option value="">全部成员</option>
-                  {memberList.map(m => (
-                    <option key={m.id} value={m.id}>{m.name || m.username}</option>
-                  ))}
-                </select>
-                <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500" />
-              </div>
+              <SearchableSelect
+                options={[
+                  { id: '', label: '全部成员' },
+                  ...memberList.map(m => ({ id: String(m.id), label: m.name || m.username })),
+                ]}
+                value={selectedUserId}
+                onChange={(v) => setSelectedUserId(v === 0 ? '' : String(v))}
+                clearValue=""
+              />
             )}
             <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-bg-hover border border-border focus-within:border-[#3B82F6]/50 transition-colors">
               <SearchIcon size={14} className="text-gray-500" />
@@ -942,7 +1023,10 @@ export default function CustomersPage() {
                             {refreshingNewsId === c.id ? '刷新中' : '刷新'}
                           </button>
                         </div>
-                        <p className="text-sm text-gray-300 leading-relaxed">{c.recent_news}</p>
+                        <RecentNewsBlock
+                          text={c.recent_news!}
+                          sources={parseNewsSources(c.recent_news_evidence)}
+                        />
                       </div>
                     )}
                     {c.ai_initiatives && (
@@ -997,7 +1081,7 @@ export default function CustomersPage() {
                   )}
                 </div>
                 <button
-                  onClick={handleSearchCompany}
+                  onClick={() => handleSearchCompany()}
                   disabled={searchingCompany || companyKeyword.trim().length < 2}
                   className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#8B5CF6] text-white text-xs font-medium hover:bg-purple-600 disabled:opacity-50 transition-colors whitespace-nowrap"
                 >
@@ -1045,7 +1129,7 @@ export default function CustomersPage() {
                   )}
                   {fetchingCompanyInfo && (
                     <span className="flex items-center gap-1 px-3 py-2 text-xs text-gray-400">
-                      <Loader2 size={13} className="animate-spin" />获取中...
+                      <Loader2 size={13} className="animate-spin" />采集中...
                     </span>
                   )}
                 </div>
@@ -1115,9 +1199,12 @@ export default function CustomersPage() {
                     {companyInfo.recent_news && (
                       <div className="flex items-start gap-2">
                         <TrendingUp size={13} className="text-gray-500 mt-0.5 shrink-0" />
-                        <div>
+                        <div className="flex-1 min-w-0">
                           <span className="text-[11px] text-gray-500">近期动向</span>
-                          <p className="text-xs text-gray-300">{companyInfo.recent_news}</p>
+                          <RecentNewsBlock
+                            text={companyInfo.recent_news}
+                            sources={parseNewsSources(companyInfo.recent_news_evidence)}
+                          />
                         </div>
                       </div>
                     )}
@@ -1136,7 +1223,7 @@ export default function CustomersPage() {
 
               {fetchStage && (
                 <div className="mt-2">
-                  <StageProgress current={fetchStage} />
+                  <StageProgress current={fetchStage} elapsed={fetchElapsed} />
                 </div>
               )}
 
@@ -1147,10 +1234,12 @@ export default function CustomersPage() {
               </div>
               <div className="pt-2 border-t border-border">
                 <label className="block text-xs text-gray-400 mb-1">状态</label>
-                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6]">
-                  {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
+                <SearchableSelect
+                  options={statusOptions.map(s => ({ id: s, label: s }))}
+                  value={form.status}
+                  onChange={(v) => setForm({ ...form, status: v === 0 ? '' : String(v) })}
+                  clearValue=""
+                />
               </div>
 
               {/* 详细信息 */}
@@ -1195,6 +1284,14 @@ export default function CustomersPage() {
                   </div>
                   <div>
                     <label className="block text-[11px] text-gray-500 mb-1">近期动向</label>
+                    {form.recent_news && form.recent_news_evidence && (
+                      <div className="mb-1.5 max-h-40 overflow-y-auto">
+                        <RecentNewsBlock
+                          text={form.recent_news}
+                          sources={parseNewsSources(form.recent_news_evidence)}
+                        />
+                      </div>
+                    )}
                     <textarea value={form.recent_news} onChange={(e) => setForm({ ...form, recent_news: e.target.value })} rows={2}
                       className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6] resize-none" placeholder="如 最近融资、新产品发布等" />
                   </div>
@@ -1215,10 +1312,11 @@ export default function CustomersPage() {
                       )}
                     </div>
                     {form.ai_initiatives ? (
-                      <div className="rounded-lg bg-[#8B5CF6]/5 border border-[#8B5CF6]/25 p-2.5 max-h-48 overflow-y-auto">
-                        <div className="text-[11px] text-gray-300 leading-relaxed prose prose-invert prose-xs max-w-none [&_ul]:list-disc [&_ul]:pl-4 [&_li]:my-0.5 [&_p]:my-0.5 [&_a]:text-[#A78BFA] [&_a]:underline break-words">
-                          <ReactMarkdown>{form.ai_initiatives}</ReactMarkdown>
-                        </div>
+                      <div className="max-h-56 overflow-y-auto">
+                        <AIInitiativeBlock
+                          text={form.ai_initiatives}
+                          evidence={parseAIEvidence(form.ai_evidence)}
+                        />
                         <textarea
                           value={form.ai_initiatives}
                           onChange={(e) => setForm({ ...form, ai_initiatives: e.target.value })}

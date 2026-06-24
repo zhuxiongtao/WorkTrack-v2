@@ -14,9 +14,13 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# 安装 Nginx 和 PostgreSQL 客户端（用于 pg_isready 健康检查）
+ENV TZ=Asia/Shanghai
+
+# 安装 Nginx、PostgreSQL 客户端和 tzdata（时区支持）
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends nginx postgresql-client \
+    && apt-get install -y --no-install-recommends nginx postgresql-client tzdata \
+    && ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
+    && echo "Asia/Shanghai" > /etc/timezone \
     && rm -rf /var/lib/apt/lists/*
 
 # 安装 Python 依赖

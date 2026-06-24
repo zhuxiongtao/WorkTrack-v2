@@ -1,4 +1,5 @@
 from datetime import datetime, timezone, timedelta
+from app.utils.time import BEIJING_TZ, now
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session, select, func
@@ -19,7 +20,7 @@ def _require_admin(current_user: User = Depends(get_current_user)):
 
 
 def _since(days: int) -> datetime:
-    return datetime.now(timezone.utc) - timedelta(days=days)
+    return now() - timedelta(days=days)
 
 
 @router.get("/by-model")
@@ -136,6 +137,7 @@ def usage_daily_trend(
             func.count(ModelUsageLog.id).label("calls"),
             func.sum(ModelUsageLog.input_tokens).label("input_tokens"),
             func.sum(ModelUsageLog.output_tokens).label("output_tokens"),
+            func.sum(ModelUsageLog.cache_read_tokens).label("cache_read_tokens"),
             func.sum(ModelUsageLog.total_tokens).label("total_tokens"),
         )
         .where(ModelUsageLog.created_at >= since)
@@ -149,6 +151,7 @@ def usage_daily_trend(
             "calls": row.calls,
             "input_tokens": row.input_tokens or 0,
             "output_tokens": row.output_tokens or 0,
+            "cache_read_tokens": row.cache_read_tokens or 0,
             "total_tokens": row.total_tokens or 0,
         }
         for row in rows

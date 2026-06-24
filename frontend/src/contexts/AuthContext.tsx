@@ -16,6 +16,12 @@ interface User {
   must_change_password?: boolean
   permissions?: string[]
   roles?: string[]
+  job_title?: string | null
+  department_id?: number | null
+  department_name?: string | null
+  leader_id?: number | null
+  leader_name?: string | null
+  created_at?: string | null
 }
 
 interface AuthContextValue {

@@ -9,13 +9,14 @@ from app.models.system_preference import SystemPreference
 from app.models.ai_prompt import AIPrompt
 from app.models.user import User
 from app.auth import get_current_user, require_permission, has_permission
-from app.services.ai_service import _extract_message_text, _get_active_provider, _get_client
+from app.services.ai_service import _extract_message_text, _get_active_provider, _get_client, _record_usage_silent
 from app.config import settings as app_settings
 
 import os
 import json
 import time
 from datetime import datetime, timezone
+from app.utils.time import BEIJING_TZ, now
 
 router = APIRouter(prefix="/api/v1/settings", tags=["设置"])
 
@@ -1104,7 +1105,7 @@ def update_preset(preset_id: int, data: PresetUpdate, db: Session = Depends(get_
     for key, value in payload.items():
         setattr(preset, key, value)
     from datetime import datetime, timezone
-    preset.updated_at = datetime.now(timezone.utc)
+    preset.updated_at = now()
     db.add(preset)
     db.commit()
     db.refresh(preset)
@@ -1336,8 +1337,8 @@ DEFAULT_PROMPTS = {
         "task_type": "project_analysis",
         "label": "📈 项目分析",
         "desc": "AI 分析销售项目状态时使用的提示词",
-        "system_prompt": "你是专业的销售项目管理助手。综合分析销售项目的跟进现状，给出客观的状态评估、潜在风险和具体的下一步行动建议。结合客户背景、项目进展和历史会议作出判断，输出简洁专业，避免空洞套话。",
-        "user_prompt_template": "请分析以下项目：\n\n【基本信息】\n项目名称: {name}\n当前状态: {status}\n涉及产品: {product}\n项目场景: {scenario}\n销售负责人: {sales_person}\n商机金额: {amount}\n截止日期: {deadline}\n\n【客户信息】\n客户名称: {customer_name}\n客户行业: {customer_industry}\n客户规模: {customer_scale}\n核心产品: {customer_products}\n客户简介: {customer_profile}\n\n【跟进记录】\n{progress}\n\n【关联会议】\n{meetings}\n\n请给出：\n1. 当前状态评估（结合跟进记录和客户情况）\n2. 风险提示（考虑客户行业、规模、项目进展）\n3. 后续建议（具体的下一步行动）",
+        "system_prompt": "你是销售项目管理助手。严格在100字以内输出：①当前最大卡点或风险（一句话点明）②最关键的下一步行动（一条可执行建议）。不列小标题，不重复已知信息，不写套话。",
+        "user_prompt_template": "请分析以下项目：\n\n【基本信息】\n项目名称: {name}\n当前状态: {status}\n涉及产品: {product}\n项目场景: {scenario}\n销售负责人: {sales_person}\n商机金额: {amount}\n\n【客户信息】\n客户名称: {customer_name}\n客户行业: {customer_industry}\n客户规模: {customer_scale}\n核心产品: {customer_products}\n客户简介: {customer_profile}\n\n【跟进记录】\n{progress}\n\n【关联会议】\n{meetings}\n\n请在100字内给出：核心卡点/风险 + 最关键的下一步行动。",
         "variables": ["{name}", "{status}", "{product}", "{scenario}", "{sales_person}", "{amount}", "{deadline}", "{customer_name}", "{customer_industry}", "{customer_scale}", "{customer_products}", "{customer_profile}", "{progress}", "{meetings}"],
     },
     "insight_week": {
@@ -1595,6 +1596,7 @@ def generate_ai_prompt(data: AIPromptGenerateRequest, db: Session = Depends(get_
             temperature=0.5,
             max_tokens=800,
         )
+        _record_usage_silent(db, response, current_user.id, getattr(provider, 'id', None), model, "system")
         text = _extract_message_text(response.choices[0].message)
         # 尝试解析 JSON
         import re as _re
@@ -1697,7 +1699,7 @@ def system_info(db: Session = Depends(get_session)):
         "total_users": total_users,
         "admin_users": admin_count,
         "uptime": uptime_str,
-        "server_time": datetime.now(timezone.utc).isoformat(),
+        "server_time": now().isoformat(),
     }
 
 
@@ -1714,11 +1716,12 @@ ALLOWED_IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico'}
 class BrandConfigUpdate(BaseModel):
     site_title: str = ""
     logo_url: str = ""
+    frontend_url: str = ""
 
 
 @router.get("/branding")
 def get_branding(db: Session = Depends(get_session)):
-    """获取品牌配置（logo 和站点标题），公开访问"""
+    """获取品牌配置（logo、站点标题、前端地址），公开访问"""
     logo_pref = db.exec(
         select(SystemPreference).where(
             SystemPreference.key == "brand_logo_url",
@@ -1731,9 +1734,16 @@ def get_branding(db: Session = Depends(get_session)):
             SystemPreference.user_id == None,
         )
     ).first()
+    fe_pref = db.exec(
+        select(SystemPreference).where(
+            SystemPreference.key == "brand_frontend_url",
+            SystemPreference.user_id == None,
+        )
+    ).first()
     return {
         "logo_url": logo_pref.value if logo_pref else "",
         "site_title": title_pref.value if title_pref else "WorkTrack",
+        "frontend_url": fe_pref.value if fe_pref else "",
     }
 
 
@@ -1741,7 +1751,11 @@ def get_branding(db: Session = Depends(get_session)):
 def update_branding(data: BrandConfigUpdate, db: Session = Depends(get_session),
                     _admin: User = Depends(require_permission("settings:edit"))):
     """更新品牌配置（仅管理员）"""
-    for key, value in [("brand_site_title", data.site_title), ("brand_logo_url", data.logo_url)]:
+    for key, value in [
+        ("brand_site_title", data.site_title),
+        ("brand_logo_url", data.logo_url),
+        ("brand_frontend_url", data.frontend_url),
+    ]:
         pref = db.exec(
             select(SystemPreference).where(
                 SystemPreference.key == key,
@@ -1753,7 +1767,7 @@ def update_branding(data: BrandConfigUpdate, db: Session = Depends(get_session),
         else:
             db.add(SystemPreference(key=key, value=value, user_id=None))
     db.commit()
-    return {"message": "品牌配置已保存", "site_title": data.site_title, "logo_url": data.logo_url}
+    return {"message": "品牌配置已保存", "site_title": data.site_title, "logo_url": data.logo_url, "frontend_url": data.frontend_url}
 
 
 @router.post("/branding/upload-logo")

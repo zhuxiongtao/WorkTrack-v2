@@ -7,6 +7,7 @@
 - 差异分析：销售 call_vol vs 供应 call_vol、客户报价 vs 实调
 """
 from datetime import datetime, timezone
+from app.utils.time import BEIJING_TZ, now
 from typing import Optional
 from sqlmodel import SQLModel, Field
 
@@ -35,8 +36,8 @@ class ReconcileSales(SQLModel, table=True):
     diff_amount: float = 0.0                   # 与客户报价单差异金额
 
     remarks: Optional[str] = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())
+    updated_at: datetime = Field(default_factory=lambda: now())
 
 
 # ──── 供应对账 ────
@@ -63,8 +64,8 @@ class ReconcileSupply(SQLModel, table=True):
     diff_amount: float = 0.0                   # 与厂商账单差异
 
     remarks: Optional[str] = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())
+    updated_at: datetime = Field(default_factory=lambda: now())
 
 
 # ──── 财务总账 ────
@@ -96,8 +97,8 @@ class ReconcileSummary(SQLModel, table=True):
     finalized_at: Optional[datetime] = None
     remarks: Optional[str] = None
 
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())
+    updated_at: datetime = Field(default_factory=lambda: now())
 
 
 # ──── 差异分析 ────
@@ -126,5 +127,5 @@ class ReconcileDiff(SQLModel, table=True):
     resolution: Optional[str] = None           # 处理结果
 
     status: str = "未处理"                     # 未处理 / 已解释 / 已处理 / 已结案
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())
+    updated_at: datetime = Field(default_factory=lambda: now())

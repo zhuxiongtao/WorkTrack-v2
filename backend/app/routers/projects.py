@@ -9,7 +9,7 @@ from app.auth import get_current_user, require_permission
 from app.schemas import ProjectCreate, ProjectUpdate, ProjectOut, MeetingNoteOut
 from app.services.vector_store import index_document, delete_document
 from app.services.ai_service import generate_project_analysis
-from app.utils.time import utc_now
+from app.utils.time import BEIJING_TZ, now, utc_now
 
 router = APIRouter(prefix="/api/v1/projects", tags=["项目"])
 
@@ -139,7 +139,8 @@ def list_projects(
 @router.post("", response_model=ProjectOut, status_code=201)
 def create_project(data: ProjectCreate, background_tasks: BackgroundTasks, current_user: User = Depends(require_permission("project:create")), db: Session = Depends(get_session)):
     meeting_ids = data.meeting_ids or []
-    create_data = data.model_dump(exclude={"meeting_ids"})
+    contract_ids = data.contract_ids or []
+    create_data = data.model_dump(exclude={"meeting_ids", "contract_ids"})
     create_data["user_id"] = current_user.id
     if not create_data.get("status"):
         create_data["status"] = "待立项"
@@ -153,6 +154,14 @@ def create_project(data: ProjectCreate, background_tasks: BackgroundTasks, curre
             meeting = db.get(MeetingNote, mid)
             if meeting and meeting.user_id == current_user.id:
                 meeting.project_id = project.id
+    # 关联合同
+    if contract_ids:
+        from app.models.contract import Contract
+        for cid in contract_ids:
+            contract = db.get(Contract, cid)
+            if contract:
+                contract.project_id = project.id
+    if meeting_ids or contract_ids:
         db.commit()
     background_tasks.add_task(
         index_document,
@@ -191,11 +200,13 @@ def update_project(project_id: int, data: ProjectUpdate, background_tasks: Backg
     if not check_data_access(project.user_id, current_user, db):
         raise HTTPException(status_code=403, detail="无权编辑该项目")
     meeting_ids = data.meeting_ids
-    update_data = data.model_dump(exclude={"meeting_ids"}, exclude_unset=True)
+    contract_ids = data.contract_ids
+    update_data = data.model_dump(exclude={"meeting_ids", "contract_ids"}, exclude_unset=True)
     for key, value in update_data.items():
         setattr(project, key, value)
-    if project.deal_amount and project.deal_amount > 0:
-        project.gross_margin = round((1 - (project.cost_amount or 0) / project.deal_amount) * 100, 2)
+    if project.deal_amount and project.deal_amount > 0 and project.cost_amount is not None:
+        deal_yuan = project.deal_amount * 10000 if project.deal_amount_unit == '万元' else project.deal_amount
+        project.gross_margin = round((1 - project.cost_amount / deal_yuan) * 100, 2)
     else:
         project.gross_margin = None
     project.updated_at = utc_now()
@@ -213,6 +224,19 @@ def update_project(project_id: int, data: ProjectUpdate, background_tasks: Backg
             meeting = db.get(MeetingNote, mid)
             if meeting and meeting.user_id == current_user.id:
                 meeting.project_id = project_id
+        db.commit()
+    # 更新合同关联（如果提供了 contract_ids）
+    if contract_ids is not None:
+        from app.models.contract import Contract
+        # 解除本项目原有合同关联
+        old_contracts = db.exec(select(Contract).where(Contract.project_id == project_id)).all()
+        for c in old_contracts:
+            c.project_id = None
+        # 设置新关联
+        for cid in contract_ids:
+            contract = db.get(Contract, cid)
+            if contract:
+                contract.project_id = project_id
         db.commit()
     background_tasks.add_task(
         index_document,
@@ -327,14 +351,14 @@ def submit_project_charter(
 
     if inst is None:
         project.status = "进行中"
-        project.updated_at = datetime.now(timezone.utc)
+        project.updated_at = now()
         db.add(project)
         db.commit()
         return {"approval_id": None, "status": project.status, "message": "无需审批，项目已直接立项"}
 
     if inst.status == "pending":
         project.status = "审批中"
-        project.updated_at = datetime.now(timezone.utc)
+        project.updated_at = now()
         db.add(project)
         db.commit()
 

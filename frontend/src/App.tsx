@@ -13,7 +13,8 @@ import AppSidebar from './components/layout/AppSidebar'
 import AppHeader from './components/layout/AppHeader'
 import AppRoutes from './components/layout/AppRoutes'
 import AdminLayout from './components/layout/AdminLayout'
-import AIFab from './components/AIFab'
+import { MobileBottomNav } from './components/layout/MobileBottomNav'
+
 import { GlobalTickerBar } from './components/GlobalTickerBar'
 
 function AppContent() {
@@ -95,6 +96,8 @@ function AppContent() {
             } else {
               setHomePage(computeDefaultHome())
             }
+          } else {
+            setHomePage(computeDefaultHome())
           }
         })
         .catch(() => {})
@@ -191,16 +194,16 @@ function AppContent() {
           brandTitle={brandTitle}
           onOpenSidebar={() => setSidebarOpen(true)}
         />
-        <div className="p-3 md:px-6 md:py-8 safe-area-bottom">
+        <div className="p-3 md:px-6 md:py-8 pb-20 md:pb-8 safe-area-bottom">
           <AppRoutes homePage={homePage} />
         </div>
       </main>
 
-      {/* L2: AI 浮动入口按钮（任意页面 1 键直达，AI 页面自身隐藏） */}
-      <AIFab
-        visible={location.pathname !== '/ai'}
-        canUse={hasPermission('ai:use')}
+      <MobileBottomNav
+        homePage={homePage}
+        onOpenSidebar={() => setSidebarOpen(true)}
       />
+
         </>
       )}
         </>

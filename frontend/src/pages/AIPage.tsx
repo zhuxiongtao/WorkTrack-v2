@@ -71,7 +71,7 @@ interface Conversation {
 function greeting(): string {
   const h = new Date().getHours()
   if (h < 6)  return '夜深了，还在工作？'
-  if (h < 12) return '早上好！'
+  if (h < 11) return '早上好！'
   if (h < 14) return '中午好！'
   if (h < 18) return '下午好！'
   return '晚上好！'
@@ -209,6 +209,7 @@ function ToolStepsBubble({ steps }: { steps: ToolStep[] }) {
 
 export default function AIPage() {
   const { confirm: showConfirm } = useToast()
+  const [greetText] = useState(greeting)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
@@ -575,7 +576,7 @@ export default function AIPage() {
                      style={{ background: 'linear-gradient(135deg,#7C3AED,#A855F7,#EC4899)', boxShadow: '0 8px 24px rgba(124,58,237,0.35)' }}>
                   <Sparkles size={24} color="#fff" strokeWidth={2.2} />
                 </div>
-                <p className="text-xl font-bold text-gray-900 dark:text-white">{greeting()}</p>
+                <p className="text-xl font-bold text-gray-900 dark:text-white">{greetText}</p>
                 <p className="text-sm text-gray-500 mt-1">我是 WorkTrack AI，有什么可以帮你？</p>
               </div>
 

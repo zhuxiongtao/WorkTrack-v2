@@ -564,6 +564,7 @@ def _record_usage_silent(db, response, user_id: int, provider_id, model_name: st
             total_tokens=total_t or (input_t + output_t),
         )
         db.add(log)
+        db.commit()
     except Exception:
         pass
 
@@ -802,7 +803,7 @@ def summarize_daily_report(content: str, db: Session, user_id: int = 0) -> str:
         ],
         **params,
     )
-    _record_usage_silent(db, response, user_id, getattr(provider, 'id', None), model, "chat")
+    _record_usage_silent(db, response, user_id, getattr(provider, 'id', None), model, "daily_summary")
     return _extract_message_text(response.choices[0].message)
 
 
@@ -834,7 +835,7 @@ def extract_meeting_minutes(content: str, db: Session, user_id: int = 0) -> dict
         ],
         **params,
     )
-    _record_usage_silent(db, response, user_id, getattr(provider, 'id', None), model, "chat")
+    _record_usage_silent(db, response, user_id, getattr(provider, 'id', None), model, "meeting_extract")
     raw_text = _extract_message_text(response.choices[0].message) or "{}"
     try:
         result = json.loads(raw_text)
@@ -866,13 +867,22 @@ def generate_project_analysis(project_id: int, db: Session, user_id: int = 0) ->
     if len(progress_text) > 3000:
         progress_text = progress_text[-3000:] + "\n\n...(以上为最近跟进记录)"
 
+    _CURRENCY_SYMBOL = {'CNY': '¥', 'USD': '$', 'HKD': 'HK$', 'EUR': '€', 'JPY': '¥'}
+
+    def _fmt_amount(value, currency, unit):
+        sym = _CURRENCY_SYMBOL.get(currency or 'CNY', currency or '')
+        num = f"{value:,.2f}".rstrip('0').rstrip('.')
+        return f"{sym}{num}{unit}"
+
     amount_text = "未设置"
     if project.opportunity_amount or project.deal_amount:
         parts = []
         if project.opportunity_amount:
-            parts.append(f"商机金额: {project.opportunity_amount} {project.currency or 'CNY'}")
+            unit = getattr(project, 'opportunity_amount_unit', '万元') or '万元'
+            parts.append(f"商机金额: {_fmt_amount(project.opportunity_amount, project.currency, unit)}")
         if project.deal_amount:
-            parts.append(f"成交金额: {project.deal_amount} {project.currency or 'CNY'}")
+            unit = getattr(project, 'deal_amount_unit', '万元') or '万元'
+            parts.append(f"成交金额: {_fmt_amount(project.deal_amount, project.currency, unit)}")
         amount_text = " / ".join(parts)
 
     system_prompt, template = _get_prompt("project_analysis", db, user_id)
@@ -901,7 +911,7 @@ def generate_project_analysis(project_id: int, db: Session, user_id: int = 0) ->
         ],
         temperature=0.5,
     )
-    _record_usage_silent(db, response, user_id, getattr(provider, 'id', None), model, "chat")
+    _record_usage_silent(db, response, user_id, getattr(provider, 'id', None), model, "project_analysis")
     return _extract_message_text(response.choices[0].message)
 
 
@@ -1010,23 +1020,31 @@ def organize_transcript(raw_text: str, db: Session, user_id: int = 0) -> str:
             func_defaults={"temperature": 0.3},  # 业务软默认：会议整理要稳定
         ),
     )
-    _record_usage_silent(db, response, user_id, getattr(provider, 'id', None), model, "chat")
+    _record_usage_silent(db, response, user_id, getattr(provider, 'id', None), model, "meeting_organize")
     return _extract_message_text(response.choices[0].message)
 
 
-def search_company_names(keyword: str, db: Session, user_id: int = 0) -> list[dict]:
+def search_company_names(keyword: str, db: Session, user_id: int = 0, diag: dict | None = None) -> list[dict]:
     """根据关键词返回匹配的公司全称候选列表（用于"安踏 → 安踏体育..."联想）
 
     加速策略：
     1. 进程内 TTL 缓存 10 分钟（同一关键词不重复打 LLM/Tavily）
     2. LLM 优先（直接基于内置知识答，1-3s，绝大多数公司 LLM 都认识）
     3. Tavily 仅在 LLM 返回 < 2 条时启用作为兜底（搜网页找小众/新公司）
+
+    diag: 传入 dict 时进入「诊断模式」——绕过缓存实时跑，并把每个 provider 的
+          尝试结果（跳过/报错/空/成功）写入该 dict，供前端/日志定位 prod 问题。
     """
     from app.services.cache import cached_call
 
     if not keyword or not keyword.strip():
         return []
     kw = keyword.strip()
+
+    # 诊断模式：绕过进程内缓存，实时跑并回填 diag
+    if diag is not None:
+        return _search_company_names_impl(kw, db, user_id, diag=diag)
+
     cache_key = f"search_company:u{user_id}:{kw.lower()}"
 
     def _compute() -> list[dict]:
@@ -1036,7 +1054,24 @@ def search_company_names(keyword: str, db: Session, user_id: int = 0) -> list[di
     return results
 
 
-def _search_company_names_impl(keyword: str, db: Session, user_id: int) -> list[dict]:
+def _summarize_company_diag(diag: dict) -> str:
+    """把 diag 里的 provider 尝试结果归纳成一句给用户/管理员看的原因。"""
+    providers = diag.get("providers", [])
+    if not providers:
+        return "没有启用的对话(chat)模型 Provider，请到「模型管理」配置并启用一个对话模型。"
+    outcomes = [p.get("outcome") for p in providers]
+    if any(o == "ok" for o in outcomes):
+        return ""  # 有成功的，不算失败
+    errs = [p for p in providers if p.get("outcome") == "error"]
+    if errs:
+        return f"对话模型调用失败：{errs[0].get('detail', '')[:160]}。请检查该 Provider 的 API Key / base_url / 余额 / 网络可达性。"
+    if all(o == "empty" for o in outcomes):
+        return ("对话模型有响应但未能解析出公司列表（可能该模型不擅长结构化/JSON 输出）。"
+                "建议在「模型管理」为对话任务换一个更强的模型。")
+    return "公司搜索未返回结果，请查看运行日志获取详细原因。"
+
+
+def _search_company_names_impl(keyword: str, db: Session, user_id: int, diag: dict | None = None) -> list[dict]:
     """search_company_names 的实际实现（无缓存）
 
     多 provider fallback：默认走 task_cfg 配置的 provider；调用失败时
@@ -1044,6 +1079,17 @@ def _search_company_names_impl(keyword: str, db: Session, user_id: int) -> list[
     """
     from sqlmodel import select
     from app.models.model_provider import ModelProvider, TaskModelConfig
+
+    def _diag_add(provider, outcome: str, detail: str = "", count: int | None = None):
+        if diag is None:
+            return
+        diag.setdefault("providers", []).append({
+            "name": getattr(provider, "name", "?"),
+            "is_vertex": _is_vertex_ai(provider) if provider else False,
+            "outcome": outcome,   # skipped_vertex | error | empty | ok
+            "detail": detail,
+            "count": count,
+        })
 
     providers_to_try: list[tuple] = []
     primary = _get_active_provider_full(db, "chat", user_id)
@@ -1066,32 +1112,35 @@ def _search_company_names_impl(keyword: str, db: Session, user_id: int) -> list[
         if not chat_model:
             continue
         # 构造一个兼容 (base_url, api_key, model, provider, task_cfg, pm) 的 6 元组
-        if _is_vertex_ai(prov):
-            # Vertex AI 跳过（国内不可达），只占位以便日志展示
-            fake_pm = type("FakePM", (), {"model_name": chat_model.model_name})()
-            providers_to_try.append((None, None, chat_model.model_name, prov, None, fake_pm))
-        else:
-            # 用真实的 chat_model 对象（带 default_temperature 等所有属性）
-            providers_to_try.append((prov.base_url, prov.api_key, chat_model.model_name, prov, None, chat_model))
+        # 用真实的 chat_model 对象（带 default_temperature 等所有属性）
+        providers_to_try.append((prov.base_url, prov.api_key, chat_model.model_name, prov, None, chat_model))
+
+    if diag is not None:
+        diag["providers_considered"] = len(providers_to_try)
 
     last_error = None
+    best_results: list[dict] = []
     for base_url, api_key, model, provider, task_cfg, pm in providers_to_try:
-        # Vertex AI 在国内常不可达（oauth2.googleapis.com 被墙），
-        # 不尝试它，直接跳过避免 120s 死等
-        if _is_vertex_ai(provider):
-            logger.info("search_company: 跳过 Vertex AI provider=%s", provider.name)
-            continue
         try:
             client = _get_client(base_url, api_key, provider)
-            results = _llm_company_names(client, model, task_cfg, pm, db, keyword, with_search_hint=False, user_id=user_id, provider_id=provider.id)
-            if len(results) >= 2:
-                return results
+            partial = _llm_company_names(client, model, task_cfg, pm, db, keyword, with_search_hint=False, user_id=user_id, provider_id=provider.id)
+            if len(partial) >= 2:
+                _diag_add(provider, "ok", f"模型 {model}", count=len(partial))
+                return partial
+            if len(partial) > len(best_results):
+                best_results = partial
+            if not partial:
+                logger.warning("search_company: provider=%s keyword=%r 返回0条，LLM 原始文本可能解析失败", getattr(provider, "name", "?"), keyword)
+                _diag_add(provider, "empty", f"模型 {model} 有响应但解析出 0 条", count=0)
+            else:
+                _diag_add(provider, "ok", f"模型 {model}", count=len(partial))
             last_error = None
         except Exception as e:
             logger.warning("provider=%s LLM 失败: %s", getattr(provider, "name", "?"), e)
+            _diag_add(provider, "error", f"{type(e).__name__}: {str(e)[:200]}")
             last_error = e
             continue
-    results = []
+    results = best_results
 
     # 阶段2：LLM 回答不充分 → Tavily 兜底（搜网页找小众/新公司）
     try:
@@ -1117,8 +1166,18 @@ def _search_company_names_impl(keyword: str, db: Session, user_id: int) -> list[
                     )
                     if len(results2) > len(results):
                         results = results2
+                        if diag is not None:
+                            diag.setdefault("providers", []).append(
+                                {"name": "Tavily兜底", "is_vertex": False,
+                                 "outcome": "ok" if results2 else "empty", "count": len(results2)}
+                            )
         except Exception as e:
             logger.error("Tavily 兜底搜索失败: %s", e)
+            if diag is not None:
+                diag["tavily_error"] = str(e)[:200]
+    if diag is not None:
+        diag["final_count"] = len(results)
+        diag["reason"] = _summarize_company_diag(diag) if not results else ""
     return results
 
 
@@ -1131,10 +1190,8 @@ def _pick_chat_provider(db: Session, user_id: int, exclude_vertex: bool = True):
     # 1) task_cfg 配的
     try:
         b, k, m, prov, tc, pm = _get_active_provider_full(db, "chat", user_id)
-        if prov and (not exclude_vertex or not _is_vertex_ai(prov)):
-            return _get_client(b, k, prov), m, pm
         if prov:
-            tried.add(prov.id)
+            return _get_client(b, k, prov), m, pm
     except Exception:
         pass
     # 2) 其他 is_active 的 chat provider
@@ -1158,6 +1215,20 @@ def _pick_chat_provider(db: Session, user_id: int, exclude_vertex: bool = True):
         if not chat_model:
             continue
         return _get_client(prov.base_url, prov.api_key, prov), chat_model.model_name, chat_model
+    # 3) 如果上面都没找到（比如只有 Vertex AI 且 exclude_vertex=True），放宽限制再试一次
+    if exclude_vertex:
+        for prov in rows:
+            if prov.id in tried:
+                continue
+            if not _is_vertex_ai(prov):
+                continue
+            chat_model = next(
+                (mm for mm in prov.models_rel if "chat" in (mm.supported_task_types or ["chat"])),
+                None,
+            )
+            if not chat_model:
+                continue
+            return _get_client(prov.base_url, prov.api_key, prov), chat_model.model_name, chat_model
     return None, None, None
 
 
@@ -1169,7 +1240,9 @@ def _llm_company_names(client, model, task_cfg, pm, db, keyword: str, with_searc
     )
     params = resolve_chat_params(
         db, model=pm, task_cfg=task_cfg,
-        func_defaults={"temperature": 0.2},  # 业务软默认：稳定简洁
+        func_defaults={"temperature": 0.2},
+        # 强制 text 模式：json_object 模式要求返回对象而非数组，会导致解析失败
+        func_overrides={"response_format": "text"},
     )
     response = client.chat.completions.create(
         model=model,
@@ -1195,7 +1268,7 @@ def _llm_company_names(client, model, task_cfg, pm, db, keyword: str, with_searc
         ],
         **params,
     )
-    _record_usage_silent(db, response, user_id or 0, provider_id, model, "chat")
+    _record_usage_silent(db, response, user_id or 0, provider_id, model, "company_search")
     text = _extract_message_text(response.choices[0].message)
     return _parse_company_names_json(text)
 
@@ -1214,6 +1287,14 @@ def _parse_company_names_json(text: str) -> list[dict]:
         arr = json.loads(cleaned)
         if isinstance(arr, list):
             return [x for x in arr if isinstance(x, dict) and (x.get("name") or x.get("full_name"))][:8]
+        # json_object 模式：模型返回 {"companies": [...]} 包装对象
+        if isinstance(arr, dict):
+            for wrapper_key in ("companies", "results", "data", "list", "items"):
+                val = arr.get(wrapper_key)
+                if isinstance(val, list):
+                    items = [x for x in val if isinstance(x, dict) and (x.get("name") or x.get("full_name"))]
+                    if items:
+                        return items[:8]
     except json.JSONDecodeError:
         pass
     # 3) 从文本里抽第一个 [ ... ] 数组
@@ -1261,6 +1342,7 @@ def fetch_company_info(company_name: str, db: Session, user_id: int = 0, progres
     search_sources: list[dict] = []
     website_sources: list[dict] = []
     news_context = ""
+    news_sources: list[dict] = []
     ai_context = ""
     ai_sources: list[dict] = []
 
@@ -1360,7 +1442,8 @@ def fetch_company_info(company_name: str, db: Session, user_id: int = 0, progres
         try:
             current_year = utc_now().year
             last_year = current_year - 1
-            news_context = search_and_summarize(
+            from app.services.web_search import search_web_with_sources as _swws_news
+            news_context, news_sources = _swws_news(
                 f"{company_name} {current_year} {last_year} 最新新闻 动态 融资 合作 产品发布 财报",
                 db, search_depth="advanced", user_id=user_id, force_tavily=True,
             )
@@ -1497,7 +1580,7 @@ def fetch_company_info(company_name: str, db: Session, user_id: int = 0, progres
         ],
         **params,
     )
-    _record_usage_silent(db, response, user_id, getattr(provider, 'id', None), model, "chat")
+    _record_usage_silent(db, response, user_id, getattr(provider, 'id', None), model, "company_info")
     text = _extract_message_text(response.choices[0].message)
     # 兜底：如果 LLM 没回 ai_initiatives 字段，从 ai_context 提取要点
     fallback_ai = _format_ai_fallback(locals().get('ai_context'))
@@ -1544,7 +1627,14 @@ def fetch_company_info(company_name: str, db: Session, user_id: int = 0, progres
         elif not (isinstance(ai_v, str) and ai_v.strip()):
             result["ai_initiatives"] = fallback_ai
         # 构建 ai_evidence 映射（按行匹配最近的 URL）
-        result["ai_evidence"] = _build_ai_evidence(result.get("ai_initiatives", ""), ai_sources)
+        # 接地搜索路径 ai_sources 为空，用 search_sources 兜底
+        _eff_ai_sources = ai_sources or search_sources
+        result["ai_evidence"] = _build_ai_evidence(result.get("ai_initiatives", ""), _eff_ai_sources)
+        # 构建 recent_news_evidence（最新动态来源）
+        # 接地搜索路径 news_sources 为空，用 search_sources 兜底
+        _eff_news_sources = news_sources or search_sources
+        if _eff_news_sources:
+            result["recent_news_evidence"] = json.dumps(_eff_news_sources[:8], ensure_ascii=False)
         # 附加 sources
         if search_sources:
             result["sources"] = search_sources[:15]  # 截前 15
@@ -1680,7 +1770,7 @@ def _supplement_company_info(company_name: str, result: dict, missing: list[str]
         ],
         **params,
     )
-    _record_usage_silent(db, resp, user_id, getattr(provider, 'id', None), model, "chat")
+    _record_usage_silent(db, resp, user_id, getattr(provider, 'id', None), model, "company_info")
     new_text = _extract_message_text(resp.choices[0].message)
     try:
         new_result = json.loads(new_text)
@@ -1902,24 +1992,26 @@ def _fetch_company_logo(domain: str) -> str:
     return domain if domain else ""
 
 
-def refresh_company_news(company_name: str, db: Session, user_id: int = 0) -> str:
-    """单独刷新公司最新动态，专注于半年内的新闻"""
-    from datetime import datetime
+def refresh_company_news(company_name: str, db: Session, user_id: int = 0) -> tuple[str, list[dict]]:
+    """单独刷新公司最新动态，专注于半年内的新闻。
+
+    返回 (news_text, sources) 二元组，sources 每条格式：
+        {"url": ..., "title": ..., "domain": ...}
+    """
     base_url, api_key, model, provider, task_cfg, pm = _get_active_provider_full(db, "chat", user_id)
     client = _get_client(base_url, api_key, provider)
 
-    # Tavily 搜索最新新闻
+    # 搜索最新新闻（优先接地搜索，回退 Tavily）
     news_context = ""
+    news_sources: list[dict] = []
     try:
-        has_tavily = bool(_get_tavily_api_key(db, user_id))
-        if has_tavily:
-            from app.services.web_search import search_and_summarize as _sas
-            current_year = utc_now().year
-            last_year = current_year - 1
-            news_query = f"{company_name} {current_year} {last_year} 最新新闻 动态 融资 合作 产品发布 财报"
-            news_context = _sas(news_query, db, search_depth="advanced", user_id=user_id)
+        from app.services.web_search import search_web_with_sources as _swws
+        current_year = utc_now().year
+        last_year = current_year - 1
+        news_query = f"{company_name} {current_year} {last_year} 最新新闻 动态 融资 合作 产品发布 财报"
+        news_context, news_sources = _swws(news_query, db, search_depth="advanced", user_id=user_id)
     except Exception as e:
-        logger.error("刷新公司新闻时 Tavily 搜索失败: %s", e)
+        logger.error("刷新公司新闻时搜索失败: %s", e)
 
     current_date = utc_now().strftime("%Y年%m月")
     system_prompt = (
@@ -1937,7 +2029,7 @@ def refresh_company_news(company_name: str, db: Session, user_id: int = 0) -> st
 
     params = resolve_chat_params(
         db, model=pm, task_cfg=task_cfg,
-        func_defaults={"temperature": 0.3},  # 业务软默认：新闻整理要稳定
+        func_defaults={"temperature": 0.3},
         func_overrides={"extra_body": {"enable_search": True}} if not news_context else {},
     )
 
@@ -1949,6 +2041,6 @@ def refresh_company_news(company_name: str, db: Session, user_id: int = 0) -> st
         ],
         **params,
     )
-    _record_usage_silent(db, response, user_id, getattr(provider, 'id', None), model, "chat")
+    _record_usage_silent(db, response, user_id, getattr(provider, 'id', None), model, "company_news")
     text = _extract_message_text(response.choices[0].message)
-    return text.strip()
+    return text.strip(), news_sources

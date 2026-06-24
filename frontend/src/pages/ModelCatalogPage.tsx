@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { PageHeader, SectionHeader, StatusBadge, IconBox, EmptyState } from '../components/design-system'
 import { Cpu, RefreshCw, Globe, Zap, Check, X, Edit3, ExternalLink, Calendar, Sparkles, Loader2, AlertCircle, DollarSign } from 'lucide-react'
+import SearchableSelect from '../components/SearchableSelect'
 
 interface ModelCatalogItem {
   id: number
@@ -286,23 +287,25 @@ export default function ModelCatalogPage() {
           ))}
         </div>
         <div className="flex items-center gap-2">
-          <select
+          <SearchableSelect
+            options={[
+              { id: '', label: '全部地域' },
+              { id: 'domestic', label: '国内' },
+              { id: 'international', label: '国际' },
+            ]}
             value={regionFilter}
-            onChange={e => setRegionFilter(e.target.value)}
-            className="px-2 py-1.5 text-xs rounded-md bg-bg-input border border-border outline-none"
-          >
-            <option value="">全部地域</option>
-            <option value="domestic">国内</option>
-            <option value="international">国际</option>
-          </select>
-          <select
+            onChange={(v) => setRegionFilter(v === 0 ? '' : String(v))}
+            clearValue=""
+          />
+          <SearchableSelect
+            options={[
+              { id: '', label: '全部提供方' },
+              ...providers.map(p => ({ id: p, label: p })),
+            ]}
             value={providerFilter}
-            onChange={e => setProviderFilter(e.target.value)}
-            className="px-2 py-1.5 text-xs rounded-md bg-bg-input border border-border outline-none"
-          >
-            <option value="">全部提供方</option>
-            {providers.map(p => <option key={p} value={p}>{p}</option>)}
-          </select>
+            onChange={(v) => setProviderFilter(v === 0 ? '' : String(v))}
+            clearValue=""
+          />
           <input
             type="text"
             value={search}

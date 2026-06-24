@@ -1,6 +1,7 @@
 """项目成本利润模型：支持多条成本明细，自动汇总计算毛利率"""
 from typing import Optional
 from datetime import datetime, timezone
+from app.utils.time import BEIJING_TZ, now
 from sqlmodel import SQLModel, Field
 
 
@@ -25,5 +26,5 @@ class ProjectCost(SQLModel, table=True):
     # 备注
     remarks: Optional[str] = None
 
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: now())
+    updated_at: datetime = Field(default_factory=lambda: now())
