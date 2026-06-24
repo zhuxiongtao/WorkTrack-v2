@@ -21,6 +21,13 @@ import TeamManagementPage from '../../pages/TeamManagementPage'
 import FeedbackPage from '../../pages/FeedbackPage'
 import PaymentsPage from '../../pages/PaymentsPage'
 import SealsPage from '../../pages/SealsPage'
+import LeavesPage from '../../pages/LeavesPage'
+import OvertimesPage from '../../pages/OvertimesPage'
+import LeaveBalancesPage from '../../pages/LeaveBalancesPage'
+import ExpensesPage from '../../pages/ExpensesPage'
+import BusinessTripsPage from '../../pages/BusinessTripsPage'
+import PurchasesPage from '../../pages/PurchasesPage'
+import AssetsPage from '../../pages/AssetsPage'
 
 interface AppRoutesProps {
   homePage: string
@@ -54,6 +61,13 @@ function AppRoutes({ homePage }: AppRoutesProps) {
       <Route path="/feedback"      element={<FeedbackPage />} />
       <Route path="/payments"      element={<PaymentsPage />} />
       <Route path="/seals"         element={<SealsPage />} />
+      <Route path="/leaves"        element={<LeavesPage />} />
+      <Route path="/overtimes"     element={<OvertimesPage />} />
+      <Route path="/leave-balances" element={<LeaveBalancesPage />} />
+      <Route path="/expenses"      element={<ExpensesPage />} />
+      <Route path="/business-trips" element={<BusinessTripsPage />} />
+      <Route path="/purchases"     element={<PurchasesPage />} />
+      <Route path="/assets"        element={<AssetsPage />} />
       <Route path="/ai"            element={hasPermission('ai:use')         ? <AIPage />           : <Navigate to={homePage} replace />} />
       <Route path="/settings"      element={<SettingsPage />} />
 

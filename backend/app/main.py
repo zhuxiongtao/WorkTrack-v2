@@ -6,6 +6,9 @@ from app.config import settings as app_settings
 from app.database import init_db
 from app.routers import daily_reports, customers, projects, meetings, scheduled_tasks, ai_agent, search, settings, logs, auth, users, dashboard, setup, files, contracts, wiki, rbac, monitor, data_export, shares, console, news, project_costs, suppliers, channels, reconcile, models, approval, model_change, contract_templates, bill_reconcile, model_usage, feedback, payments, seals
 from app.routers import project_follow_ups
+from app.routers import purchase_suppliers
+from app.routers import leaves, overtimes, leave_balances
+from app.routers import expenses, business_trips, purchases, assets
 from app.rate_limit import limiter
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -365,6 +368,14 @@ def create_app() -> FastAPI:
     app.include_router(payments.router)
     app.include_router(seals.router)
     app.include_router(project_follow_ups.router)
+    app.include_router(purchase_suppliers.router)
+    app.include_router(leaves.router)
+    app.include_router(overtimes.router)
+    app.include_router(leave_balances.router)
+    app.include_router(expenses.router)
+    app.include_router(business_trips.router)
+    app.include_router(purchases.router)
+    app.include_router(assets.router)
 
     # 挂载 MCP 服务（带 API Key 认证）
     from app.mcp_server import mcp, MCPAuthMiddleware

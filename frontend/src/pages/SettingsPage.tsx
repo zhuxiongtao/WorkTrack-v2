@@ -156,12 +156,12 @@ function EmailConfigSection({ showToast }: { showToast: ToastFn }) {
   const [showPassword, setShowPassword] = useState(false)
 
   useEffect(() => {
-    fetch('/api/v1/settings/email-config', { headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` } })
+    fetchWithAuth('/api/v1/settings/email-config')
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setCfg(prev => ({ ...prev, ...d, password: '' })) })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [])
+  }, [fetchWithAuth])
 
   const applyPreset = (key: string) => {
     const p = EMAIL_PRESETS[key]
@@ -177,9 +177,9 @@ function EmailConfigSection({ showToast }: { showToast: ToastFn }) {
         use_tls: cfg.use_tls, use_ssl: cfg.use_ssl, provider: cfg.provider,
       }
       if (cfg.password) payload.password = cfg.password
-      const r = await fetch('/api/v1/settings/email-config', {
+      const r = await fetchWithAuth('/api/v1/settings/email-config', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('auth_token')}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
       if (!r.ok) throw new Error((await r.json()).detail || '保存失败')
@@ -196,9 +196,9 @@ function EmailConfigSection({ showToast }: { showToast: ToastFn }) {
     if (!testTo || !testTo.includes('@')) return showToast('请填写有效的收件邮箱', 'error')
     setTesting(true)
     try {
-      const r = await fetch('/api/v1/settings/email-config/test', {
+      const r = await fetchWithAuth('/api/v1/settings/email-config/test', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('auth_token')}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to: testTo }),
       })
       const d = await r.json()
@@ -610,11 +610,11 @@ export default function SettingsPage() {
   const [brandMsg, setBrandMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const loadBranding = useCallback(() => {
-    fetch('/api/v1/settings/branding')
+    fetchWithAuth('/api/v1/settings/branding')
       .then(res => res.json())
       .then(data => setBranding({ logo_url: data.logo_url || '', site_title: data.site_title || 'WorkTrack', frontend_url: data.frontend_url || '' }))
       .catch(() => {})
-  }, [])
+  }, [fetchWithAuth])
 
   useEffect(() => { loadBranding() }, [loadBranding])
 
@@ -626,11 +626,11 @@ export default function SettingsPage() {
   const [showMcpCode, setShowMcpCode] = useState(false)
 
   const loadMcpConfig = useCallback(() => {
-    fetch('/api/v1/settings/mcp-config')
+    fetchWithAuth('/api/v1/settings/mcp-config')
       .then(res => res.json())
       .then(data => setMcpConfig(data))
       .catch(() => {})
-  }, [])
+  }, [fetchWithAuth])
 
   useEffect(() => { loadMcpConfig() }, [loadMcpConfig])
 
@@ -648,20 +648,20 @@ export default function SettingsPage() {
   }, [expandedDropdown])
 
   const loadProviders = useCallback(() => {
-    fetch('/api/v1/settings/providers')
+    fetchWithAuth('/api/v1/settings/providers')
       .then((res) => res.json())
       .then((data) => { setProviders(Array.isArray(data) ? data : []); setLoading(false) })
       .catch(() => setLoading(false))
-  }, [])
+  }, [fetchWithAuth])
 
   useEffect(() => { loadProviders() }, [loadProviders])
 
   const loadProviderModels = useCallback((pid: number) => {
-    fetch(`/api/v1/settings/providers/${pid}/models`)
+    fetchWithAuth(`/api/v1/settings/providers/${pid}/models`)
       .then((r) => r.json())
       .then((d) => setProviderModels((prev) => ({ ...prev, [pid]: Array.isArray(d) ? d : [] })))
       .catch(() => {})
-  }, [])
+  }, [fetchWithAuth])
 
   useEffect(() => {
     providers.forEach((p) => loadProviderModels(p.id))
@@ -685,11 +685,11 @@ export default function SettingsPage() {
     setSaving(true)
     try {
       if (editingProvider) {
-        await fetch(`/api/v1/settings/providers/${editingProvider.id}`, {
+        await fetchWithAuth(`/api/v1/settings/providers/${editingProvider.id}`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
         })
       } else {
-        await fetch('/api/v1/settings/providers', {
+        await fetchWithAuth('/api/v1/settings/providers', {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
         })
       }
@@ -709,7 +709,7 @@ export default function SettingsPage() {
   }
 
   const handleToggleActive = async (p: Provider) => {
-    await fetch(`/api/v1/settings/providers/${p.id}`, {
+    await fetchWithAuth(`/api/v1/settings/providers/${p.id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: p.name, base_url: p.base_url, api_key: p.api_key, is_active: !p.is_active, project_id: p.project_id, location: p.location, gcp_label_team: p.gcp_label_team, gcp_label_app: p.gcp_label_app, gcp_label_env: p.gcp_label_env }),
     })
@@ -719,7 +719,7 @@ export default function SettingsPage() {
   const handleFetchModels = async (id: number) => {
     setFetchingModels(id)
     try {
-      const res = await fetch(`/api/v1/settings/providers/${id}/fetch-models`, { method: 'POST' })
+      const res = await fetchWithAuth(`/api/v1/settings/providers/${id}/fetch-models`, { method: 'POST' })
       const data = await res.json()
       if (!data.success) { console.warn('拉取模型列表失败:', data.message); return }
       loadProviders(); loadProviderModels(id)
@@ -733,7 +733,7 @@ export default function SettingsPage() {
       if (modelType && modelType !== 'auto') {
         body.model_type = modelType
       }
-      const res = await fetch(`/api/v1/settings/providers/${providerId}/models`, {
+      const res = await fetchWithAuth(`/api/v1/settings/providers/${providerId}/models`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
@@ -746,7 +746,7 @@ export default function SettingsPage() {
 
   const removeModel = async (providerId: number, modelId: number) => {
     try {
-      await fetch(`/api/v1/settings/providers/${providerId}/models/${modelId}`, { method: 'DELETE' })
+      await fetchWithAuth(`/api/v1/settings/providers/${providerId}/models/${modelId}`, { method: 'DELETE' })
       loadProviderModels(providerId)
       loadTaskConfigs()
       showToast('模型已移除', 'success')
@@ -780,8 +780,8 @@ export default function SettingsPage() {
   const [taskConfigs, setTaskConfigs] = useState<Record<string, TaskConfig>>({})
   const [taskSaving, setTaskSaving] = useState<string | null>(null)
   const loadTaskConfigs = useCallback(() => {
-    fetch('/api/v1/settings/task-models').then((r) => r.json()).then((d) => setTaskConfigs(d as Record<string, TaskConfig>)).catch(() => {})
-  }, [])
+    fetchWithAuth('/api/v1/settings/task-models').then((r) => r.json()).then((d) => setTaskConfigs(d as Record<string, TaskConfig>)).catch(() => {})
+  }, [fetchWithAuth])
   useEffect(() => { loadTaskConfigs() }, [loadTaskConfigs])
   const saveTaskConfig = async (taskTypes: string | string[], providerId: number | null, modelName: string) => {
     const list = Array.isArray(taskTypes) ? taskTypes : [taskTypes]
@@ -790,7 +790,7 @@ export default function SettingsPage() {
       // 并发保存组内所有 task
       await Promise.all(list.map((taskType) => {
         const existing = taskConfigs[taskType]
-        return fetch('/api/v1/settings/task-models', {
+        return fetchWithAuth('/api/v1/settings/task-models', {
           method: 'PUT', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             task_type: taskType,
@@ -824,12 +824,12 @@ export default function SettingsPage() {
 
   const loadPresets = useCallback(() => {
     setPresetsLoading(true)
-    fetch('/api/v1/settings/model-presets')
+    fetchWithAuth('/api/v1/settings/model-presets')
       .then((r) => r.json())
       .then((d) => setPresets(Array.isArray(d) ? d : []))
       .catch(() => {})
       .finally(() => setPresetsLoading(false))
-  }, [])
+  }, [fetchWithAuth])
   useEffect(() => { loadPresets() }, [loadPresets])
 
   // 打开预设编辑器（修复 P1 bug：编辑时回填表单）
@@ -868,7 +868,7 @@ export default function SettingsPage() {
       }
       const isEdit = !!presetEditor.preset
       const url = isEdit ? `/api/v1/settings/model-presets/${presetEditor.preset!.id}` : '/api/v1/settings/model-presets'
-      const res = await fetch(url, {
+      const res = await fetchWithAuth(url, {
         method: isEdit ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -888,7 +888,7 @@ export default function SettingsPage() {
   const handleDeletePreset = async (p: Preset) => {
     if (!await showConfirm(`确定删除预设「${p.name}」？引用该预设的任务会回退到模型默认参数。`)) return
     try {
-      const res = await fetch(`/api/v1/settings/model-presets/${p.id}`, { method: 'DELETE' })
+      const res = await fetchWithAuth(`/api/v1/settings/model-presets/${p.id}`, { method: 'DELETE' })
       if (!res.ok && res.status !== 204) {
         const err = await res.json().catch(() => ({}))
         throw new Error(err.detail || '删除失败')
@@ -918,16 +918,16 @@ export default function SettingsPage() {
 
   // 加载 Tavily 配置
   useEffect(() => {
-    fetch('/api/v1/settings/tavily-config')
+    fetchWithAuth('/api/v1/settings/tavily-config')
       .then((r) => r.json())
       .then((d) => { if (d.api_key) setTavilyApiKey(d.api_key) })
       .catch(() => {})
-  }, [])
+  }, [fetchWithAuth])
 
   const handleSaveTavilyKey = async () => {
     setTavilySaving(true)
     try {
-      await fetch('/api/v1/settings/tavily-config', {
+      await fetchWithAuth('/api/v1/settings/tavily-config', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ api_key: tavilyApiKey }),
       })
@@ -939,7 +939,7 @@ export default function SettingsPage() {
     setSearchProvider(value)
     setSearchProviderSaving(true)
     try {
-      await fetch('/api/v1/settings/preferences', {
+      await fetchWithAuth('/api/v1/settings/preferences', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: 'search_provider', value }),
       })
@@ -961,7 +961,7 @@ export default function SettingsPage() {
       .then((r) => r.json())
       .then((d) => setAiPrompts(d as Record<string, any>))
       .catch(() => {})
-  }, [])
+  }, [fetchWithAuth])
   useEffect(() => { loadPrompts() }, [loadPrompts])
 
   const openPromptEditor = (taskType: string) => {
@@ -1024,18 +1024,18 @@ export default function SettingsPage() {
   const categoryLabels: Record<string, string> = { product: '涉及产品', project_scenario: '项目场景', sales_person: '销售', project_status: '项目状态', cloud: '供应商' }
   const categoryIcons: Record<string, any> = { product: Package, project_scenario: MapPin, sales_person: User, project_status: Activity, cloud: Cloud }
   const categoryColors: Record<string, string> = { product: '#3B82F6', project_scenario: '#8B5CF6', sales_person: '#F59E0B', project_status: '#10B981', cloud: '#EC4899' }
-  const loadFieldOptions = () => { fetch('/api/v1/settings/field-options').then((r) => r.json()).then((d) => setFieldOptions(d as FieldOption[])) }
-  useEffect(() => { loadFieldOptions() }, [])
+  const loadFieldOptions = () => { fetchWithAuth('/api/v1/settings/field-options').then((r) => r.json()).then((d) => setFieldOptions(d as FieldOption[])) }
+  useEffect(() => { loadFieldOptions() }, [fetchWithAuth])
 
   useEffect(() => {
-    fetch('/api/v1/settings/preferences')
+    fetchWithAuth('/api/v1/settings/preferences')
       .then((r) => r.json())
       .then((d) => {
         if (d.home_page) setHomePage(d.home_page)
         if (d.search_provider) setSearchProvider(d.search_provider)
       })
       .catch(() => {})
-  }, [])
+  }, [fetchWithAuth])
   useEffect(() => {
     setEditingOptions(fieldOptions.filter((o) => o.category === selectedCategory).sort((a, b) => a.sort_order - b.sort_order).map((o) => o.value).join('\n'))
   }, [selectedCategory, fieldOptions])
@@ -1043,7 +1043,7 @@ export default function SettingsPage() {
     setOptionsSaving(true)
     try {
       const values = editingOptions.split('\n').map((s) => s.trim()).filter(Boolean)
-      await fetch('/api/v1/settings/field-options/batch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ category: selectedCategory, values }) })
+      await fetchWithAuth('/api/v1/settings/field-options/batch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ category: selectedCategory, values }) })
       loadFieldOptions()
       showToast('字段选项已保存', 'success')
     } finally { setOptionsSaving(false) }
@@ -1052,7 +1052,7 @@ export default function SettingsPage() {
   const handleSaveHomePage = async () => {
     setHomePageSaving(true)
     try {
-      await fetch('/api/v1/settings/preferences', {
+      await fetchWithAuth('/api/v1/settings/preferences', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: 'home_page', value: homePage }),
       })
@@ -1441,8 +1441,8 @@ export default function SettingsPage() {
               // 整体高度统计：已选/未选状态
               const fullyConfiguredCount = group.taskKeys.filter((tk) => taskConfigs[tk]?.provider_id && taskConfigs[tk]?.model_name).length
               return (
-                <div key={group.id} className="rounded-lg bg-bg-card border border-border overflow-hidden hover:border-[#3B82F6]/30 transition-colors" style={{ borderColor: `${group.color}25` }}>
-                  <div className="px-3 py-2.5 flex items-center gap-2.5">
+                <div key={group.id} className="rounded-lg bg-bg-card border border-border hover:border-[#3B82F6]/30 transition-colors" style={{ borderColor: `${group.color}25` }}>
+                  <div className="px-3 py-2.5 flex items-center gap-2.5 rounded-t-lg">
                     <IconBox icon={GroupIcon} size="md" tone={
                       group.id === 'chat' ? 'blue' :
                       group.id === 'summary' ? 'green' :
@@ -1866,7 +1866,7 @@ export default function SettingsPage() {
                   if (brandLogoFile) {
                     const fd = new FormData()
                     fd.append('file', brandLogoFile)
-                    const logoRes = await fetch('/api/v1/settings/branding/upload-logo', {
+                    const logoRes = await fetchWithAuth('/api/v1/settings/branding/upload-logo', {
                       method: 'POST',
                       body: fd,
                     })
@@ -1879,7 +1879,7 @@ export default function SettingsPage() {
                     }
                   }
                   // 保存品牌配置
-                  const saveRes = await fetch('/api/v1/settings/branding', {
+                  const saveRes = await fetchWithAuth('/api/v1/settings/branding', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ site_title: branding.site_title, logo_url: logoUrl, frontend_url: branding.frontend_url }),
@@ -1939,7 +1939,7 @@ export default function SettingsPage() {
               onClick={async () => {
                 setMcpLoading(true)
                 try {
-                  const res = await fetch('/api/v1/settings/mcp-config', {
+                  const res = await fetchWithAuth('/api/v1/settings/mcp-config', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ enabled: !mcpConfig.enabled, public_url: mcpConfig.public_url }),
@@ -2003,7 +2003,7 @@ export default function SettingsPage() {
                 onClick={async () => {
                   setMcpLoading(true)
                   try {
-                    const res = await fetch('/api/v1/settings/mcp-config', {
+                    const res = await fetchWithAuth('/api/v1/settings/mcp-config', {
                       method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ enabled: mcpConfig.enabled, public_url: mcpConfig.public_url }),
@@ -2067,7 +2067,7 @@ export default function SettingsPage() {
                 setMcpLoading(true)
                 setMcpMsg(null)
                 try {
-                  const res = await fetch('/api/v1/settings/mcp-config/generate-key', {
+                  const res = await fetchWithAuth('/api/v1/settings/mcp-config/generate-key', {
                     method: 'POST',
                   })
                   if (res.ok) {

@@ -36,6 +36,14 @@ from app.models.feedback import Feedback
 from app.models.payment import PaymentRequest
 from app.models.seal import SealRequest
 from app.models.project_follow_up import ProjectFollowUp
+from app.models.purchase_supplier import PurchaseSupplier
+from app.models.leave_balance import LeaveBalance, LeaveBalanceLog
+from app.models.leave_request import LeaveRequest
+from app.models.overtime_request import OvertimeRequest
+from app.models.expense_request import ExpenseRequest
+from app.models.business_trip_request import BusinessTripRequest
+from app.models.purchase_request import PurchaseRequest
+from app.models.asset import Asset
 
 __all__ = [
     "User",
@@ -94,4 +102,13 @@ __all__ = [
     "PaymentRequest",
     "SealRequest",
     "ProjectFollowUp",
+    "PurchaseSupplier",
+    "LeaveBalance",
+    "LeaveBalanceLog",
+    "LeaveRequest",
+    "OvertimeRequest",
+    "ExpenseRequest",
+    "BusinessTripRequest",
+    "PurchaseRequest",
+    "Asset",
 ]

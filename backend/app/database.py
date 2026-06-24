@@ -273,6 +273,20 @@ PERMISSION_DEFS = [
     ("payment:view_all", "查看全部付款申请", "payment", "view_all"),
     # 盖章申请（公章 / 财务章 / 法人章；发起仅需登录，view_all 供法务/印章管理员/老板查看全部）
     ("seal:view_all", "查看全部盖章申请", "seal", "view_all"),
+    # OA 办公模块（请假 / 加班 / 采购供应商；发起仅需登录，view_all/manage 供 HR/管理员）
+    ("leave:view_all", "查看全部请假", "leave", "view_all"),
+    ("leave:manage", "管理假期额度", "leave", "manage"),
+    ("overtime:view_all", "查看全部加班", "overtime", "view_all"),
+    ("purchase_supplier:read", "查看采购供应商", "purchase_supplier", "read"),
+    ("purchase_supplier:manage", "管理采购供应商", "purchase_supplier", "manage"),
+    # P2 OA 模块（报销/出差/采购/资产）
+    ("expense:view_all", "查看全部报销", "expense", "view_all"),
+    ("expense:pay", "执行报销付款", "expense", "pay"),
+    ("trip:view_all", "查看出差申请", "trip", "view_all"),
+    ("purchase:view_all", "查看全部采购", "purchase", "view_all"),
+    ("purchase:manage", "管理采购执行", "purchase", "manage"),
+    ("asset:read", "查看企业资产", "asset", "read"),
+    ("asset:manage", "管理企业资产", "asset", "manage"),
 ]
 
 ROLE_DEFS = {
@@ -310,6 +324,14 @@ ROLE_DEFS = {
             "feedback:manage",
             # 付款 / 盖章申请全局查看
             "payment:view_all", "seal:view_all",
+            # OA 办公模块
+            "leave:view_all", "leave:manage", "overtime:view_all",
+            "purchase_supplier:read", "purchase_supplier:manage",
+            # P2 OA 模块
+            "expense:view_all", "expense:pay",
+            "trip:view_all",
+            "purchase:view_all", "purchase:manage",
+            "asset:read", "asset:manage",
         ],
     },
     "dept_leader": {
@@ -445,6 +467,29 @@ ROLE_DEFS = {
             "share:read", "share:comment",
             # 付款 / 盖章申请全局查看
             "payment:view_all", "seal:view_all",
+            # OA 办公模块全局查看
+            "leave:view_all", "overtime:view_all",
+            # P2 OA 模块全局查看
+            "expense:view_all", "trip:view_all", "purchase:view_all",
+            "asset:read",
+        ],
+    },
+    "hr": {
+        "name": "人事",
+        "description": "人事专员，负责员工假期额度管理、请假/加班审批与考勤统计",
+        "ensure_exists": True,
+        "perms": [
+            "user:read",
+            "leave:view_all", "leave:manage",
+            "overtime:view_all",
+            "purchase_supplier:read",
+            "expense:view_all", "trip:view_all",
+            "report:read", "report:submit",
+            "meeting:read",
+            "wiki:read",
+            "ai:use",
+            "dashboard:read",
+            "share:read", "share:comment",
         ],
     },
     "cashier": {
@@ -453,6 +498,7 @@ ROLE_DEFS = {
         "ensure_exists": True,
         "perms": [
             "payment:view_all",
+            "expense:view_all", "expense:pay",
             "reconcile:read",
             "dashboard:read",
             "ai:use",
@@ -596,6 +642,69 @@ APPROVAL_FLOW_DEFS = [
         "nodes": [
             {"name": "部门主管审批", "approver_type": "dept_manager", "approver_value": "", "order": 1},
             {"name": "商务审核", "approver_type": "role", "approver_value": "business", "order": 2},
+            {"name": "老板批准", "approver_type": "role", "approver_value": "boss", "order": 3},
+        ],
+    },
+    {
+        "code": "leave_approval",
+        "name": "请假审批",
+        "business_type": "leave",
+        "is_system": True,
+        "trigger_condition": None,
+        "description": "员工请假依次经部门负责人/分管领导审批、人事复核备案，通过后扣减假期额度",
+        "nodes": [
+            {"name": "部门负责人/分管领导", "approver_type": "dept_or_leader", "approver_value": "", "order": 1},
+            {"name": "人事复核", "approver_type": "role", "approver_value": "hr", "order": 2},
+        ],
+    },
+    {
+        "code": "overtime_approval",
+        "name": "加班审批",
+        "business_type": "overtime",
+        "is_system": True,
+        "trigger_condition": None,
+        "description": "员工加班申请经部门负责人/分管领导审批、人事复核备案，通过后按补偿方式处理（调休授予额度/加班费）",
+        "nodes": [
+            {"name": "部门负责人/分管领导", "approver_type": "dept_or_leader", "approver_value": "", "order": 1},
+            {"name": "人事复核", "approver_type": "role", "approver_value": "hr", "order": 2},
+        ],
+    },
+    {
+        "code": "expense_approval",
+        "name": "报销审批",
+        "business_type": "expense",
+        "is_system": True,
+        "trigger_condition": None,
+        "description": "员工报销依次经部门负责人、财务审核、老板批准，通过后由出纳执行付款",
+        "nodes": [
+            {"name": "部门负责人/分管领导", "approver_type": "dept_or_leader", "approver_value": "", "order": 1},
+            {"name": "财务审核", "approver_type": "role", "approver_value": "finance", "order": 2},
+            {"name": "老板批准", "approver_type": "role", "approver_value": "boss", "order": 3},
+            {"name": "出纳付款", "approver_type": "role", "approver_value": "cashier", "order": 4, "node_kind": "execution", "action_label": "确认付款"},
+        ],
+    },
+    {
+        "code": "business_trip_approval",
+        "name": "出差审批",
+        "business_type": "business_trip",
+        "is_system": True,
+        "trigger_condition": None,
+        "description": "员工出差申请经部门负责人/分管领导审批、老板批准，通过后可出差",
+        "nodes": [
+            {"name": "部门负责人/分管领导", "approver_type": "dept_or_leader", "approver_value": "", "order": 1},
+            {"name": "老板批准", "approver_type": "role", "approver_value": "boss", "order": 2},
+        ],
+    },
+    {
+        "code": "purchase_approval",
+        "name": "采购审批",
+        "business_type": "purchase",
+        "is_system": True,
+        "trigger_condition": None,
+        "description": "采购申请依次经部门负责人、财务审核、老板批准，通过后执行采购和入库",
+        "nodes": [
+            {"name": "部门负责人/分管领导", "approver_type": "dept_or_leader", "approver_value": "", "order": 1},
+            {"name": "财务审核", "approver_type": "role", "approver_value": "finance", "order": 2},
             {"name": "老板批准", "approver_type": "role", "approver_value": "boss", "order": 3},
         ],
     },

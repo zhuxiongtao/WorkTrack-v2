@@ -487,6 +487,94 @@ def _on_finished(instance: ApprovalInstance, db: Session) -> None:
             db.add(s)
             db.commit()
 
+    elif instance.target_type == "leave":
+        from app.models.leave_request import LeaveRequest
+        from app.services import leave_balance_service
+        lv = db.get(LeaveRequest, instance.target_id)
+        if lv:
+            if instance.status == "approved":
+                lv.status = "已批准"
+                # 扣减假期额度
+                try:
+                    leave_balance_service.apply_leave(lv, db, operator_id=instance.submitted_by)
+                except Exception as e:
+                    import logging
+                    logging.getLogger("worktrack").warning(
+                        "请假 #%s 扣减额度失败: %s", lv.id, e
+                    )
+            elif instance.status == "rejected":
+                lv.status = "已驳回"
+            elif instance.status == "cancelled":
+                lv.status = "草稿"
+            lv.updated_at = _now()
+            db.add(lv)
+            db.commit()
+
+    elif instance.target_type == "overtime":
+        from app.models.overtime_request import OvertimeRequest
+        from app.services import leave_balance_service
+        ot = db.get(OvertimeRequest, instance.target_id)
+        if ot:
+            if instance.status == "approved":
+                ot.status = "已批准"
+                # 若补偿方式为调休，授予调休额度
+                try:
+                    leave_balance_service.grant_overtime_compensate(ot, db)
+                except Exception as e:
+                    import logging
+                    logging.getLogger("worktrack").warning(
+                        "加班 #%s 授予调休额度失败: %s", ot.id, e
+                    )
+            elif instance.status == "rejected":
+                ot.status = "已驳回"
+            elif instance.status == "cancelled":
+                ot.status = "草稿"
+            ot.updated_at = _now()
+            db.add(ot)
+            db.commit()
+
+    elif instance.target_type == "expense":
+        from app.models.expense_request import ExpenseRequest
+        e = db.get(ExpenseRequest, instance.target_id)
+        if e:
+            if instance.status == "approved":
+                e.status = "已批准"
+            elif instance.status == "rejected":
+                e.status = "已驳回"
+            elif instance.status == "cancelled":
+                e.status = "草稿"
+            e.updated_at = _now()
+            db.add(e)
+            db.commit()
+
+    elif instance.target_type == "business_trip":
+        from app.models.business_trip_request import BusinessTripRequest
+        t = db.get(BusinessTripRequest, instance.target_id)
+        if t:
+            if instance.status == "approved":
+                t.status = "已批准"
+            elif instance.status == "rejected":
+                t.status = "已驳回"
+            elif instance.status == "cancelled":
+                t.status = "草稿"
+            t.updated_at = _now()
+            db.add(t)
+            db.commit()
+
+    elif instance.target_type == "purchase":
+        from app.models.purchase_request import PurchaseRequest
+        p = db.get(PurchaseRequest, instance.target_id)
+        if p:
+            if instance.status == "approved":
+                p.status = "已批准"
+            elif instance.status == "rejected":
+                p.status = "已驳回"
+            elif instance.status == "cancelled":
+                p.status = "草稿"
+            p.updated_at = _now()
+            db.add(p)
+            db.commit()
+
 
 # ──────────────────────────── 待办查询 ────────────────────────────
 

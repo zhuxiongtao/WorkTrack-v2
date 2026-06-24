@@ -28,6 +28,20 @@ def _ensure_chroma():
         raise
 
 
+def _is_openai_compatible_for_embedding(base_url: str) -> bool:
+    """判断 base_url 是否指向支持 OpenAI 兼容 /v1/embeddings 接口的服务。
+    Google Gemini (generativelanguage.googleapis.com) 和 Anthropic (api.anthropic.com)
+    不支持该路径,需要排除。"""
+    if not base_url:
+        return True  # 空值走默认配置,不拦截
+    lower = base_url.lower()
+    if "generativelanguage.googleapis.com" in lower:
+        return False
+    if "api.anthropic.com" in lower:
+        return False
+    return True
+
+
 def _get_embedding_config(db: Session = None) -> tuple:
     """获取嵌入模型配置，返回 (base_url, api_key, model_name, provider_id)"""
     if db:
@@ -37,15 +51,22 @@ def _get_embedding_config(db: Session = None) -> tuple:
         if task_cfg and task_cfg.provider_id and task_cfg.model_name:
             provider = db.get(ModelProvider, task_cfg.provider_id)
             if provider and provider.is_active and provider.api_key:
-                return provider.base_url, provider.api_key, task_cfg.model_name, task_cfg.provider_id
-        provider = db.exec(
+                if _is_openai_compatible_for_embedding(provider.base_url):
+                    return provider.base_url, provider.api_key, task_cfg.model_name, task_cfg.provider_id
+                logger.warning(
+                    "embedding 任务绑定的供应商 %s 不支持 OpenAI 兼容接口，已跳过",
+                    provider.base_url,
+                )
+        # fallback: 取第一个 active 且支持 OpenAI 兼容 embedding 的 provider
+        providers = db.exec(
             select(ModelProvider).where(
                 ModelProvider.is_active == True, ModelProvider.api_key != ""
             )
-        ).first()
-        if provider:
-            model = settings.embedding_model_name
-            return provider.base_url, provider.api_key, model, provider.id
+        ).all()
+        for provider in providers:
+            if _is_openai_compatible_for_embedding(provider.base_url):
+                model = settings.embedding_model_name
+                return provider.base_url, provider.api_key, model, provider.id
     return (
         settings.effective_embedding_base_url,
         settings.effective_embedding_api_key,

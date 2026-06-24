@@ -2,7 +2,7 @@ import {
   Briefcase, Calendar, Clock, BookOpen,
   FileText, Users, UsersRound, LayoutDashboard,
   Share2, BarChart3, Home, Layers, Calculator, CheckSquare, RefreshCw, MessageSquarePlus,
-  Wallet, Stamp, type LucideIcon,
+  Wallet, Stamp, CalendarDays, Database, Receipt, Plane, ShoppingCart, Package, type LucideIcon,
 } from 'lucide-react'
 
 export interface MenuItem {
@@ -19,7 +19,7 @@ export interface MenuCategory {
   id: string
   title: string
   icon: LucideIcon
-  iconTone: 'blue' | 'green' | 'orange' | 'purple' | 'pink' | 'gray' | 'cyan' | 'red'
+  iconTone: 'blue' | 'green' | 'orange' | 'purple' | 'pink' | 'gray' | 'cyan' | 'red' | 'indigo'
   items: MenuItem[]
 }
 
@@ -54,6 +54,21 @@ export const MENU_CATEGORIES: MenuCategory[] = [
       { to: '/contracts',     label: '合同管理',   icon: FileText,   gradientFrom: '#06B6D4', gradientTo: '#14B8A6', permission: 'contract:read' },
       { to: '/payments',      label: '付款申请',   icon: Wallet,     gradientFrom: '#10B981', gradientTo: '#059669', permission: 'payment:view_all' },
       { to: '/seals',         label: '盖章申请',   icon: Stamp,      gradientFrom: '#EF4444', gradientTo: '#F97316', permission: 'seal:view_all' },
+    ],
+  },
+  {
+    id: 'oa',
+    title: 'OA 办公',
+    icon: CalendarDays,
+    iconTone: 'purple',
+    items: [
+      { to: '/leaves',          label: '请假申请',   icon: CalendarDays, gradientFrom: '#8B5CF6', gradientTo: '#A78BFA' },
+      { to: '/overtimes',       label: '加班申请',   icon: Clock,        gradientFrom: '#06B6D4', gradientTo: '#3B82F6' },
+      { to: '/leave-balances',  label: '假期额度',   icon: Database,     gradientFrom: '#6366F1', gradientTo: '#8B5CF6', permission: 'leave:manage' },
+      { to: '/expenses',        label: '报销申请',   icon: Receipt,      gradientFrom: '#10B981', gradientTo: '#059669' },
+      { to: '/business-trips',  label: '出差申请',   icon: Plane,        gradientFrom: '#3B82F6', gradientTo: '#06B6D4' },
+      { to: '/purchases',       label: '采购申请',   icon: ShoppingCart, gradientFrom: '#F59E0B', gradientTo: '#FBBF24' },
+      { to: '/assets',          label: '企业资产',   icon: Package,      gradientFrom: '#8B5CF6', gradientTo: '#EC4899', permission: 'asset:read' },
     ],
   },
   {

@@ -152,7 +152,11 @@ now_dt = now()
 
 - 新增字段/表后，在对应 Pydantic schema（`schemas/`）同步更新 `Create`、`Update`、`Out` 三个类
 - `DEFAULT_FIELD_OPTIONS`（`database.py`）仅在首次初始化时写入，生产环境已有数据不受影响
-- 迁移脚本放在 `scripts/` 目录，命名格式 `migrate_vX.X.X_description.py`
+- 迁移脚本使用 **Alembic**（`backend/alembic/versions/`），不使用 `scripts/` 目录
+- 新增迁移：在 `backend/` 下执行 `python -m alembic revision --autogenerate -m "描述"`，生成后检查 `upgrade()`/`downgrade()` 是否正确
+- 新模型必须在 `alembic/env.py` 的 `from app.models import (...)` 中导入，否则 autogenerate 无法识别
+- 迁移文件命名格式：`<revision_id>_<description>.py`，`down_revision` 必须指向当前 head（`python -m alembic heads` 查看）
+- 应用迁移：`python -m alembic upgrade head`；回滚：`python -m alembic downgrade -1`
 
 ---
 

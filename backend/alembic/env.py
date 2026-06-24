@@ -30,6 +30,9 @@ from app.models import (  # noqa: F401
     UserGroup, UserGroupMember, WikiSpace, WikiPage, WikiPermission, WikiPageVersion,
     # RBAC 模型
     Permission, Role, RolePermission, UserRole, GroupRole,
+    # OA 模块模型
+    PurchaseSupplier, LeaveBalance, LeaveBalanceLog, LeaveRequest, OvertimeRequest,
+    ExpenseRequest, BusinessTripRequest, PurchaseRequest, Asset,
 )
 
 target_metadata = SQLModel.metadata

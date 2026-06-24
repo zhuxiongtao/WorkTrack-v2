@@ -1,10 +1,328 @@
 import { useState, useEffect, useCallback } from 'react'
+import type { ReactNode } from 'react'
 import {
   CheckSquare, Loader2, Check, X, RotateCcw, Clock, FileText,
   ChevronRight, ChevronDown, ChevronUp, CircleCheck, CircleX, CircleDot, Send,
 } from 'lucide-react'
 import { PageHeader, EmptyState, Modal } from '../components/design-system'
 import { useToast } from '../contexts/ToastContext'
+
+/* ──── 业务详情注册表 ──── */
+// 各 target_type 注册加载函数和渲染组件，新增业务只需在此添加一项
+interface TargetDetailConfig {
+  label: string
+  load: (targetId: number) => Promise<any | null>
+  render: (detail: any) => ReactNode
+}
+
+const TARGET_DETAIL_REGISTRY: Record<string, TargetDetailConfig> = {
+  contract: {
+    label: '合同信息',
+    load: async (id) => {
+      const r = await fetch(`/api/v1/contracts/${id}`)
+      return r.ok ? r.json() : null
+    },
+    render: (d) => (
+      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[12px]">
+        <div className="col-span-2 flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">合同名称</span>
+          <span className="text-gray-100 break-words min-w-0 flex-1">{d.title}</span>
+        </div>
+        {d.contract_type && (
+          <div className="flex gap-1.5">
+            <span className="text-gray-400 shrink-0 w-[4em]">合同类型</span>
+            <span className="text-gray-200">{d.contract_type}</span>
+          </div>
+        )}
+        {d.contract_amount != null && (
+          <div className="flex gap-1.5">
+            <span className="text-gray-400 shrink-0 w-[4em]">合同金额</span>
+            <span className="text-gray-200">{d.contract_amount}{d.amount_unit}</span>
+          </div>
+        )}
+        {d.party_a && (
+          <div className="flex gap-1.5">
+            <span className="text-gray-400 shrink-0 w-[4em]">甲方</span>
+            <span className="text-gray-200">{d.party_a}</span>
+          </div>
+        )}
+        {d.party_b && (
+          <div className="flex gap-1.5">
+            <span className="text-gray-400 shrink-0 w-[4em]">乙方</span>
+            <span className="text-gray-200">{d.party_b}</span>
+          </div>
+        )}
+        {d.seal_types_requested && (
+          <div className="col-span-2 flex gap-1.5">
+            <span className="text-gray-400 shrink-0 w-[4em]">用章类型</span>
+            <span className="text-gray-200">{d.seal_types_requested}</span>
+          </div>
+        )}
+      </div>
+    ),
+  },
+  payment: {
+    label: '付款信息',
+    load: async (id) => {
+      const r = await fetch(`/api/v1/payments/${id}`)
+      return r.ok ? r.json() : null
+    },
+    render: (d) => (
+      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[12px]">
+        <div className="col-span-2 flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">摘要</span>
+          <span className="text-gray-100 break-words min-w-0 flex-1">{d.title}</span>
+        </div>
+        <div className="flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">类型</span>
+          <span className="text-gray-200">{d.payment_type}</span>
+        </div>
+        <div className="flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">金额</span>
+          <span className="text-gray-200">{d.currency} {d.amount?.toLocaleString()} {d.amount_unit}</span>
+        </div>
+        <div className="flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">收款方</span>
+          <span className="text-gray-200">{d.payee || '—'}</span>
+        </div>
+        <div className="flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">申请人</span>
+          <span className="text-gray-200">{d.user_name || '—'}</span>
+        </div>
+        {d.reason && (
+          <div className="col-span-2 flex gap-1.5">
+            <span className="text-gray-400 shrink-0 w-[4em]">事由</span>
+            <span className="text-gray-200 break-words min-w-0 flex-1">{d.reason}</span>
+          </div>
+        )}
+      </div>
+    ),
+  },
+  seal: {
+    label: '盖章信息',
+    load: async (id) => {
+      const r = await fetch(`/api/v1/seals/${id}`)
+      return r.ok ? r.json() : null
+    },
+    render: (d) => (
+      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[12px]">
+        <div className="col-span-2 flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">摘要</span>
+          <span className="text-gray-100 break-words min-w-0 flex-1">{d.title}</span>
+        </div>
+        <div className="flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">印章类型</span>
+          <span className="text-gray-200">{d.seal_type}</span>
+        </div>
+        <div className="flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">份数</span>
+          <span className="text-gray-200">{d.copies}</span>
+        </div>
+        {d.reason && (
+          <div className="col-span-2 flex gap-1.5">
+            <span className="text-gray-400 shrink-0 w-[4em]">事由</span>
+            <span className="text-gray-200 break-words min-w-0 flex-1">{d.reason}</span>
+          </div>
+        )}
+      </div>
+    ),
+  },
+  leave: {
+    label: '请假信息',
+    load: async (id) => {
+      const r = await fetch(`/api/v1/leaves/${id}`)
+      return r.ok ? r.json() : null
+    },
+    render: (d) => (
+      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[12px]">
+        <div className="col-span-2 flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">摘要</span>
+          <span className="text-gray-100 break-words min-w-0 flex-1">{d.title}</span>
+        </div>
+        <div className="flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">类型</span>
+          <span className="text-gray-200">{d.leave_type}</span>
+        </div>
+        <div className="flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">时长</span>
+          <span className="text-gray-200">{d.hours} 小时</span>
+        </div>
+        <div className="flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">开始</span>
+          <span className="text-gray-200">{fmtTime(d.start_at)}</span>
+        </div>
+        <div className="flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">结束</span>
+          <span className="text-gray-200">{fmtTime(d.end_at)}</span>
+        </div>
+        {d.reason && (
+          <div className="col-span-2 flex gap-1.5">
+            <span className="text-gray-400 shrink-0 w-[4em]">事由</span>
+            <span className="text-gray-200 break-words min-w-0 flex-1">{d.reason}</span>
+          </div>
+        )}
+      </div>
+    ),
+  },
+  overtime: {
+    label: '加班信息',
+    load: async (id) => {
+      const r = await fetch(`/api/v1/overtimes/${id}`)
+      return r.ok ? r.json() : null
+    },
+    render: (d) => (
+      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[12px]">
+        <div className="col-span-2 flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">摘要</span>
+          <span className="text-gray-100 break-words min-w-0 flex-1">{d.title}</span>
+        </div>
+        <div className="flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">时长</span>
+          <span className="text-gray-200">{d.hours} 小时</span>
+        </div>
+        <div className="flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">补偿</span>
+          <span className="text-gray-200">{d.compensate_type}</span>
+        </div>
+        <div className="flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">开始</span>
+          <span className="text-gray-200">{fmtTime(d.start_at)}</span>
+        </div>
+        <div className="flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">结束</span>
+          <span className="text-gray-200">{fmtTime(d.end_at)}</span>
+        </div>
+        {d.reason && (
+          <div className="col-span-2 flex gap-1.5">
+            <span className="text-gray-400 shrink-0 w-[4em]">事由</span>
+            <span className="text-gray-200 break-words min-w-0 flex-1">{d.reason}</span>
+          </div>
+        )}
+      </div>
+    ),
+  },
+  expense: {
+    label: '报销信息',
+    load: async (id) => {
+      const r = await fetch(`/api/v1/expenses/${id}`)
+      return r.ok ? r.json() : null
+    },
+    render: (d) => (
+      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[12px]">
+        <div className="col-span-2 flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">摘要</span>
+          <span className="text-gray-100 break-words min-w-0 flex-1">{d.title}</span>
+        </div>
+        <div className="flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">类型</span>
+          <span className="text-gray-200">{d.expense_type}</span>
+        </div>
+        <div className="flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">金额</span>
+          <span className="text-gray-200">{d.currency} {d.amount?.toLocaleString()} {d.amount_unit}</span>
+        </div>
+        <div className="flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">费用日期</span>
+          <span className="text-gray-200">{fmtTime(d.expense_date)}</span>
+        </div>
+        <div className="flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">申请人</span>
+          <span className="text-gray-200">{d.user_name || '—'}</span>
+        </div>
+        {d.reason && (
+          <div className="col-span-2 flex gap-1.5">
+            <span className="text-gray-400 shrink-0 w-[4em]">事由</span>
+            <span className="text-gray-200 break-words min-w-0 flex-1">{d.reason}</span>
+          </div>
+        )}
+      </div>
+    ),
+  },
+  business_trip: {
+    label: '出差信息',
+    load: async (id) => {
+      const r = await fetch(`/api/v1/business-trips/${id}`)
+      return r.ok ? r.json() : null
+    },
+    render: (d) => (
+      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[12px]">
+        <div className="col-span-2 flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">摘要</span>
+          <span className="text-gray-100 break-words min-w-0 flex-1">{d.title}</span>
+        </div>
+        <div className="flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">目的地</span>
+          <span className="text-gray-200">{d.destination}</span>
+        </div>
+        <div className="flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">天数</span>
+          <span className="text-gray-200">{d.days} 天</span>
+        </div>
+        <div className="flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">交通</span>
+          <span className="text-gray-200">{d.transport}</span>
+        </div>
+        <div className="flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">预算</span>
+          <span className="text-gray-200">{d.currency} {d.budget?.toLocaleString()} {d.budget_unit}</span>
+        </div>
+        <div className="flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">开始</span>
+          <span className="text-gray-200">{fmtTime(d.start_date)}</span>
+        </div>
+        <div className="flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">结束</span>
+          <span className="text-gray-200">{fmtTime(d.end_date)}</span>
+        </div>
+        {d.purpose && (
+          <div className="col-span-2 flex gap-1.5">
+            <span className="text-gray-400 shrink-0 w-[4em]">目的</span>
+            <span className="text-gray-200 break-words min-w-0 flex-1">{d.purpose}</span>
+          </div>
+        )}
+      </div>
+    ),
+  },
+  purchase: {
+    label: '采购信息',
+    load: async (id) => {
+      const r = await fetch(`/api/v1/purchases/${id}`)
+      return r.ok ? r.json() : null
+    },
+    render: (d) => (
+      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[12px]">
+        <div className="col-span-2 flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">摘要</span>
+          <span className="text-gray-100 break-words min-w-0 flex-1">{d.title}</span>
+        </div>
+        <div className="flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">类型</span>
+          <span className="text-gray-200">{d.purchase_type}</span>
+        </div>
+        <div className="flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">总金额</span>
+          <span className="text-gray-200">{d.currency} {d.total_amount?.toLocaleString()} {d.amount_unit}</span>
+        </div>
+        {d.supplier_name && (
+          <div className="flex gap-1.5">
+            <span className="text-gray-400 shrink-0 w-[4em]">供应商</span>
+            <span className="text-gray-200">{d.supplier_name}</span>
+          </div>
+        )}
+        <div className="flex gap-1.5">
+          <span className="text-gray-400 shrink-0 w-[4em]">申请人</span>
+          <span className="text-gray-200">{d.user_name || '—'}</span>
+        </div>
+        {d.reason && (
+          <div className="col-span-2 flex gap-1.5">
+            <span className="text-gray-400 shrink-0 w-[4em]">事由</span>
+            <span className="text-gray-200 break-words min-w-0 flex-1">{d.reason}</span>
+          </div>
+        )}
+      </div>
+    ),
+  },
+}
 
 /* ──── 类型 ──── */
 interface ApprovalBrief {
@@ -74,6 +392,8 @@ const ACTION_LABEL: Record<string, string> = {
 const TARGET_LABEL: Record<string, string> = {
   contract: '合同', payment: '付款申请', seal: '盖章申请',
   supplier: '供应商', channel: '通道', project: '项目', reconcile_summary: '财务月结',
+  leave: '请假', overtime: '加班',
+  expense: '报销', business_trip: '出差', purchase: '采购',
 }
 
 function fmtTime(s: string | null): string {
@@ -84,17 +404,6 @@ function fmtTime(s: string | null): string {
 function statusBadge(status: string) {
   const m = STATUS_META[status] || { label: status, cls: 'text-gray-400 bg-gray-500/10 border-gray-500/30' }
   return <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium border ${m.cls}`}>{m.label}</span>
-}
-
-interface ContractDetail {
-  title: string
-  contract_type: string
-  party_a: string
-  party_b: string
-  contract_amount: number | null
-  amount_unit: string
-  seal_types_requested: string
-  status: string
 }
 
 export default function ApprovalsPage() {
@@ -108,7 +417,7 @@ export default function ApprovalsPage() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [comment, setComment] = useState('')
   const [acting, setActing] = useState(false)
-  const [contractDetail, setContractDetail] = useState<ContractDetail | null>(null)
+  const [targetDetail, setTargetDetail] = useState<any | null>(null)
   const [showNodes, setShowNodes] = useState(true)
 
   const load = useCallback(async () => {
@@ -129,17 +438,18 @@ export default function ApprovalsPage() {
   const openDetail = async (id: number) => {
     setDetailLoading(true)
     setComment('')
-    setContractDetail(null)
+    setTargetDetail(null)
     try {
       const res = await fetch(`/api/v1/approvals/${id}`)
       if (res.ok) {
         const inst: ApprovalDetail = await res.json()
         setDetail(inst)
         setShowNodes(inst.status === 'pending')
-        if (inst.target_type === 'contract') {
-          fetch(`/api/v1/contracts/${inst.target_id}`)
-            .then(r => r.ok ? r.json() : null)
-            .then(d => { if (d) setContractDetail(d) })
+        // 通过注册表加载业务详情
+        const cfg = TARGET_DETAIL_REGISTRY[inst.target_type]
+        if (cfg) {
+          cfg.load(inst.target_id)
+            .then(d => { if (d) setTargetDetail(d) })
             .catch(() => {})
         }
       } else showToast('加载审批详情失败', 'error')
@@ -291,7 +601,7 @@ export default function ApprovalsPage() {
           subtitle={`${TARGET_LABEL[detail.target_type] || detail.target_type} · 发起人 ${detail.submitted_by_name} · ${fmtTime(detail.submitted_at)}`}
           tone="orange"
           size="2xl"
-          onClose={() => { setDetail(null); setContractDetail(null) }}
+          onClose={() => { setDetail(null); setTargetDetail(null) }}
         >
           {detailLoading ? (
             <div className="flex items-center justify-center py-12"><Loader2 className="animate-spin text-gray-400" size={22} /></div>
@@ -303,46 +613,13 @@ export default function ApprovalsPage() {
                 {detail.finished_at && <span className="text-[11px] text-gray-500">结束于 {fmtTime(detail.finished_at)}</span>}
               </div>
 
-              {/* 合同详情（仅合同类审批显示） */}
-              {detail.target_type === 'contract' && contractDetail && (
+              {/* 业务详情（通过注册表渲染） */}
+              {targetDetail && TARGET_DETAIL_REGISTRY[detail.target_type] && (
                 <div className="rounded-xl bg-bg-input/50 border border-border/50 p-4">
-                  <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">合同信息</div>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[12px]">
-                    <div className="col-span-2 flex gap-1.5">
-                      <span className="text-gray-400 shrink-0 w-[4em]">合同名称</span>
-                      <span className="text-gray-100 break-words min-w-0 flex-1">{contractDetail.title}</span>
-                    </div>
-                    {contractDetail.contract_type && (
-                      <div className="flex gap-1.5">
-                        <span className="text-gray-400 shrink-0 w-[4em]">合同类型</span>
-                        <span className="text-gray-200">{contractDetail.contract_type}</span>
-                      </div>
-                    )}
-                    {contractDetail.contract_amount != null && (
-                      <div className="flex gap-1.5">
-                        <span className="text-gray-400 shrink-0 w-[4em]">合同金额</span>
-                        <span className="text-gray-200">{contractDetail.contract_amount}{contractDetail.amount_unit}</span>
-                      </div>
-                    )}
-                    {contractDetail.party_a && (
-                      <div className="flex gap-1.5">
-                        <span className="text-gray-400 shrink-0 w-[4em]">甲方</span>
-                        <span className="text-gray-200">{contractDetail.party_a}</span>
-                      </div>
-                    )}
-                    {contractDetail.party_b && (
-                      <div className="flex gap-1.5">
-                        <span className="text-gray-400 shrink-0 w-[4em]">乙方</span>
-                        <span className="text-gray-200">{contractDetail.party_b}</span>
-                      </div>
-                    )}
-                    {contractDetail.seal_types_requested && (
-                      <div className="col-span-2 flex gap-1.5">
-                        <span className="text-gray-400 shrink-0 w-[4em]">用章类型</span>
-                        <span className="text-gray-200">{contractDetail.seal_types_requested}</span>
-                      </div>
-                    )}
+                  <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                    {TARGET_DETAIL_REGISTRY[detail.target_type].label}
                   </div>
+                  {TARGET_DETAIL_REGISTRY[detail.target_type].render(targetDetail)}
                 </div>
               )}
 

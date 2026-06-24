@@ -351,3 +351,118 @@ def cancel_instance(instance_id: int, current_user: User = Depends(get_current_u
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return _instance_detail(inst, db, current_user)
+
+
+# ──────────────────────────── 通用审批预览 ────────────────────────────
+
+# target_type → 模型类 映射（各业务模块在此注册，供通用预览接口加载已有数据）
+_TARGET_MODELS: dict[str, type] = {}
+
+
+def register_target_model(target_type: str, model_cls: type) -> None:
+    """注册业务模型，供通用 approval-preview 接口使用。"""
+    _TARGET_MODELS[target_type] = model_cls
+
+
+def _init_target_registry() -> None:
+    """初始化预置业务模型注册（延迟导入避免循环依赖）"""
+    if _TARGET_MODELS:
+        return
+    from app.models.contract import Contract
+    from app.models.payment import PaymentRequest
+    from app.models.seal import SealRequest
+    from app.models.project import Project
+    from app.models.supplier import Supplier
+    from app.models.channel import Channel
+    from app.models.reconcile import ReconcileSummary
+    from app.models.bill_reconcile import BillReconcileSession
+    from app.models.leave_request import LeaveRequest
+    from app.models.overtime_request import OvertimeRequest
+    from app.models.expense_request import ExpenseRequest
+    from app.models.business_trip_request import BusinessTripRequest
+    from app.models.purchase_request import PurchaseRequest
+    _TARGET_MODELS.update({
+        "contract": Contract,
+        "payment": PaymentRequest,
+        "seal": SealRequest,
+        "project": Project,
+        "supplier": Supplier,
+        "channel": Channel,
+        "reconcile_summary": ReconcileSummary,
+        "bill_reconcile": BillReconcileSession,
+        "leave": LeaveRequest,
+        "overtime": OvertimeRequest,
+        "expense": ExpenseRequest,
+        "business_trip": BusinessTripRequest,
+        "purchase": PurchaseRequest,
+    })
+
+
+class _PreviewData:
+    """用 dict 模拟业务对象，供 match_flow 评估触发条件（新建预览场景）"""
+    def __init__(self, data: dict):
+        for k, v in data.items():
+            setattr(self, k, v)
+
+
+@router.post("/preview")
+def preview_approval(
+    data: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    """通用审批预览：解析某业务提交审批后的节点和审批人（真实姓名）。
+
+    Body:
+      { "target_type": "payment", "target_id": 12 }              # 已有数据预览
+      { "target_type": "payment", "target_data": { ... } }       # 新建预览（未保存）
+
+    返回:
+      { "nodes": [{ name, order, approver_type, approver_names, node_kind }], "no_flow": bool }
+    """
+    _init_target_registry()
+    target_type = data.get("target_type")
+    if not target_type:
+        raise HTTPException(400, "请提供 target_type")
+
+    target_id = data.get("target_id")
+    target_data = data.get("target_data")
+
+    # 加载业务对象
+    if target_id:
+        model_cls = _TARGET_MODELS.get(target_type)
+        if not model_cls:
+            raise HTTPException(400, f"未注册的业务类型: {target_type}")
+        target_obj = db.get(model_cls, target_id)
+        if not target_obj:
+            raise HTTPException(404, "业务数据不存在")
+    elif target_data:
+        target_obj = _PreviewData(target_data)
+    else:
+        raise HTTPException(400, "请提供 target_id 或 target_data")
+
+    flow = approval_engine.match_flow(target_type, target_obj, db)
+    if not flow:
+        return {"nodes": [], "no_flow": True}
+
+    nodes = json.loads(flow.nodes or "[]")
+    nodes.sort(key=lambda n: n.get("order", 0))
+
+    result = []
+    for n in nodes:
+        approver_ids = approval_engine.resolve_approvers(
+            n.get("approver_type", ""), str(n.get("approver_value", "")), current_user, db
+        )
+        names = []
+        if approver_ids:
+            users = db.exec(select(User).where(User.id.in_(approver_ids))).all()
+            names = [u.name or u.username for u in users]
+        result.append({
+            "name": n.get("name", ""),
+            "order": n.get("order", 0),
+            "approver_type": n.get("approver_type", ""),
+            "approver_names": names,
+            "node_kind": n.get("node_kind", "approval"),
+            "action_label": n.get("action_label", ""),
+        })
+    return {"nodes": result, "no_flow": False}
