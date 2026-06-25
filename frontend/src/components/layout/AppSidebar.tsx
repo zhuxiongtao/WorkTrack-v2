@@ -10,6 +10,8 @@ import { useAuth } from '../../contexts/AuthContext'
 import AppSearch from './AppSearch'
 import { MENU_CATEGORIES } from './menuConfig'
 
+const APP_VERSION = 'v2.5.0'
+
 interface AppSidebarProps {
   sidebarOpen: boolean
   onCloseSidebar: () => void
@@ -235,6 +237,7 @@ function AppSidebar({ sidebarOpen, onCloseSidebar, brandLogo, brandTitle, isInsi
             <LogOut size={14} />
           </button>
         </div>
+        <p className="text-center text-[10px] text-gray-400 dark:text-gray-600 mt-1">{APP_VERSION}</p>
       </div>
     </aside>
   )
