@@ -41,6 +41,20 @@ class AdjustBody(BaseModel):
     reason: str = ""
 
 
+class GenerateAnnualPreviewBody(BaseModel):
+    year: int
+
+
+class AnnualApplyItem(BaseModel):
+    user_id: int
+    days: float               # 该员工本年度年假天数（HR 可在预览基础上微调）
+
+
+class GenerateAnnualApplyBody(BaseModel):
+    year: int
+    items: list[AnnualApplyItem]
+
+
 @router.get("/my")
 def get_my_balances(
     year: Optional[int] = Query(None),
@@ -115,6 +129,74 @@ def adjust(
         "total_hours": bal.total_hours, "used_hours": bal.used_hours,
         "remaining_hours": round(bal.total_hours - bal.used_hours, 2),
     }
+
+
+@router.post("/generate-annual/preview")
+def generate_annual_preview(
+    body: GenerateAnnualPreviewBody,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    """按工龄预览本年度年假发放草稿（需 leave:manage）。
+
+    对每个在职员工，依据「参加工作日期」算法定累计工龄→年假天数，
+    返回草稿列表供 HR 确认/微调，本接口不写库。
+    """
+    if not _can_manage(current_user, db):
+        raise HTTPException(403, "无权生成年假")
+    year = body.year
+    users = db.exec(
+        select(User).where(User.is_active == True, User.status == "active")
+    ).all()
+    # 当前已发年假总额（小时）
+    existing = {
+        b.user_id: b for b in db.exec(
+            select(LeaveBalance).where(
+                LeaveBalance.leave_type == "年假",
+                LeaveBalance.year == year,
+            )
+        ).all()
+    }
+    rows = []
+    for u in users:
+        days = leave_balance_service.statutory_annual_leave_days(u.first_work_date, year)
+        bal = existing.get(u.id)
+        rows.append({
+            "user_id": u.id,
+            "user_name": u.name or u.username,
+            "first_work_date": u.first_work_date.isoformat() if u.first_work_date else None,
+            "hire_date": u.hire_date.isoformat() if u.hire_date else None,
+            "tenure_years": leave_balance_service._tenure_years(u.first_work_date, year),
+            "statutory_days": days,
+            "current_total_days": round(bal.total_hours / leave_balance_service.HOURS_PER_DAY, 1) if bal else 0,
+            "current_used_days": round(bal.used_hours / leave_balance_service.HOURS_PER_DAY, 1) if bal else 0,
+            "missing_first_work_date": u.first_work_date is None,
+        })
+    rows.sort(key=lambda r: (r["missing_first_work_date"], -r["statutory_days"], r["user_name"]))
+    return {"year": year, "items": rows}
+
+
+@router.post("/generate-annual/apply")
+def generate_annual_apply(
+    body: GenerateAnnualApplyBody,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    """确认并发放年假（需 leave:manage）：将每位员工的年假总额设为指定天数。"""
+    if not _can_manage(current_user, db):
+        raise HTTPException(403, "无权发放年假")
+    applied = 0
+    for item in body.items:
+        leave_balance_service.set_balance_total(
+            item.user_id, "年假", body.year,
+            item.days * leave_balance_service.HOURS_PER_DAY,
+            f"{body.year} 年度按工龄发放年假 {item.days} 天",
+            current_user.id, db,
+        )
+        applied += 1
+    write_log("info", "leave_balance",
+              f"用户 {current_user.username} 批量发放 {body.year} 年度年假，共 {applied} 人", db=db)
+    return {"ok": True, "applied": applied, "year": body.year}
 
 
 @router.get("/logs")

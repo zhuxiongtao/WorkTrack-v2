@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   Package, Loader2, Plus, X, Pencil, Trash2, Search,
+  History, ArrowLeftRight, Wrench, Ban, Undo2, UserCheck, ArrowRight,
 } from 'lucide-react'
 import { PageHeader, EmptyState, Modal } from '../components/design-system'
 import { useAuth } from '../contexts/AuthContext'
@@ -42,6 +43,31 @@ interface SimpleSupplier {
   category: string | null
 }
 
+interface AssetRecordItem {
+  id: number
+  asset_id: number
+  action: string
+  from_user_id: number | null
+  from_user_name: string | null
+  to_user_id: number | null
+  to_user_name: string | null
+  operator_id: number | null
+  operator_name: string | null
+  from_status: string | null
+  to_status: string | null
+  note: string | null
+  created_at: string
+}
+
+// 流转操作元数据
+const ACTION_META: Record<string, { icon: any; cls: string; needUser: boolean; desc: string }> = {
+  领用: { icon: UserCheck,       cls: 'text-green-600 dark:text-green-400 border-green-500/40 hover:bg-green-500/10', needUser: true,  desc: '配发给指定员工，状态置「在用」' },
+  归还: { icon: Undo2,           cls: 'text-blue-600 dark:text-blue-400 border-blue-500/40 hover:bg-blue-500/10',    needUser: false, desc: '收回资产，状态置「闲置」' },
+  调拨: { icon: ArrowLeftRight,  cls: 'text-indigo-600 dark:text-indigo-400 border-indigo-500/40 hover:bg-indigo-500/10', needUser: true, desc: '转交给其他员工' },
+  维修: { icon: Wrench,          cls: 'text-orange-600 dark:text-orange-400 border-orange-500/40 hover:bg-orange-500/10', needUser: false, desc: '送修，状态置「维修中」' },
+  报废: { icon: Ban,             cls: 'text-red-600 dark:text-red-400 border-red-500/40 hover:bg-red-500/10',      needUser: false, desc: '资产报废，不可再操作' },
+}
+
 const DEFAULT_CATEGORIES = ['电子设备', '办公家具', '车辆', '房屋', '软件', '其他']
 const DEFAULT_STATUSES = ['在用', '闲置', '维修中', '已报废']
 
@@ -62,6 +88,13 @@ function fmtDate(s: string | null): string {
   try {
     const d = new Date(s)
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  } catch { return s }
+}
+
+function fmtDateTime(s: string): string {
+  try {
+    const d = new Date(s)
+    return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
   } catch { return s }
 }
 
@@ -114,6 +147,15 @@ export default function AssetsPage() {
 
   const [detail, setDetail] = useState<AssetItem | null>(null)
 
+  // 资产履历
+  const [records, setRecords] = useState<AssetRecordItem[]>([])
+  const [recordsLoading, setRecordsLoading] = useState(false)
+  // 流转操作子表单：null=未展开，否则为当前操作类型
+  const [action, setAction] = useState<string | null>(null)
+  const [actionUserId, setActionUserId] = useState('')
+  const [actionNote, setActionNote] = useState('')
+  const [actionBusy, setActionBusy] = useState(false)
+
   // 加载分类/状态选项
   useEffect(() => {
     fetch('/api/v1/assets/categories')
@@ -157,6 +199,48 @@ export default function AssetsPage() {
   }, [keyword, filterCategory, filterStatus, filterUserId])
 
   useEffect(() => { load() }, [load])
+
+  // 打开详情时加载履历，关闭操作子表单
+  const loadRecords = useCallback(async (assetId: number) => {
+    setRecordsLoading(true)
+    try {
+      const res = await fetch(`/api/v1/assets/${assetId}/records`)
+      if (res.ok) setRecords(await res.json())
+      else setRecords([])
+    } catch { setRecords([]) }
+    finally { setRecordsLoading(false) }
+  }, [])
+
+  useEffect(() => {
+    if (detail) { loadRecords(detail.id); setAction(null); setActionUserId(''); setActionNote('') }
+    else { setRecords([]) }
+  }, [detail, loadRecords])
+
+  // 执行流转操作
+  const submitAction = async () => {
+    if (!detail || !action) return
+    const meta = ACTION_META[action]
+    if (meta.needUser && !actionUserId) { showToast(`请选择${action === '领用' ? '领用' : '调拨目标'}员工`, 'warning'); return }
+    setActionBusy(true)
+    try {
+      const res = await fetch(`/api/v1/assets/${detail.id}/action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          to_user_id: meta.needUser ? parseInt(actionUserId) : null,
+          note: actionNote.trim() || null,
+        }),
+      })
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || '操作失败') }
+      const updated = await res.json()
+      showToast(`已${action}`, 'success')
+      setDetail(updated)        // 触发 records 重新加载
+      setAction(null); setActionUserId(''); setActionNote('')
+      load()
+    } catch (e: any) { showToast(e.message || '操作失败', 'error') }
+    finally { setActionBusy(false) }
+  }
 
   const openCreate = () => {
     setEditingId(null)
@@ -400,22 +484,126 @@ export default function AssetsPage() {
 
             {detail.remarks && (
               <div>
-                <p className="text-xs text-gray-400 mb-1">备注</p>
-                <p className="text-sm text-gray-200 whitespace-pre-wrap leading-relaxed">{detail.remarks}</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">备注</p>
+                <p className="text-sm text-gray-700 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">{detail.remarks}</p>
               </div>
             )}
 
+            {/* 流转操作 */}
+            {canManage && detail.status !== '已报废' && (
+              <div className="pt-1">
+                <p className="text-xs text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-1.5"><ArrowLeftRight size={12} /> 流转操作</p>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(ACTION_META).map(([act, meta]) => {
+                    // 归还：仅在有使用人时可用
+                    const disabled = act === '归还' && !detail.user_id
+                    const Icon = meta.icon
+                    return (
+                      <button
+                        key={act}
+                        disabled={disabled}
+                        onClick={() => { setAction(act); setActionUserId(''); setActionNote('') }}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${meta.cls} ${action === act ? 'bg-bg-hover' : ''}`}
+                      >
+                        <Icon size={13} /> {act}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* 操作子表单 */}
+                {action && (
+                  <div className="mt-3 p-3 rounded-xl bg-bg-hover/50 border border-border space-y-3">
+                    <p className="text-[11px] text-gray-600 dark:text-gray-400">{ACTION_META[action].desc}</p>
+                    {ACTION_META[action].needUser && (
+                      <div>
+                        <label className="block text-[11px] text-gray-600 dark:text-gray-400 mb-1.5">{action === '领用' ? '领用员工' : '调拨给'} <span className="text-red-500">*</span></label>
+                        <SearchableSelect
+                          options={users.map(u => ({ id: String(u.id), label: u.name || u.username }))}
+                          value={actionUserId}
+                          onChange={(v) => setActionUserId(v === 0 ? '' : String(v))}
+                          placeholder="选择员工"
+                          clearValue=""
+                        />
+                      </div>
+                    )}
+                    <div>
+                      <label className="block text-[11px] text-gray-600 dark:text-gray-400 mb-1.5">备注</label>
+                      <input
+                        value={actionNote}
+                        onChange={e => setActionNote(e.target.value)}
+                        placeholder={action === '报废' ? '如：屏幕老化无法使用' : '可选'}
+                        className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div className="flex items-center justify-end gap-2">
+                      <button onClick={() => setAction(null)} className="px-3 py-1.5 rounded-lg bg-bg-card border border-border text-gray-600 dark:text-gray-400 text-xs hover:text-gray-900 dark:hover:text-white transition-colors">取消</button>
+                      <button
+                        onClick={submitAction}
+                        disabled={actionBusy}
+                        className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-gradient-to-r from-indigo-500 to-violet-500 text-white text-xs font-bold hover:opacity-90 disabled:opacity-50 transition-opacity"
+                      >
+                        {actionBusy && <Loader2 size={13} className="animate-spin" />}
+                        确认{action}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 流转履历 */}
+            <div className="pt-1">
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-1.5"><History size={12} /> 流转履历</p>
+              {recordsLoading ? (
+                <div className="flex items-center justify-center py-6"><Loader2 className="animate-spin text-gray-400" size={20} /></div>
+              ) : records.length === 0 ? (
+                <p className="text-[11px] text-gray-500 py-3 text-center">暂无流转记录</p>
+              ) : (
+                <div className="space-y-2">
+                  {records.map(r => {
+                    const meta = ACTION_META[r.action]
+                    const Icon = meta?.icon || History
+                    return (
+                      <div key={r.id} className="flex items-start gap-2.5 p-2.5 rounded-lg bg-bg-hover/40 border border-border/50">
+                        <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${meta?.cls || 'text-gray-500'} border`}>
+                          <Icon size={12} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 text-xs flex-wrap">
+                            <span className="font-semibold text-gray-800 dark:text-gray-200">{r.action}</span>
+                            {(r.from_user_name || r.to_user_name) && (
+                              <span className="flex items-center gap-1 text-gray-600 dark:text-gray-400">
+                                {r.from_user_name || '库房'}
+                                <ArrowRight size={10} />
+                                {r.to_user_name || '库房'}
+                              </span>
+                            )}
+                            {r.from_status && r.to_status && r.from_status !== r.to_status && (
+                              <span className="text-[10px] text-gray-500">（{r.from_status}→{r.to_status}）</span>
+                            )}
+                          </div>
+                          {r.note && <p className="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5">{r.note}</p>}
+                          <p className="text-[10px] text-gray-500 mt-0.5">{fmtDateTime(r.created_at)} · 操作人 {r.operator_name || '系统'}</p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
             {canManage && (
-              <div className="flex items-center gap-2 pt-1">
+              <div className="flex items-center gap-2 pt-1 border-t border-border/40 mt-1">
                 <button
                   onClick={() => openEdit(detail)}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-bg-hover border border-border text-gray-300 text-xs font-medium hover:text-white transition-colors"
+                  className="flex items-center gap-1.5 px-4 py-2 mt-3 rounded-lg bg-bg-hover border border-border text-gray-700 dark:text-gray-300 text-xs font-medium hover:text-gray-900 dark:hover:text-white transition-colors"
                 >
                   <Pencil size={14} /> 编辑
                 </button>
                 <button
                   onClick={() => remove(detail)}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium hover:bg-red-500/20 transition-colors"
+                  className="flex items-center gap-1.5 px-4 py-2 mt-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-medium hover:bg-red-500/20 transition-colors"
                 >
                   <Trash2 size={14} /> 删除
                 </button>

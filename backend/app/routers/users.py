@@ -5,7 +5,7 @@ import secrets
 import string
 import logging
 from typing import Optional, List
-from datetime import datetime, timezone
+from datetime import datetime, date, timezone
 from app.utils.time import BEIJING_TZ, now
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel
@@ -70,6 +70,8 @@ class UserCreate(BaseModel):
     leader_id: Optional[int] = None
     department_id: Optional[int] = None
     job_title: Optional[str] = None
+    first_work_date: Optional[date] = None  # 参加工作日期（法定年假工龄）
+    hire_date: Optional[date] = None        # 本公司入职日期
 
 
 class UserUpdate(BaseModel):
@@ -82,6 +84,8 @@ class UserUpdate(BaseModel):
     leader_id: Optional[int] = None
     department_id: Optional[int] = None
     job_title: Optional[str] = None
+    first_work_date: Optional[date] = None
+    hire_date: Optional[date] = None
 
 
 class ResetPasswordRequest(BaseModel):
@@ -107,6 +111,8 @@ class UserOut(BaseModel):
     leader_id: Optional[int] = None
     department_id: Optional[int] = None
     job_title: Optional[str] = None
+    first_work_date: Optional[str] = None
+    hire_date: Optional[str] = None
     created_at: Optional[str] = None
 
 
@@ -142,6 +148,8 @@ def _user_to_out(user: User) -> dict:
         "leader_id": user.leader_id,
         "department_id": user.department_id,
         "job_title": user.job_title,
+        "first_work_date": user.first_work_date.isoformat() if user.first_work_date else None,
+        "hire_date": user.hire_date.isoformat() if user.hire_date else None,
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "must_change_password": user.must_change_password,
     }
@@ -807,6 +815,8 @@ def create_user(data: UserCreate, db: Session = Depends(get_session),
         leader_id=resolved_leader_id,
         department_id=data.department_id,
         job_title=data.job_title,
+        first_work_date=data.first_work_date,
+        hire_date=data.hire_date,
         must_change_password=True,  # 要求首次登录修改密码
     )
     db.add(user)
@@ -887,6 +897,10 @@ def update_user(user_id: int, data: UserUpdate, db: Session = Depends(get_sessio
         user.leader_id = data.leader_id if data.leader_id != 0 else None
     if "job_title" in update_fields:
         user.job_title = data.job_title if data.job_title and data.job_title.strip() else None
+    if "first_work_date" in update_fields:
+        user.first_work_date = data.first_work_date
+    if "hire_date" in update_fields:
+        user.hire_date = data.hire_date
 
     db.add(user)
     db.flush()

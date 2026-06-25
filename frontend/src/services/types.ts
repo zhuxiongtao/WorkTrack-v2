@@ -19,6 +19,8 @@ export interface UserData {
   department_id: number | null
   department_name: string | null
   job_title?: string | null
+  first_work_date?: string | null
+  hire_date?: string | null
   roles?: { id: number; name: string; code: string }[]
 }
 
@@ -40,6 +42,8 @@ export interface UserCreatePayload {
   leader_id: number | null
   department_id: number | null
   job_title?: string | null
+  first_work_date?: string | null
+  hire_date?: string | null
 }
 
 export interface UserUpdatePayload {
@@ -52,6 +56,8 @@ export interface UserUpdatePayload {
   leader_id?: number | null
   department_id?: number | null
   job_title?: string | null
+  first_work_date?: string | null
+  hire_date?: string | null
 }
 
 export interface UserListParams {

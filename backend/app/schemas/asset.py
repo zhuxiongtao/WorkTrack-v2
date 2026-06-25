@@ -54,3 +54,26 @@ class AssetOut(BaseModel):
     remarks: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+
+
+class AssetActionIn(BaseModel):
+    """资产流转操作：领用/归还/调拨/维修/报废"""
+    action: str                         # 领用 | 归还 | 调拨 | 维修 | 报废
+    to_user_id: Optional[int] = None    # 领用/调拨的目标使用人
+    note: Optional[str] = None
+
+
+class AssetRecordOut(BaseModel):
+    id: int
+    asset_id: int
+    action: str
+    from_user_id: Optional[int] = None
+    from_user_name: Optional[str] = None
+    to_user_id: Optional[int] = None
+    to_user_name: Optional[str] = None
+    operator_id: Optional[int] = None
+    operator_name: Optional[str] = None
+    from_status: Optional[str] = None
+    to_status: Optional[str] = None
+    note: Optional[str] = None
+    created_at: datetime

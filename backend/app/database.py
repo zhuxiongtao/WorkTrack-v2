@@ -54,6 +54,9 @@ def init_db():
         try:
             conn.execute(text("ALTER TABLE wiki_space ADD COLUMN IF NOT EXISTS share_password VARCHAR(100) DEFAULT NULL;"))
             conn.execute(text("ALTER TABLE wiki_space ADD COLUMN IF NOT EXISTS share_expires_at TIMESTAMP WITH TIME ZONE DEFAULT NULL;"))
+            # HR 档案日期（参加工作日期→法定年假工龄；入职日期→司龄）
+            conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS first_work_date DATE DEFAULT NULL;'))
+            conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS hire_date DATE DEFAULT NULL;'))
             conn.commit()
         except Exception as e:
             logger.debug("ALTER TABLE skipped: %s", e)

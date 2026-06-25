@@ -9,7 +9,7 @@
 """
 import logging
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, date
 
 from sqlmodel import Session, select
 
@@ -19,6 +19,40 @@ from app.models.overtime_request import OvertimeRequest
 from app.utils.time import now
 
 logger = logging.getLogger("worktrack")
+
+# 每个工作日折合小时数（年假天数 → 额度小时数）
+HOURS_PER_DAY = 8.0
+
+
+def _tenure_years(first_work_date: Optional[date], as_of_year: int) -> int:
+    """累计工龄（已满整年），以分配年度的 12 月 31 日为基准。"""
+    if not first_work_date:
+        return 0
+    ref = date(as_of_year, 12, 31)
+    return ref.year - first_work_date.year - (
+        (ref.month, ref.day) < (first_work_date.month, first_work_date.day)
+    )
+
+
+def statutory_annual_leave_days(first_work_date: Optional[date], as_of_year: int) -> int:
+    """按《职工带薪年休假条例》计算法定年假天数。
+
+    依据「累计工作时间（社会工龄）」：
+      - 累计满 1 年不满 10 年：5 天
+      - 满 10 年不满 20 年：10 天
+      - 满 20 年以上：15 天
+      - 不满 1 年：0 天（条例规定不享受，首年是否按比例由 HR 在草稿中调整）
+
+    工龄以指定年度的 12 月 31 日为基准，按已满整年计算。
+    """
+    years = _tenure_years(first_work_date, as_of_year)
+    if years < 1:
+        return 0
+    if years < 10:
+        return 5
+    if years < 20:
+        return 10
+    return 15
 
 
 def get_or_create_balance(
@@ -152,4 +186,26 @@ def adjust_balance(
         reason or "管理员调整", db,
         operator_id=operator_id,
     )
+    return bal
+
+
+def set_balance_total(
+    user_id: int, leave_type: str, year: int,
+    total_hours: float, reason: str, operator_id: int, db: Session,
+) -> LeaveBalance:
+    """将额度「总额」直接设为目标值（用于按工龄批量发放年假），记录变动差额。"""
+    bal = get_or_create_balance(user_id, leave_type, year, db)
+    new_total = round(max(0, total_hours), 2)
+    delta = round(new_total - bal.total_hours, 2)
+    bal.total_hours = new_total
+    bal.updated_at = now()
+    db.add(bal)
+    db.commit()
+    db.refresh(bal)
+    if delta != 0:
+        _write_log(
+            bal, "adjust", delta,
+            reason or "按工龄发放年假", db,
+            operator_id=operator_id,
+        )
     return bal

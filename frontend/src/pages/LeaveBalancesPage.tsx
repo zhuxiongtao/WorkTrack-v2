@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Database, Loader2, Plus, X, SlidersHorizontal, History,
+  Database, Loader2, Plus, X, SlidersHorizontal, History, CalendarClock, AlertTriangle, Check,
 } from 'lucide-react'
 import { PageHeader, EmptyState, Modal } from '../components/design-system'
 import { useAuth } from '../contexts/AuthContext'
@@ -38,6 +38,19 @@ interface SimpleUser {
   name: string
   username: string
   department?: string
+}
+
+interface AnnualPreviewRow {
+  user_id: number
+  user_name: string
+  first_work_date: string | null
+  hire_date: string | null
+  tenure_years: number
+  statutory_days: number
+  current_total_days: number
+  current_used_days: number
+  missing_first_work_date: boolean
+  apply_days: number   // 前端可编辑的拟发放天数
 }
 
 const DEFAULT_LEAVE_TYPES = ['年假', '事假', '病假', '调休', '婚假', '产假', '陪产假', '丧假']
@@ -110,6 +123,13 @@ export default function LeaveBalancesPage() {
   const [showAdjust, setShowAdjust] = useState(false)
   const [adjustForm, setAdjustForm] = useState({ ...emptyAdjustForm })
   const [saving, setSaving] = useState(false)
+
+  // 按工龄批量发放年假
+  const [showGenerate, setShowGenerate] = useState(false)
+  const [genYear, setGenYear] = useState(CURRENT_YEAR)
+  const [genRows, setGenRows] = useState<AnnualPreviewRow[]>([])
+  const [genLoading, setGenLoading] = useState(false)
+  const [genApplying, setGenApplying] = useState(false)
 
   // 加载用户列表
   useEffect(() => {
@@ -204,6 +224,54 @@ export default function LeaveBalancesPage() {
     finally { setSaving(false) }
   }
 
+  // 打开「按工龄发放年假」并加载预览
+  const openGenerate = async (year: number = CURRENT_YEAR) => {
+    setGenYear(year)
+    setShowGenerate(true)
+    setGenLoading(true)
+    setGenRows([])
+    try {
+      const res = await fetch('/api/v1/leave-balances/generate-annual/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ year }),
+      })
+      if (!res.ok) throw new Error('预览失败')
+      const data = await res.json()
+      setGenRows((data.items || []).map((r: any) => ({ ...r, apply_days: r.statutory_days })))
+    } catch (e: any) {
+      showToast(e.message || '加载预览失败', 'error')
+    } finally {
+      setGenLoading(false)
+    }
+  }
+
+  const submitGenerate = async () => {
+    const items = genRows
+      .filter(r => !r.missing_first_work_date)
+      .map(r => ({ user_id: r.user_id, days: r.apply_days }))
+    if (items.length === 0) { showToast('没有可发放的员工（请先补全参加工作日期）', 'warning'); return }
+    setGenApplying(true)
+    try {
+      const res = await fetch('/api/v1/leave-balances/generate-annual/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ year: genYear, items }),
+      })
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || '发放失败') }
+      const data = await res.json()
+      showToast(`已为 ${data.applied} 名员工发放 ${genYear} 年度年假`, 'success')
+      setShowGenerate(false)
+      setFilterYear(genYear)
+      setFilterLeaveType('年假')
+      loadBalances()
+    } catch (e: any) {
+      showToast(e.message || '发放失败', 'error')
+    } finally {
+      setGenApplying(false)
+    }
+  }
+
   // 下拉选项
   const userFilterOptions = [
     { id: '', label: '全部用户' },
@@ -246,12 +314,20 @@ export default function LeaveBalancesPage() {
         tone="purple"
         stats={stats}
         right={
-          <button
-            onClick={() => openAdjust()}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-violet-500 text-white text-sm font-medium hover:opacity-90 transition-opacity"
-          >
-            <Plus size={16} /> 调整额度
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => openGenerate(CURRENT_YEAR)}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-emerald-500/50 text-emerald-600 dark:text-emerald-400 text-sm font-medium hover:bg-emerald-500/10 transition-colors"
+            >
+              <CalendarClock size={16} /> 按工龄发放年假
+            </button>
+            <button
+              onClick={() => openAdjust()}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-violet-500 text-white text-sm font-medium hover:opacity-90 transition-opacity"
+            >
+              <Plus size={16} /> 调整额度
+            </button>
+          </div>
         }
       />
 
@@ -500,7 +576,7 @@ export default function LeaveBalancesPage() {
             <div className="flex items-center justify-end gap-2 pt-2">
               <button
                 onClick={() => setShowAdjust(false)}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-bg-hover border border-border text-gray-300 text-xs font-medium hover:text-white transition-colors"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-bg-hover border border-border text-gray-700 dark:text-gray-300 text-xs font-medium hover:text-gray-900 dark:hover:text-white transition-colors"
               >
                 <X size={14} /> 取消
               </button>
@@ -511,6 +587,111 @@ export default function LeaveBalancesPage() {
               >
                 {saving && <Loader2 size={14} className="animate-spin" />}
                 确认调整
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* 按工龄批量发放年假弹窗 */}
+      {showGenerate && (
+        <Modal
+          icon={CalendarClock}
+          title="按工龄发放年假"
+          subtitle="依据《职工带薪年休假条例》，按参加工作日期核算累计工龄→年假天数，可逐人微调后确认"
+          tone="purple"
+          size="xl"
+          onClose={() => setShowGenerate(false)}
+        >
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <Field label="发放年度" required>
+                <input
+                  type="number"
+                  value={genYear}
+                  onChange={e => openGenerate(parseInt(e.target.value) || CURRENT_YEAR)}
+                  className="w-32 px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-indigo-500"
+                />
+              </Field>
+              <div className="flex-1 text-[11px] text-gray-500 dark:text-gray-400 pt-5 leading-relaxed">
+                档位：满 1 年不满 10 年 = 5 天；满 10 年不满 20 年 = 10 天；满 20 年 = 15 天。<br />
+                发放将把每人年假「总额」设为下方天数（1 天 = 8 小时），已用部分保留。
+              </div>
+            </div>
+
+            {genLoading ? (
+              <div className="flex items-center justify-center py-16"><Loader2 className="animate-spin text-gray-400" size={26} /></div>
+            ) : genRows.length === 0 ? (
+              <EmptyState icon={Database} title="暂无在职员工" description="没有可发放年假的在职员工" tone="purple" />
+            ) : (
+              <div className="rounded-xl bg-bg-card border border-border/50 overflow-hidden max-h-[48vh] overflow-y-auto">
+                <table className="w-full">
+                  <thead className="sticky top-0 bg-bg-card z-10">
+                    <tr className="border-b border-border">
+                      <th className="text-left text-[11px] text-gray-600 dark:text-gray-400 uppercase font-medium px-3 py-2.5">员工</th>
+                      <th className="text-left text-[11px] text-gray-600 dark:text-gray-400 uppercase font-medium px-3 py-2.5">参加工作</th>
+                      <th className="text-right text-[11px] text-gray-600 dark:text-gray-400 uppercase font-medium px-3 py-2.5">工龄</th>
+                      <th className="text-right text-[11px] text-gray-600 dark:text-gray-400 uppercase font-medium px-3 py-2.5">法定</th>
+                      <th className="text-right text-[11px] text-gray-600 dark:text-gray-400 uppercase font-medium px-3 py-2.5">当前/已用</th>
+                      <th className="text-right text-[11px] text-gray-600 dark:text-gray-400 uppercase font-medium px-3 py-2.5">拟发放(天)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/40">
+                    {genRows.map((r, i) => (
+                      <tr key={r.user_id} className={`transition-colors ${r.missing_first_work_date ? 'bg-amber-500/5' : 'hover:bg-bg-hover/40'}`}>
+                        <td className="px-3 py-2 text-sm text-gray-800 dark:text-gray-200 font-medium whitespace-nowrap">{r.user_name}</td>
+                        <td className="px-3 py-2 text-xs whitespace-nowrap">
+                          {r.first_work_date
+                            ? <span className="text-gray-600 dark:text-gray-400 tabular-nums">{r.first_work_date}</span>
+                            : <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400"><AlertTriangle size={11} /> 未录入</span>}
+                        </td>
+                        <td className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 text-right tabular-nums">{r.missing_first_work_date ? '—' : `${r.tenure_years}年`}</td>
+                        <td className="px-3 py-2 text-sm text-gray-700 dark:text-gray-300 text-right tabular-nums">{r.missing_first_work_date ? '—' : `${r.statutory_days}天`}</td>
+                        <td className="px-3 py-2 text-xs text-gray-500 dark:text-gray-500 text-right tabular-nums whitespace-nowrap">{r.current_total_days}/{r.current_used_days}天</td>
+                        <td className="px-3 py-2 text-right">
+                          <input
+                            type="number"
+                            min={0}
+                            step={0.5}
+                            value={r.apply_days}
+                            disabled={r.missing_first_work_date}
+                            onChange={e => {
+                              const v = parseFloat(e.target.value)
+                              setGenRows(rows => rows.map((x, j) => j === i ? { ...x, apply_days: isNaN(v) ? 0 : v } : x))
+                            }}
+                            className="w-20 px-2 py-1 rounded-md bg-bg-input border border-border text-sm text-right outline-none focus:border-indigo-500 disabled:opacity-40 tabular-nums"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {genRows.some(r => r.missing_first_work_date) && (
+              <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                <AlertTriangle size={13} className="text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                <span className="text-[11px] text-amber-700 dark:text-amber-300/90 leading-relaxed">
+                  有 {genRows.filter(r => r.missing_first_work_date).length} 名员工未录入「参加工作日期」，将跳过。请到「用户管理」补全后再发放。
+                </span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                onClick={() => setShowGenerate(false)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-bg-hover border border-border text-gray-700 dark:text-gray-300 text-xs font-medium hover:text-gray-900 dark:hover:text-white transition-colors"
+              >
+                <X size={14} /> 取消
+              </button>
+              <button
+                onClick={submitGenerate}
+                disabled={genApplying || genLoading}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold hover:opacity-90 disabled:opacity-50 transition-opacity"
+              >
+                {genApplying ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                确认发放 {genRows.filter(r => !r.missing_first_work_date).length} 人
               </button>
             </div>
           </div>

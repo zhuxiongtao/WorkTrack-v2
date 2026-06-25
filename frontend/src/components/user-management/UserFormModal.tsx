@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Save, Loader2, UserPlus, Crown, Sparkles, Users, Eye, EyeOff, Check, ChevronRight, ChevronLeft, Mail, AtSign, Briefcase, Building2, UserCheck, ShieldCheck, Lock, AlertCircle } from 'lucide-react'
+import { X, Save, Loader2, UserPlus, Crown, Sparkles, Users, Eye, EyeOff, Check, ChevronRight, ChevronLeft, Mail, AtSign, Briefcase, Building2, UserCheck, ShieldCheck, Lock, AlertCircle, CalendarClock, CalendarCheck2 } from 'lucide-react'
 import { useToast } from '../../contexts/ToastContext'
 import type { UserData } from '../../services/types'
 import SearchableSelect from '../SearchableSelect'
@@ -65,6 +65,8 @@ export function UserFormModal({ isOpen, editingUser, onClose }: UserFormModalPro
     leader_id: editingUser?.leader_id ?? null as number | null,
     department_id: editingUser?.department_id ?? null as number | null,
     job_title: editingUser?.job_title ?? null as string | null,
+    first_work_date: editingUser?.first_work_date ?? null as string | null,
+    hire_date: editingUser?.hire_date ?? null as string | null,
   }))
   const [showPassword, setShowPassword] = useState(false)
   const [step, setStep] = useState<StepKey>('basics')
@@ -118,6 +120,18 @@ export function UserFormModal({ isOpen, editingUser, onClose }: UserFormModalPro
     }
   }, [form.department_id, departments, editingUser, leaderManuallyEdited])
 
+  // 按参加工作日期预估法定累计工龄与年假天数（前端展示用，最终以后端为准）
+  const annualLeavePreview = useMemo(() => {
+    if (!form.first_work_date) return { years: 0, days: 0 }
+    const start = new Date(form.first_work_date)
+    if (isNaN(start.getTime())) return { years: 0, days: 0 }
+    const ref = new Date(new Date().getFullYear(), 11, 31)
+    let years = ref.getFullYear() - start.getFullYear()
+    if (ref.getMonth() < start.getMonth() || (ref.getMonth() === start.getMonth() && ref.getDate() < start.getDate())) years -= 1
+    const days = years < 1 ? 0 : years < 10 ? 5 : years < 20 ? 10 : 15
+    return { years: Math.max(0, years), days }
+  }, [form.first_work_date])
+
   // 当前密码强度（仅创建用户时计算）
   const pwdEval = useMemo(() => evaluatePassword(form.password), [form.password])
   // 编辑时不校验；创建时密码可留空（系统自动生成），若填写则需至少"良好"
@@ -156,6 +170,8 @@ export function UserFormModal({ isOpen, editingUser, onClose }: UserFormModalPro
           leader_id: form.leader_id,
           department_id: form.department_id,
           job_title: form.job_title,
+          first_work_date: form.first_work_date,
+          hire_date: form.hire_date,
         },
       }, { onSuccess: onClose })
     } else {
@@ -170,6 +186,8 @@ export function UserFormModal({ isOpen, editingUser, onClose }: UserFormModalPro
         leader_id: form.leader_id,
         department_id: form.department_id,
         job_title: form.job_title,
+        first_work_date: form.first_work_date,
+        hire_date: form.hire_date,
       }, {
         onSuccess: (data) => {
           if (data?.welcome_email_sent) {
@@ -402,6 +420,33 @@ export function UserFormModal({ isOpen, editingUser, onClose }: UserFormModalPro
                   placeholder="e.g. 前端开发工程师"
                 />
               </FormField>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField label="参加工作日期" icon={CalendarClock} hint="首次参加工作时间，按法定累计工龄自动核算年假档位">
+                  <input
+                    type="date"
+                    value={form.first_work_date ?? ''}
+                    onChange={e => updateFormField('first_work_date', e.target.value || null)}
+                    className="form-input"
+                  />
+                </FormField>
+                <FormField label="本公司入职日期" icon={CalendarCheck2} hint="入职本公司的时间，用于司龄统计">
+                  <input
+                    type="date"
+                    value={form.hire_date ?? ''}
+                    onChange={e => updateFormField('hire_date', e.target.value || null)}
+                    className="form-input"
+                  />
+                </FormField>
+              </div>
+              {form.first_work_date && (
+                <div className="rounded-lg bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 px-3 py-2 flex items-center gap-2">
+                  <CalendarClock size={12} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span className="text-[11px] text-emerald-700 dark:text-emerald-300/90">
+                    按参加工作日期，当前累计工龄约 <b>{annualLeavePreview.years}</b> 年，法定年假 <b>{annualLeavePreview.days}</b> 天/年
+                  </span>
+                </div>
+              )}
 
               {/* 预览卡片 */}
               <div className="rounded-xl bg-gradient-to-br from-blue-50 to-cyan-50/50 dark:from-accent-blue/5 dark:to-cyan-500/5 border border-blue-100 dark:border-accent-blue/15 p-4">

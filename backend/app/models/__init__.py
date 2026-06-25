@@ -44,6 +44,7 @@ from app.models.expense_request import ExpenseRequest
 from app.models.business_trip_request import BusinessTripRequest
 from app.models.purchase_request import PurchaseRequest
 from app.models.asset import Asset
+from app.models.asset_record import AssetRecord
 
 __all__ = [
     "User",

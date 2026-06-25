@@ -11,10 +11,11 @@ from sqlmodel import Session, select
 
 from app.database import get_session
 from app.models.asset import Asset
+from app.models.asset_record import AssetRecord
 from app.models.purchase_supplier import PurchaseSupplier
 from app.models.user import User
 from app.auth import get_current_user, require_permission
-from app.schemas.asset import AssetCreate, AssetUpdate, AssetOut
+from app.schemas.asset import AssetCreate, AssetUpdate, AssetOut, AssetActionIn, AssetRecordOut
 from app.routers.logs import write_log
 from app.utils.time import now
 
@@ -24,6 +25,7 @@ router = APIRouter(prefix="/api/v1/assets", tags=["企业资产"])
 
 ASSET_CATEGORIES = ["电子设备", "办公家具", "车辆", "房屋", "软件", "其他"]
 ASSET_STATUSES = ["在用", "闲置", "维修中", "已报废"]
+ASSET_ACTIONS = ["领用", "归还", "调拨", "维修", "报废"]
 
 
 def _name_map(db: Session, ids: list[int]) -> dict:
@@ -57,7 +59,7 @@ def _to_out(a: Asset, nm: dict, sm: dict) -> AssetOut:
 
 @router.get("/categories")
 def list_categories():
-    return {"categories": ASSET_CATEGORIES, "statuses": ASSET_STATUSES}
+    return {"categories": ASSET_CATEGORIES, "statuses": ASSET_STATUSES, "actions": ASSET_ACTIONS}
 
 
 @router.get("", response_model=list[AssetOut])
@@ -161,7 +163,98 @@ def delete_asset(
     a = db.get(Asset, asset_id)
     if not a:
         raise HTTPException(404, "资产不存在")
+    # 先删履历再删资产（FK 约束）
+    for rec in db.exec(select(AssetRecord).where(AssetRecord.asset_id == asset_id)).all():
+        db.delete(rec)
+    db.flush()
     db.delete(a)
     db.commit()
     write_log("info", "asset", f"资产 #{asset_id}（{a.name}）已删除", db=db)
     return {"ok": True}
+
+
+@router.post("/{asset_id}/action", response_model=AssetOut)
+def asset_action(
+    asset_id: int,
+    body: AssetActionIn,
+    current_user: User = Depends(require_permission("asset:manage")),
+    db: Session = Depends(get_session),
+):
+    """资产流转操作：领用/归还/调拨/维修/报废。
+    自动更新资产当前使用人与状态，并写入履历，可追溯历任使用人。"""
+    a = db.get(Asset, asset_id)
+    if not a:
+        raise HTTPException(404, "资产不存在")
+    action = (body.action or "").strip()
+    if action not in ASSET_ACTIONS:
+        raise HTTPException(400, f"不支持的操作：{action}")
+    if a.status == "已报废":
+        raise HTTPException(400, "资产已报废，不能再操作")
+
+    from_user_id = a.user_id
+    from_status = a.status
+    to_user_id = None
+
+    if action in ("领用", "调拨"):
+        if not body.to_user_id:
+            raise HTTPException(400, f"{action}须指定使用人")
+        if not db.get(User, body.to_user_id):
+            raise HTTPException(404, "指定的使用人不存在")
+        to_user_id = body.to_user_id
+        a.user_id = to_user_id
+        a.status = "在用"
+    elif action == "归还":
+        if not from_user_id:
+            raise HTTPException(400, "该资产当前无使用人，无需归还")
+        a.user_id = None
+        a.status = "闲置"
+    elif action == "维修":
+        a.status = "维修中"
+    elif action == "报废":
+        a.user_id = None
+        a.status = "已报废"
+
+    a.updated_at = now()
+    db.add(a)
+    db.flush()
+    db.add(AssetRecord(
+        asset_id=asset_id, action=action,
+        from_user_id=from_user_id, to_user_id=to_user_id,
+        operator_id=current_user.id,
+        from_status=from_status, to_status=a.status,
+        note=(body.note or None),
+    ))
+    db.commit()
+    db.refresh(a)
+    write_log("info", "asset",
+              f"用户 {current_user.username} 对资产 #{asset_id}（{a.name}）执行「{action}」", db=db)
+    nm = _name_map(db, [a.user_id] if a.user_id else [])
+    sm = _supplier_map(db, [a.supplier_id] if a.supplier_id else [])
+    return _to_out(a, nm, sm)
+
+
+@router.get("/{asset_id}/records", response_model=list[AssetRecordOut])
+def list_asset_records(
+    asset_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    """查看资产流转履历（按时间倒序）"""
+    if not db.get(Asset, asset_id):
+        raise HTTPException(404, "资产不存在")
+    rows = db.exec(
+        select(AssetRecord).where(AssetRecord.asset_id == asset_id)
+        .order_by(AssetRecord.created_at.desc())
+    ).all()
+    ids = []
+    for r in rows:
+        ids += [r.from_user_id, r.to_user_id, r.operator_id]
+    nm = _name_map(db, [i for i in ids if i])
+    return [AssetRecordOut(
+        id=r.id, asset_id=r.asset_id, action=r.action,
+        from_user_id=r.from_user_id, from_user_name=nm.get(r.from_user_id) if r.from_user_id else None,
+        to_user_id=r.to_user_id, to_user_name=nm.get(r.to_user_id) if r.to_user_id else None,
+        operator_id=r.operator_id, operator_name=nm.get(r.operator_id) if r.operator_id else None,
+        from_status=r.from_status, to_status=r.to_status,
+        note=r.note, created_at=r.created_at,
+    ) for r in rows]
