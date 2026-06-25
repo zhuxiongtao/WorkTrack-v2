@@ -192,6 +192,17 @@ vMAJOR.MINOR.PATCH
 - **MINOR**：新功能模块上线（如审批引擎、项目跟进记录等）
 - **PATCH**：Bug 修复、小优化
 
+### 发版时必须同步更新的版本号位置
+
+每次发布新版本，以下四处**必须同步修改**，缺一不可：
+
+| 位置 | 文件 | 修改内容 |
+|---|---|---|
+| 平台侧边栏展示 | `frontend/src/components/layout/AppSidebar.tsx` | `APP_VERSION = 'vX.X.X'` |
+| 前端包版本 | `frontend/package.json` | `"version": "X.X.X"` |
+| 后端 API 版本 | `backend/app/main.py` | `version="X.X.X"`（FastAPI + root 接口各一处） |
+| 开发规范历史 | `CLAUDE.md` 版本历史表 | 新增行，前一行去掉 `(latest)` 标注 |
+
 ### 构建命令
 
 ```bash
