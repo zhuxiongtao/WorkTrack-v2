@@ -2,7 +2,8 @@ import json
 from typing import Optional
 from sqlmodel import Session, select, func
 from datetime import date, datetime
-from app.services.ai_service import _get_active_provider, _get_client, _extract_message_text
+from app.services.ai_service import _get_active_provider, _get_active_provider_full, _get_client, _extract_message_text
+from app.services.param_resolver import resolve_chat_params
 from app.services.vector_store import search_similar
 from app.models import Customer, Project, DailyReport, MeetingNote
 from app.models.contract import Contract
@@ -1095,11 +1096,19 @@ def run_agent_chat(user_message: str, history: list[dict], db: Session, user: Us
     messages.append({"role": "user", "content": user_message})
 
     try:
-        base_url, api_key, model, provider = _get_active_provider(db, "chat", user.id)
+        base_url, api_key, model, provider, task_cfg, pm = _get_active_provider_full(db, "chat", user.id)
         client = _get_client(base_url, api_key, provider)
     except Exception as e:
         write_log("error", "ai", f"AI模型配置失败: {str(e)[:150]}", details=str(e), db=db)
         return f"AI 模型配置失败: {str(e)[:200]}"
+
+    # 应用用户/管理员在「模型管理」中配置的参数（温度、top_p、max_tokens、预设等）
+    # func_defaults 仅在用户未配置时兜底；response_format 与工具调用冲突，需剔除
+    chat_params = resolve_chat_params(
+        db, model=pm, task_cfg=task_cfg,
+        func_defaults={"temperature": 0.7},
+    )
+    chat_params.pop("response_format", None)
 
     for _ in range(5):
         try:
@@ -1107,7 +1116,7 @@ def run_agent_chat(user_message: str, history: list[dict], db: Session, user: Us
                 model=model,
                 messages=messages,
                 tools=tools_for_user if tools_for_user else None,
-                temperature=0.7,
+                **chat_params,
             )
         except Exception as e:
             write_log("error", "ai", f"AI API调用失败: {str(e)[:150]}", details=str(e), db=db)

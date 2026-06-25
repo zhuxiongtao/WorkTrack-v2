@@ -476,7 +476,7 @@ def generate_weekly_summary(data: WeeklySummaryRequest, current_user: User = Dep
     user_prompt = _fill_template(template, week_range=week_range, reports_content=reports_content)
 
     try:
-        base_url, api_key, model, provider = _get_active_provider(db, "chat", current_user.id)
+        base_url, api_key, model, provider = _get_active_provider(db, "weekly_summary", current_user.id)
         client = _get_client(base_url, api_key, provider)
         response = client.chat.completions.create(
             model=model,

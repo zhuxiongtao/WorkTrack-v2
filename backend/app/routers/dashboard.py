@@ -467,20 +467,23 @@ def get_ai_insights(
     # 获取提示词（从数据库或默认配置）
     system_prompt, user_prompt_template = _resolve_prompt(db, period, current_user.id)
 
-    # 尝试调用 AI
+    # 尝试调用 AI（按 insight_{period} 专属配置，未配置则回落 chat）
     try:
-        provider_info = _get_active_provider(db, "chat", current_user.id)
+        provider_info = _get_active_provider(db, f"insight_{period}", current_user.id)
     except HTTPException:
-        provider_info = (None, None, None)
+        provider_info = (None, None, None, None)
     except Exception as e:
         logger.error("获取 AI 供应商失败: %s", e)
-        provider_info = (None, None, None)
+        provider_info = (None, None, None, None)
 
-    if not provider_info[0] or not provider_info[1]:
+    # 用 provider 对象判定是否可用：Vertex AI 的 base_url/api_key 为 None 但 provider 有效，
+    # 不能用 base_url 判空（否则 Vertex 供应商会被误判为未配置，洞察永远返回空）
+    if not provider_info[3]:
         return {"insights": [], "period": period, "sources": sources, "updated_at": None}
 
     try:
-        client = _get_client(provider_info[0], provider_info[1])
+        # 传入 provider 对象，确保 Gemini/Vertex/Anthropic 原生供应商也能正确调用
+        client = _get_client(provider_info[0], provider_info[1], provider_info[3])
         model = provider_info[2] or "gpt-3.5-turbo"
 
         # 构建用户消息：用真实数据替换模板变量

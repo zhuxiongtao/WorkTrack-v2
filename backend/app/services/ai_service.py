@@ -660,35 +660,38 @@ def _get_active_provider(db: Session, task_type: str = "chat", user_id: int = 0)
         else:
             return provider.base_url, provider.api_key, model_name
 
-    # 1. 用户自己的任务配置
-    if user:
-        task_cfg = db.exec(
-            select(TaskModelConfig).where(
-                TaskModelConfig.task_type == task_type,
-                TaskModelConfig.user_id == user_id,
-            )
-        ).first()
-        if task_cfg and task_cfg.provider_id and task_cfg.model_name:
-            provider = db.get(ModelProvider, task_cfg.provider_id)
-            if provider and provider.is_active and provider.api_key:
-                base_url, api_key, model_name = _resolve(provider, task_cfg.model_name)
-                return base_url, api_key, model_name, provider
+    # 按「专属 task_type → chat」顺序查找：每档先用户私有，后管理员共享。
+    # 这样为某任务（如 project_analysis）单独配置的模型会真正生效；
+    # 未单独配置时回落到通用 chat 模型，保证只配了 chat 的部署不受影响。
+    candidates = [task_type] + (["chat"] if task_type != "chat" else [])
+    for tt in candidates:
+        if user:
+            task_cfg = db.exec(
+                select(TaskModelConfig).where(
+                    TaskModelConfig.task_type == tt,
+                    TaskModelConfig.user_id == user_id,
+                )
+            ).first()
+            if task_cfg and task_cfg.provider_id and task_cfg.model_name:
+                provider = db.get(ModelProvider, task_cfg.provider_id)
+                if provider and provider.is_active and provider.api_key:
+                    base_url, api_key, model_name = _resolve(provider, task_cfg.model_name)
+                    return base_url, api_key, model_name, provider
 
-    # 2. 管理员共享的任务配置（需 use_shared_models 权限）
-    if use_shared:
-        task_cfg = db.exec(
-            select(TaskModelConfig).where(
-                TaskModelConfig.task_type == task_type,
-                TaskModelConfig.user_id == None,
-            )
-        ).first()
-        if task_cfg and task_cfg.provider_id and task_cfg.model_name:
-            provider = db.get(ModelProvider, task_cfg.provider_id)
-            if provider and provider.is_active and provider.api_key:
-                base_url, api_key, model_name = _resolve(provider, task_cfg.model_name)
-                return base_url, api_key, model_name, provider
+        if use_shared:
+            task_cfg = db.exec(
+                select(TaskModelConfig).where(
+                    TaskModelConfig.task_type == tt,
+                    TaskModelConfig.user_id == None,
+                )
+            ).first()
+            if task_cfg and task_cfg.provider_id and task_cfg.model_name:
+                provider = db.get(ModelProvider, task_cfg.provider_id)
+                if provider and provider.is_active and provider.api_key:
+                    base_url, api_key, model_name = _resolve(provider, task_cfg.model_name)
+                    return base_url, api_key, model_name, provider
 
-    # 3. 如果没有任何 TaskModelConfig，报错而不是随机选一个 provider
+    # 没有任何可用 TaskModelConfig，报错而不是随机选一个 provider
     raise AIServiceError("未配置模型供应商，请先在设置中配置")
 
 
@@ -712,45 +715,48 @@ def _get_active_provider_full(db: Session, task_type: str = "chat", user_id: int
         else:
             return provider.base_url, provider.api_key, model_name
 
-    # 1. 用户自己的
-    if user:
-        task_cfg = db.exec(
-            select(TaskModelConfig).where(
-                TaskModelConfig.task_type == task_type,
-                TaskModelConfig.user_id == user_id,
-            )
-        ).first()
-        if task_cfg and task_cfg.provider_id and task_cfg.model_name:
-            provider = db.get(ModelProvider, task_cfg.provider_id)
-            if provider and provider.is_active and provider.api_key:
-                pm = db.exec(
-                    select(ProviderModel).where(
-                        ProviderModel.provider_id == task_cfg.provider_id,
-                        ProviderModel.model_name == task_cfg.model_name,
-                    )
-                ).first()
-                base_url, api_key, model_name = _resolve(provider, task_cfg.model_name)
-                return base_url, api_key, model_name, provider, task_cfg, pm
+    # 按「专属 task_type → chat」顺序查找：每档先用户私有，后管理员共享。
+    # 与 _get_active_provider 保持一致，确保 task_cfg 取自对应任务的配置，
+    # resolve_chat_params 据此应用该任务专属的模型参数。
+    candidates = [task_type] + (["chat"] if task_type != "chat" else [])
+    for tt in candidates:
+        if user:
+            task_cfg = db.exec(
+                select(TaskModelConfig).where(
+                    TaskModelConfig.task_type == tt,
+                    TaskModelConfig.user_id == user_id,
+                )
+            ).first()
+            if task_cfg and task_cfg.provider_id and task_cfg.model_name:
+                provider = db.get(ModelProvider, task_cfg.provider_id)
+                if provider and provider.is_active and provider.api_key:
+                    pm = db.exec(
+                        select(ProviderModel).where(
+                            ProviderModel.provider_id == task_cfg.provider_id,
+                            ProviderModel.model_name == task_cfg.model_name,
+                        )
+                    ).first()
+                    base_url, api_key, model_name = _resolve(provider, task_cfg.model_name)
+                    return base_url, api_key, model_name, provider, task_cfg, pm
 
-    # 2. 共享
-    if use_shared:
-        task_cfg = db.exec(
-            select(TaskModelConfig).where(
-                TaskModelConfig.task_type == task_type,
-                TaskModelConfig.user_id == None,
-            )
-        ).first()
-        if task_cfg and task_cfg.provider_id and task_cfg.model_name:
-            provider = db.get(ModelProvider, task_cfg.provider_id)
-            if provider and provider.is_active and provider.api_key:
-                pm = db.exec(
-                    select(ProviderModel).where(
-                        ProviderModel.provider_id == task_cfg.provider_id,
-                        ProviderModel.model_name == task_cfg.model_name,
-                    )
-                ).first()
-                base_url, api_key, model_name = _resolve(provider, task_cfg.model_name)
-                return base_url, api_key, model_name, provider, task_cfg, pm
+        if use_shared:
+            task_cfg = db.exec(
+                select(TaskModelConfig).where(
+                    TaskModelConfig.task_type == tt,
+                    TaskModelConfig.user_id == None,
+                )
+            ).first()
+            if task_cfg and task_cfg.provider_id and task_cfg.model_name:
+                provider = db.get(ModelProvider, task_cfg.provider_id)
+                if provider and provider.is_active and provider.api_key:
+                    pm = db.exec(
+                        select(ProviderModel).where(
+                            ProviderModel.provider_id == task_cfg.provider_id,
+                            ProviderModel.model_name == task_cfg.model_name,
+                        )
+                    ).first()
+                    base_url, api_key, model_name = _resolve(provider, task_cfg.model_name)
+                    return base_url, api_key, model_name, provider, task_cfg, pm
 
     raise AIServiceError("未配置模型供应商，请先在设置中配置")
 
@@ -787,7 +793,7 @@ def _extract_message_text(message) -> str:
 
 def summarize_daily_report(content: str, db: Session, user_id: int = 0) -> str:
     """AI 总结日报内容"""
-    base_url, api_key, model, provider, task_cfg, pm = _get_active_provider_full(db, "chat", user_id)
+    base_url, api_key, model, provider, task_cfg, pm = _get_active_provider_full(db, "daily_summary", user_id)
     client = _get_client(base_url, api_key, provider)
     system_prompt, template = _get_prompt("daily_summary", db, user_id)
     user_prompt = _fill_template(template, content=content)
@@ -813,7 +819,7 @@ def _strip_html(text: str) -> str:
 
 def extract_meeting_minutes(content: str, db: Session, user_id: int = 0) -> dict:
     """AI 从会议纪要中提取结构化信息"""
-    base_url, api_key, model, provider, task_cfg, pm = _get_active_provider_full(db, "chat", user_id)
+    base_url, api_key, model, provider, task_cfg, pm = _get_active_provider_full(db, "meeting_extract", user_id)
     client = _get_client(base_url, api_key, provider)
     system_prompt, template = _get_prompt("meeting_extract", db, user_id)
     # 去除 HTML 标签，发送纯文本给 AI
@@ -853,7 +859,7 @@ def generate_project_analysis(project_id: int, db: Session, user_id: int = 0) ->
 
     customer = db.get(Customer, project.customer_id) if project.customer_id else None
 
-    base_url, api_key, model, provider = _get_active_provider(db, "chat", user_id)
+    base_url, api_key, model, provider = _get_active_provider(db, "project_analysis", user_id)
     client = _get_client(base_url, api_key, provider)
 
     meetings = db.exec(
@@ -1005,7 +1011,7 @@ def _transcribe_with_genai(audio_path: str, model: str, provider: ModelProvider)
 
 def organize_transcript(raw_text: str, db: Session, user_id: int = 0) -> str:
     """AI 整理转写文字，生成结构化会议纪要"""
-    base_url, api_key, model, provider, task_cfg, pm = _get_active_provider_full(db, "chat", user_id)
+    base_url, api_key, model, provider, task_cfg, pm = _get_active_provider_full(db, "meeting_organize", user_id)
     client = _get_client(base_url, api_key, provider)
     system_prompt, template = _get_prompt("meeting_organize", db, user_id)
     user_prompt = _fill_template(template, content=raw_text)
@@ -1329,7 +1335,7 @@ def fetch_company_info(company_name: str, db: Session, user_id: int = 0, progres
     from app.services.company_aggregator import (
         aggregate_company_sources, duckduckgo_search,
     )
-    base_url, api_key, model, provider, task_cfg, pm = _get_active_provider_full(db, "chat", user_id)
+    base_url, api_key, model, provider, task_cfg, pm = _get_active_provider_full(db, "company_info", user_id)
     client = _get_client(base_url, api_key, provider)
 
     def _emit(stage: str, msg: str = ""):
@@ -1755,7 +1761,7 @@ def _supplement_company_info(company_name: str, result: dict, missing: list[str]
     if not extra_hints:
         return result
     # 用 LLM 修订 result
-    base_url, api_key, model, provider, task_cfg, pm = _get_active_provider_full(db, "chat", user_id)
+    base_url, api_key, model, provider, task_cfg, pm = _get_active_provider_full(db, "company_info", user_id)
     client = _get_client(base_url, api_key, provider)
     params = resolve_chat_params(db, model=pm, task_cfg=task_cfg, func_defaults={"temperature": 0.0})
     resp = client.chat.completions.create(
@@ -1998,7 +2004,7 @@ def refresh_company_news(company_name: str, db: Session, user_id: int = 0) -> tu
     返回 (news_text, sources) 二元组，sources 每条格式：
         {"url": ..., "title": ..., "domain": ...}
     """
-    base_url, api_key, model, provider, task_cfg, pm = _get_active_provider_full(db, "chat", user_id)
+    base_url, api_key, model, provider, task_cfg, pm = _get_active_provider_full(db, "company_info", user_id)
     client = _get_client(base_url, api_key, provider)
 
     # 搜索最新新闻（优先接地搜索，回退 Tavily）

@@ -743,6 +743,7 @@ def _init_rbac_data(engine):
         existing_codes = {p.code for p in existing_perms}
 
         perm_map = {}  # code → Permission object
+        newly_created_perm_codes = set()  # 本次启动新建的权限码（用于判定是否给已有角色授默认权限）
         needs_commit = False
         for code, name, module, action in PERMISSION_DEFS:
             if code not in existing_codes:
@@ -750,6 +751,7 @@ def _init_rbac_data(engine):
                 session.add(perm)
                 session.flush()
                 perm_map[code] = perm
+                newly_created_perm_codes.add(code)
                 needs_commit = True
             else:
                 # 使用已有权限
@@ -774,7 +776,10 @@ def _init_rbac_data(engine):
             existing_role = next((r for r in existing_roles if r.code == role_code), None)
             if existing_role:
                 role = existing_role
-                # 已存在的系统角色：增量同步权限（仅补充新增权限，不清除用户手动修改的权限）
+                # 已存在的系统角色：仅为「本次新引入的权限码」补默认授权。
+                # 关键：不能补充所有 ROLE_DEFS 里的权限——否则管理员在后台手动「删除」的权限
+                # 会在每次容器重启时被重新加回（这是历史 bug）。只有当某权限码是本版本新增、
+                # 数据库里之前根本不存在时，才按 ROLE_DEFS 给相关角色授权。
                 existing_rp = session.exec(select(RolePermission).where(RolePermission.role_id == role.id)).all()
                 existing_perm_ids = {rp.permission_id for rp in existing_rp}
                 # 同步名称和描述
@@ -783,11 +788,15 @@ def _init_rbac_data(engine):
                 session.add(role)
                 session.commit()
 
-                # 仅补充 ROLE_DEFS 中有但数据库中尚未分配的权限
+                # 仅补充「本次新建的权限码」中、ROLE_DEFS 声明该角色应有、且尚未分配的
                 perms = role_def["perms"]
-                perm_codes_to_add = perms if perms != "all" else list(perm_map.keys())
-                for _code in perm_codes_to_add:
-                    if _code in perm_map and perm_map[_code].id not in existing_perm_ids:
+                perm_codes_default = perms if perms != "all" else list(perm_map.keys())
+                for _code in perm_codes_default:
+                    if (
+                        _code in newly_created_perm_codes
+                        and _code in perm_map
+                        and perm_map[_code].id not in existing_perm_ids
+                    ):
                         session.add(RolePermission(role_id=role.id, permission_id=perm_map[_code].id))
                 session.commit()
             elif is_first_deploy or role_def.get("ensure_exists"):
