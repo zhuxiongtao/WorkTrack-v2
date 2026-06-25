@@ -84,46 +84,22 @@ function AppSidebar({ sidebarOpen, onCloseSidebar, brandLogo, brandTitle, isInsi
           <NavLink
             to="/ai"
             onClick={() => onCloseSidebar()}
-            className="group relative flex items-center gap-3 p-3 rounded-xl overflow-hidden transition-all hover:shadow-lg hover:shadow-violet-500/25 hover:-translate-y-0.5 active:translate-y-0"
+            className="group relative flex items-center gap-2.5 px-3 py-2 rounded-xl overflow-hidden transition-all hover:shadow-md hover:shadow-violet-500/20 hover:-translate-y-px active:translate-y-0"
             style={{
-              background: 'linear-gradient(135deg, #7C3AED 0%, #A855F7 50%, #EC4899 100%)',
-              boxShadow: '0 4px 12px rgba(124, 58, 237, 0.30), inset 0 1px 1px rgba(255,255,255,0.18)',
+              background: 'linear-gradient(135deg, #7C3AED 0%, #A855F7 60%, #EC4899 100%)',
+              boxShadow: '0 2px 8px rgba(124, 58, 237, 0.25), inset 0 1px 0 rgba(255,255,255,0.15)',
             }}
             title="进入 AI 智能助手"
           >
-            <div className="absolute inset-0 pointer-events-none rounded-xl" style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.22) 0%, transparent 55%)' }} />
-            <div className="absolute -top-6 -right-6 w-20 h-20 rounded-full blur-2xl opacity-60 group-hover:opacity-90 transition-opacity pointer-events-none"
-                 style={{ background: 'radial-gradient(circle, rgba(236,72,153,0.6) 0%, transparent 70%)' }} />
-            <div className="relative w-9 h-9 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0 ring-1 ring-white/25">
-              <Wand2
-                size={18}
-                strokeWidth={2.4}
-                style={{ color: '#ffffff', filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.25))' }}
-              />
+            <div className="absolute inset-0 pointer-events-none rounded-xl" style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.15) 0%, transparent 60%)' }} />
+            <div className="relative w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+              <Wand2 size={14} strokeWidth={2.4} style={{ color: '#ffffff' }} />
             </div>
-            <div className="relative flex-1 min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span
-                  className="text-sm font-bold drop-shadow-sm"
-                  style={{ color: '#ffffff' }}
-                >
-                  AI 智能助手
-                </span>
-                <span
-                  className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-white/25 backdrop-blur-sm"
-                  style={{ color: '#ffffff' }}
-                >
-                  NEW
-                </span>
-              </div>
-              <p
-                className="text-[11px] mt-0.5 truncate"
-                style={{ color: 'rgba(255,255,255,0.95)' }}
-              >
-                搜索 · 总结 · 分析 · 联网
-              </p>
+            <div className="relative flex-1 min-w-0 flex items-center gap-1.5">
+              <span className="text-[13px] font-semibold truncate" style={{ color: '#ffffff' }}>AI 智能助手</span>
+              <span className="text-[10px] font-bold px-1 py-px rounded" style={{ color: '#ffffff', background: 'rgba(255,255,255,0.22)' }}>NEW</span>
             </div>
-            <ArrowRight size={14} className="relative text-white/70 group-hover:text-white group-hover:translate-x-0.5 transition-all shrink-0" />
+            <ArrowRight size={13} className="relative text-white/60 group-hover:text-white group-hover:translate-x-0.5 transition-all shrink-0" />
           </NavLink>
         </div>
       )}

@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Send, Sparkles, Plus, Trash2, MessageSquare, PanelLeftClose, PanelLeft,
-  Loader2, FileText, Users, Briefcase, Calendar, Globe, TrendingUp,
-  CheckSquare, Square, StopCircle, ChevronDown, ChevronRight,
+  Loader2, FileText, Users, Briefcase, CheckSquare, Square, StopCircle,
+  ChevronDown, ChevronRight, ClipboardList, CalendarCheck,
 } from 'lucide-react'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import { useToast } from '../contexts/ToastContext'
+import { useAuth } from '../contexts/AuthContext'
 import { StatusBadge } from '../components/design-system'
 import type { Tone } from '../theme/tokens'
 import type { LucideIcon } from 'lucide-react'
@@ -93,72 +94,73 @@ function hasMarkdown(str: string) {
 
 // ─── Welcome capability cards ─────────────────────────────────────────────────
 
-const CAPABILITY_CARDS: {
+const CAPABILITY_CARDS_CONFIG: {
   emoji: string; label: string; desc: string; prompt: string; fillInput?: boolean
   gradientClass: string; hoverBorder: string
+  permission?: string  // 留空 = 所有登录用户可见
 }[] = [
   {
-    emoji: '📋', label: '今日日报总结',
-    desc: '汇总所有人今天的工作进展',
-    prompt: '帮我总结今天所有人的日报',
-    gradientClass: 'from-blue-500/10 to-violet-500/8',
-    hoverBorder: 'hover:border-blue-500/50',
-  },
-  {
-    emoji: '📊', label: '项目状态速览',
-    desc: '一览当前所有在进行中的项目',
-    prompt: '列出所有进行中的项目，告诉我每个项目的当前状态和主要进展',
+    emoji: '📊', label: '项目情况',
+    desc: '查看进行中项目的状态与进展',
+    prompt: '列出我有权限查看的所有进行中的项目，告诉我每个项目的当前状态和主要进展',
     gradientClass: 'from-orange-500/10 to-amber-500/8',
     hoverBorder: 'hover:border-orange-500/50',
+    permission: 'project:read',
   },
   {
-    emoji: '👥', label: '客户跟进动态',
-    desc: '查看最近的客户会议和跟进记录',
+    emoji: '👥', label: '客户查询',
+    desc: '搜索客户信息与最近跟进记录',
     prompt: '最近哪些客户有新的会议纪要或跟进记录？列出来并简要说明',
     gradientClass: 'from-purple-500/10 to-pink-500/8',
     hoverBorder: 'hover:border-purple-500/50',
+    permission: 'customer:read',
   },
   {
-    emoji: '📄', label: '合同智能检索',
+    emoji: '✅', label: '审批待办',
+    desc: '查看所有待我审批的申请事项',
+    prompt: '我有哪些待审批的申请？',
+    gradientClass: 'from-rose-500/10 to-red-500/8',
+    hoverBorder: 'hover:border-rose-500/50',
+  },
+  {
+    emoji: '📄', label: '合同查询',
     desc: 'AI 搜索并解析合同关键信息',
     prompt: '帮我搜索最近的合同，列出合同名称、金额、甲乙双方和签订日期',
     gradientClass: 'from-cyan-500/10 to-teal-500/8',
     hoverBorder: 'hover:border-cyan-500/50',
+    permission: 'contract:read',
   },
   {
-    emoji: '🌐', label: '搜索公司信息',
-    desc: '联网获取目标公司的行业动态',
-    prompt: '搜索公司：',
-    fillInput: true,
+    emoji: '📝', label: '会议纪要',
+    desc: '搜索并查看历次会议记录',
+    prompt: '查看我最近参与的会议纪要，列出时间、参与者和主要议题',
+    gradientClass: 'from-violet-500/10 to-indigo-500/8',
+    hoverBorder: 'hover:border-violet-500/50',
+    permission: 'meeting:read',
+  },
+  {
+    emoji: '🌴', label: '假期额度',
+    desc: '查询年假、调休等剩余天数',
+    prompt: '查询我的假期余额，告诉我年假、调休各剩余多少天',
     gradientClass: 'from-emerald-500/10 to-green-500/8',
     hoverBorder: 'hover:border-emerald-500/50',
   },
-  {
-    emoji: '✅', label: '审批待办处理',
-    desc: '查看所有待我审批的申请事项',
-    prompt: '我有哪些待审批的合同或申请？',
-    gradientClass: 'from-rose-500/10 to-red-500/8',
-    hoverBorder: 'hover:border-rose-500/50',
-  },
 ]
 
-// ─── Smart quick prompts (time-aware) ────────────────────────────────────────
+// ─── Smart quick prompts (permission-aware) ──────────────────────────────────
 
-interface QuickPrompt { icon: LucideIcon; label: string; prompt: string; tone: Tone }
+interface QuickPrompt { icon: LucideIcon; label: string; prompt: string; tone: Tone; permission?: string }
 
-function getSmartPrompts(): QuickPrompt[] {
-  const h = new Date().getHours()
-  const list: QuickPrompt[] = [
-    { icon: FileText,    label: '今日日报',  prompt: '总结今天所有人的工作日报',                     tone: 'blue'   },
-    { icon: Briefcase,   label: '项目概览',  prompt: '列出所有进行中的项目，给我一个状态概览',       tone: 'orange' },
-    { icon: Users,       label: '客户动态',  prompt: '最近哪些客户有新的会议或跟进记录？',           tone: 'purple' },
-    { icon: CheckSquare, label: '待办审批',  prompt: '查看我有哪些待处理的审批事项',                 tone: 'green'  },
-    { icon: FileText,    label: '合同查询',  prompt: '查找最近签订的合同，展示金额、甲乙方',         tone: 'cyan'   },
-    { icon: Globe,       label: '搜索公司',  prompt: '搜索公司：',                                   tone: 'pink'   },
+function getSmartPrompts(hasPermission: (p: string) => boolean): QuickPrompt[] {
+  const all: QuickPrompt[] = [
+    { icon: Briefcase,     label: '项目概览',  prompt: '列出我有权限查看的所有进行中的项目，给我一个状态概览',  tone: 'orange', permission: 'project:read'  },
+    { icon: Users,         label: '客户动态',  prompt: '最近哪些客户有新的会议或跟进记录？',                    tone: 'purple', permission: 'customer:read' },
+    { icon: CheckSquare,   label: '待办审批',  prompt: '查看我有哪些待处理的审批事项',                          tone: 'green'                              },
+    { icon: FileText,      label: '合同查询',  prompt: '查找最近签订的合同，展示金额、甲乙方',                  tone: 'cyan',   permission: 'contract:read' },
+    { icon: ClipboardList, label: '会议纪要',  prompt: '查看我最近参与的会议纪要',                              tone: 'blue',   permission: 'meeting:read'  },
+    { icon: CalendarCheck, label: '假期余额',  prompt: '查询我的假期余额，告诉我年假、调休各剩余多少天',        tone: 'pink'                               },
   ]
-  if (h >= 8 && h < 11)   list.unshift({ icon: Calendar,    label: '今日重点', prompt: '今天有哪些需要跟进的项目或客户？', tone: 'blue' })
-  else if (h >= 17)        list.unshift({ icon: TrendingUp,  label: '工作回顾', prompt: '总结今天的工作：日报和项目动态',   tone: 'pink' })
-  return list.slice(0, 5)
+  return all.filter(p => !p.permission || hasPermission(p.permission)).slice(0, 5)
 }
 
 // ─── ToolSteps component ──────────────────────────────────────────────────────
@@ -209,7 +211,9 @@ function ToolStepsBubble({ steps }: { steps: ToolStep[] }) {
 
 export default function AIPage() {
   const { confirm: showConfirm } = useToast()
+  const { hasPermission } = useAuth()
   const [greetText] = useState(greeting)
+  const visibleCards = CAPABILITY_CARDS_CONFIG.filter(c => !c.permission || hasPermission(c.permission))
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
@@ -436,7 +440,7 @@ export default function AIPage() {
     ? `${activeModel.provider_name} / ${activeModel.model_name}`
     : activeModel.provider_name
 
-  const smartPrompts = getSmartPrompts()
+  const smartPrompts = getSmartPrompts(hasPermission)
 
   return (
     <div className="flex h-[calc(100vh-5rem)] max-md:h-[calc(100vh-7rem)] gap-3 relative overflow-hidden">
@@ -557,7 +561,7 @@ export default function AIPage() {
             </div>
             <div className="min-w-0">
               <h2 className="text-[15px] font-bold text-gray-900 dark:text-white leading-tight">WorkTrack AI</h2>
-              <p className="text-[11px] text-gray-500 hidden sm:block">智能工作助手 · 日报 · 项目 · 客户 · 合同 · 审批</p>
+              <p className="text-[11px] text-gray-500 hidden sm:block">智能工作助手 · 项目 · 客户 · 合同 · 审批 · 会议 · 假期</p>
             </div>
           </div>
           {activeModel.model_name
@@ -581,7 +585,7 @@ export default function AIPage() {
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-w-2xl mx-auto">
-                {CAPABILITY_CARDS.map((card, i) => (
+                {visibleCards.map((card, i) => (
                   <button
                     key={i}
                     onClick={() => handleCardClick(card)}

@@ -30,12 +30,12 @@ def _ensure_chroma():
 
 def _is_openai_compatible_for_embedding(base_url: str) -> bool:
     """判断 base_url 是否指向支持 OpenAI 兼容 /v1/embeddings 接口的服务。
-    Google Gemini (generativelanguage.googleapis.com) 和 Anthropic (api.anthropic.com)
-    不支持该路径,需要排除。"""
+    Google（各子域）和 Anthropic 不支持该路径，需要排除。"""
     if not base_url:
-        return True  # 空值走默认配置,不拦截
+        return True  # 空值走默认 OpenAI，不拦截
     lower = base_url.lower()
-    if "generativelanguage.googleapis.com" in lower:
+    # Google：Gemini / Vertex AI / 其他 googleapis.com 端点均不支持 /v1/embeddings
+    if "googleapis.com" in lower:
         return False
     if "api.anthropic.com" in lower:
         return False
@@ -67,12 +67,16 @@ def _get_embedding_config(db: Session = None) -> tuple:
             if _is_openai_compatible_for_embedding(provider.base_url):
                 model = settings.embedding_model_name
                 return provider.base_url, provider.api_key, model, provider.id
-    return (
-        settings.effective_embedding_base_url,
-        settings.effective_embedding_api_key,
-        settings.embedding_model_name,
-        None,
-    )
+
+    # env-var fallback — 同样需要兼容性检查：LLM_BASE_URL 可能指向 Gemini/Anthropic
+    env_url = settings.effective_embedding_base_url
+    env_key = settings.effective_embedding_api_key
+    if not _is_openai_compatible_for_embedding(env_url):
+        raise VectorStoreError(
+            f"embedding 配置不可用：{env_url} 不支持 OpenAI 兼容 /v1/embeddings 接口，"
+            "请在「设置 → 模型管理」中配置 embedding 任务，或设置专用 EMBEDDING_BASE_URL"
+        )
+    return (env_url, env_key, settings.embedding_model_name, None)
 
 
 def get_collection(name: str):
