@@ -180,7 +180,8 @@ now_dt = now()
 | `v2.3.4` | 功能迭代 |
 | `20260622` | v2.3.5–v2.3.9 补丁合集：时区修复、用户管理 UnboundLocalError、看板权限、重发邮件、Wiki AI Markdown |
 | `v2.4.0` | 付款/盖章/反馈/项目跟进模块上线；审批引擎增强（dept_or_leader 或签、执行节点、审批人不再强制排除发起人）；合同删除 FK 级联修复 + 上传签章版权限放宽 + 审批预览真实姓名；RBAC 新增出纳/印章管理员；项目管理表单重构；全站浅色主题对比度优化 |
-| `v2.5.0` (latest) | OA 办公模块全量上线：请假、加班、报销、出差、采购（含供应商台账）、资产管理；假期额度账户（LeaveBalance + LeaveBalanceLog）；审批引擎回调接入 OA 各模块；Alembic 迁移两批次（P1+P2） |
+| `v2.5.0` | OA 办公模块全量上线：请假、加班、报销、出差、采购（含供应商台账）、资产管理；假期额度账户（LeaveBalance + LeaveBalanceLog）；审批引擎回调接入 OA 各模块；Alembic 迁移两批次（P1+P2） |
+| `v2.5.1` (latest) | 修复向量索引误用 LLM_BASE_URL（Google）导致 /v1/embeddings 404；扩展 googleapis.com 全域过滤；AI 交互中心卡片按权限过滤（去日报，加项目/客户/审批/合同/会议/假期）；侧边栏 AI 入口紧凑化 |
 
 ### 版本号规范
 
