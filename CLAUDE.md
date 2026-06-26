@@ -303,7 +303,8 @@ now_dt = now()
 | `v2.5.1` | 修复向量索引误用 LLM_BASE_URL（Google）导致 /v1/embeddings 404；扩展 googleapis.com 全域过滤；AI 交互中心卡片按权限过滤（去日报，加项目/客户/审批/合同/会议/假期）；侧边栏 AI 入口紧凑化 |
 | `v2.5.2` | 修复角色权限容器重启后回退（仅对本次新建权限码补默认授权，不再覆盖管理员手动增删）；修复 8 处 AI 功能未用各自任务模型（日报/会议/项目分析/公司信息/看板洞察/周报均误读 chat），并在解析器内置「专属 task_type→chat」回落；Agent 对话改用 resolve_chat_params（温度/参数配置生效）；修复看板洞察对 Vertex 供应商永远返回空 |
 | `v2.6.0` | OA 落地增强：员工档案加「参加工作日期/入职日期」；年假按法定累计工龄档位（5/10/15 天）HR 一键批量生成草稿→确认发放；资产管理加完整流转履历（领用/归还/调拨/维修/报废，AssetRecord 留痕可追溯历任使用人）；新增迁移 r1h2r3o4a5s6 |
-| `v2.7.0` (latest) | OA 审批与报销增强：审批流配置页浅色/深色双主题重构（去五颜六色、统一中性色、加深对比度）；报销申请优化（费用时间精确到分钟、个人欠款汇总显示、抵消借款逻辑修复含撤销重算、发票抬头/抵扣/关联单合并一行、移除账户余额暴露）；权限体系系统化更新（13 个角色权限映射补齐 OA view_all + asset:read 全员下放、权限矩阵补齐 OA 模块图标与 ACTION_LABELS）；系统配置白屏修复（EmailConfigSection 缺 useAuth）；下拉框样式标准与卡片配色规范写入 CLAUDE.md |
+| `v2.7.0` | OA 审批与报销增强：审批流配置页浅色/深色双主题重构（去五颜六色、统一中性色、加深对比度）；报销申请优化（费用时间精确到分钟、个人欠款汇总显示、抵消借款逻辑修复含撤销重算、发票抬头/抵扣/关联单合并一行、移除账户余额暴露）；权限体系系统化更新（13 个角色权限映射补齐 OA view_all + asset:read 全员下放、权限矩阵补齐 OA 模块图标与 ACTION_LABELS）；系统配置白屏修复（EmailConfigSection 缺 useAuth）；下拉框样式标准与卡片配色规范写入 CLAUDE.md |
+| `v2.8.0` (latest) | 数据管理模块重构：新增 BackupRecord 模型 + 迁移（b1a2c3k4u5p6）记录备份历史；新增 excel_export_service 服务（23 业务模块 / 271 字段 / 8 子表 / 4 业务域中文字段映射 + 导出引擎）；重构 data_export 路由 10 个 API（Excel 模块导出 / JSON 全量备份 / SQL dump / 历史下载 / dry-run 恢复）；重写 DataExportPage 三 Tab 布局（模块导出 / 全量备份 / 数据恢复）；备份文件持久化到 /app/data/backups/（worktrack_data volume）；导入策略仅 skip/insert_only + dry-run 预检查，避免数据覆盖；权限收敛仅 data:export/data:import（管理员可见，boss 无权限）；修复 BackupRecord 未显式声明 __tablename__ 导致 ORM 表名不匹配 |
 
 ### 版本号规范
 
