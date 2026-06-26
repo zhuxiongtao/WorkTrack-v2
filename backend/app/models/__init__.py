@@ -49,6 +49,7 @@ from app.models.legal_entity import LegalEntity
 from app.models.employee_loan import EmployeeLoan
 from app.models.expense_item import ExpenseItem
 from app.models.expense_relation import ExpenseRelation
+from app.models.backup_record import BackupRecord
 
 __all__ = [
     "User",
@@ -121,4 +122,5 @@ __all__ = [
     "EmployeeLoan",
     "ExpenseItem",
     "ExpenseRelation",
+    "BackupRecord",
 ]

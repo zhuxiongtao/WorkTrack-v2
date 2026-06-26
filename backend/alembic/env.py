@@ -33,6 +33,7 @@ from app.models import (  # noqa: F401
     # OA 模块模型
     PurchaseSupplier, LeaveBalance, LeaveBalanceLog, LeaveRequest, OvertimeRequest,
     ExpenseRequest, BusinessTripRequest, PurchaseRequest, Asset,
+    BackupRecord,
 )
 
 target_metadata = SQLModel.metadata

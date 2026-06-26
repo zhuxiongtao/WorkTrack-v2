@@ -902,9 +902,11 @@ function OAFormModal({ type, onClose }: { type: OAType; onClose: () => void }) {
             <div className="grid grid-cols-3 gap-3">
               {/* 发票的我方名义 */}
               <div className="flex flex-col">
-                <label className="block text-xs text-gray-400 mb-1.5">
-                  发票的我方名义 <span className="text-red-400">*</span>
-                </label>
+                <div className="flex items-center h-5 mb-1.5">
+                  <label className="block text-xs text-gray-400">
+                    发票的我方名义 <span className="text-red-400">*</span>
+                  </label>
+                </div>
                 <SearchableSelect<number>
                   value={form.invoice_entity_id ?? null}
                   onChange={(v) => update('invoice_entity_id', v)}
@@ -941,7 +943,9 @@ function OAFormModal({ type, onClose }: { type: OAType; onClose: () => void }) {
 
               {/* 优先抵消借款 */}
               <div className="flex flex-col">
-                <label className="block text-xs text-gray-400 mb-1.5">优先抵消借款</label>
+                <div className="flex items-center h-5 mb-1.5">
+                  <label className="block text-xs text-gray-400">优先抵消借款</label>
+                </div>
                 <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-bg-card cursor-pointer hover:border-accent-blue/50 h-9">
                   <input
                     type="checkbox"
@@ -956,7 +960,7 @@ function OAFormModal({ type, onClose }: { type: OAType; onClose: () => void }) {
 
               {/* 关联申请单 */}
               <div className="flex flex-col">
-                <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center justify-between h-5 mb-1.5">
                   <label className="text-xs text-gray-400">
                     关联申请单 {(form.items || []).some((it: any) => it.expense_type === '差旅') && (
                       <span className="text-red-400">*</span>
