@@ -120,37 +120,50 @@ def upgrade():
     op.create_index('ix_expense_request_invoice_entity_id', 'expense_request', ['invoice_entity_id'])
 
     # ── 6. 数据回填：把旧 items JSON 解析后写进 expense_item；把旧 trip_id 写进 expense_relation ──
+    # 注意：items / trip_id 列在某些旧版本生产环境中可能不存在，需容错处理
     bind = op.get_bind()
-    rows = bind.execute(text("SELECT id, items, trip_id, amount FROM expense_request")).fetchall()
-    for row in rows:
-        expense_id, items_json, trip_id, fallback_amount = row
-        if items_json:
-            try:
-                import json
-                items = json.loads(items_json)
-                for idx, it in enumerate(items or []):
-                    if not isinstance(it, dict):
-                        continue
-                    bind.execute(text(
-                        "INSERT INTO expense_item (expense_id, name, expense_type, department_id, city, expense_date, amount, note, remark, attachments, sort_order, created_at, updated_at) "
-                        "VALUES (:eid, :n, :t, NULL, :c, NULL, :a, :nt, :rk, NULL, :ord, NOW(), NOW())"
-                    ), {
-                        'eid': expense_id,
-                        'n': str(it.get('name', '') or it.get('description', '') or '')[:100],
-                        't': str(it.get('expense_type', '') or it.get('type', '') or '其他')[:50],
-                        'c': str(it.get('city', '') or '')[:50],
-                        'a': float(it.get('amount', 0) or 0),
-                        'nt': str(it.get('note', '') or it.get('description', '') or '')[:500],
-                        'rk': str(it.get('remark', '') or '')[:500],
-                        'ord': idx,
-                    })
-            except Exception as e:
-                print(f"[migration] expense {expense_id} items JSON parse failed: {e}")
-        if trip_id:
-            bind.execute(text(
-                "INSERT INTO expense_relation (expense_id, target_type, target_id, relation_note, created_at) "
-                "VALUES (:eid, 'business_trip', :tid, '从 trip_id 字段迁移', NOW())"
-            ), {'eid': expense_id, 'tid': trip_id})
+    inspector = sa.inspect(bind)
+    existing_cols = {c['name'] for c in inspector.get_columns('expense_request')}
+    has_items = 'items' in existing_cols
+    has_trip_id = 'trip_id' in existing_cols
+
+    if not has_items and not has_trip_id:
+        print("[migration] expense_request 无 items/trip_id 列，跳过数据回填")
+    else:
+        select_cols = ['id'] + (['items'] if has_items else []) + (['trip_id'] if has_trip_id else [])
+        rows = bind.execute(text(f"SELECT {', '.join(select_cols)} FROM expense_request")).fetchall()
+        for row in rows:
+            row_map = dict(zip(select_cols, row))
+            expense_id = row_map['id']
+            items_json = row_map.get('items') if has_items else None
+            trip_id = row_map.get('trip_id') if has_trip_id else None
+            if items_json:
+                try:
+                    import json
+                    items = json.loads(items_json)
+                    for idx, it in enumerate(items or []):
+                        if not isinstance(it, dict):
+                            continue
+                        bind.execute(text(
+                            "INSERT INTO expense_item (expense_id, name, expense_type, department_id, city, expense_date, amount, note, remark, attachments, sort_order, created_at, updated_at) "
+                            "VALUES (:eid, :n, :t, NULL, :c, NULL, :a, :nt, :rk, NULL, :ord, NOW(), NOW())"
+                        ), {
+                            'eid': expense_id,
+                            'n': str(it.get('name', '') or it.get('description', '') or '')[:100],
+                            't': str(it.get('expense_type', '') or it.get('type', '') or '其他')[:50],
+                            'c': str(it.get('city', '') or '')[:50],
+                            'a': float(it.get('amount', 0) or 0),
+                            'nt': str(it.get('note', '') or it.get('description', '') or '')[:500],
+                            'rk': str(it.get('remark', '') or '')[:500],
+                            'ord': idx,
+                        })
+                except Exception as e:
+                    print(f"[migration] expense {expense_id} items JSON parse failed: {e}")
+            if trip_id:
+                bind.execute(text(
+                    "INSERT INTO expense_relation (expense_id, target_type, target_id, relation_note, created_at) "
+                    "VALUES (:eid, 'business_trip', :tid, '从 trip_id 字段迁移', NOW())"
+                ), {'eid': expense_id, 'tid': trip_id})
 
 
 def downgrade():
