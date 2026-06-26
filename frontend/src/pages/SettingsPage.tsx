@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Plus, X, Save, Trash2, Loader2, Key, Globe, Cpu, Settings2, ListChecks, Sparkles, Brain, Eye, EyeOff, Mic, MessageSquare, Search, ChevronDown, Home, RotateCcw, Edit3, User, Package, MapPin, Activity, Cloud, Palette, Upload, Copy, Terminal, Zap, Pencil, AlertTriangle, Sliders, Layers, Megaphone, RefreshCw, CheckCircle2, Power, Mail, Send, Briefcase, Building2, Users, Calendar } from 'lucide-react'
+import { Plus, X, Save, Trash2, Loader2, Key, Globe, Cpu, Settings2, ListChecks, Sparkles, Brain, Eye, EyeOff, Mic, MessageSquare, Search, ChevronDown, Home, RotateCcw, Edit3, User, Package, MapPin, Activity, Cloud, Palette, Upload, Copy, Terminal, Zap, Pencil, AlertTriangle, Sliders, Layers, Megaphone, RefreshCw, CheckCircle2, Power, Mail, Send, Briefcase, Building2, Users, Calendar, Wallet, Receipt } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useSearchParams } from 'react-router-dom'
@@ -8,6 +8,9 @@ import TaskOverrideModal from '../components/TaskOverrideModal'
 import { IconBox, StatusBadge, SectionHeader, TASK_GROUP_ICONS, SUBTASK_ICONS } from '../components/design-system'
 import RichTextEditor from '../components/RichTextEditor'
 import SearchableSelect from '../components/SearchableSelect'
+import { ErrorBoundary } from '../components/ErrorBoundary'
+import { expenseService, type LegalEntity, type EmployeeLoan } from '../services/expenseService'
+import { apiFetch } from '../services/api'
 
 interface Provider {
   id: number
@@ -144,6 +147,7 @@ const EMAIL_PRESETS: Record<string, { label: string; host: string; port: number;
 }
 
 function EmailConfigSection({ showToast }: { showToast: ToastFn }) {
+  const { fetchWithAuth } = useAuth()
   const [cfg, setCfg] = useState({
     enabled: false, host: '', port: 587, username: '', password: '',
     from_name: 'WorkTrack 系统', use_tls: true, use_ssl: false,
@@ -563,6 +567,7 @@ export default function SettingsPage() {
     ...(canUseAI ? [{ key: 'prompts', label: 'AI 提示词', icon: Edit3, desc: '自定义 AI 输出风格' }] : []),
     ...(canEditSettings ? [{ key: 'system', label: '系统配置', icon: Settings2, desc: '字段选项管理' }] : []),
     ...(canEditSettings ? [{ key: 'announcement', label: '系统公告', icon: Megaphone, desc: '全频道公告与 AI 资讯' }] : []),
+    ...(canEditSettings ? [{ key: 'expense', label: '报销设置', icon: Receipt, desc: '公司主体与员工借款台账' }] : []),
     { key: 'account', label: '个人账户', icon: User, desc: '个人信息、首页与密码' },
   ]
 
@@ -1294,10 +1299,9 @@ export default function SettingsPage() {
                               <span className="text-[11px] text-gray-500 shrink-0">添加类型:</span>
                               <SearchableSelect
                                 className="flex-1"
-                                options={[{ id: 'auto', label: '自动推断' }, ...MODEL_TYPE_OPTIONS.map(opt => ({ id: opt.key, label: opt.label }))]}
+                                options={[{ value: 'auto', label: '自动推断' }, ...MODEL_TYPE_OPTIONS.map(opt => ({ value: opt.key, label: opt.label }))]}
                                 value={addModelType}
-                                onChange={(v) => setAddModelType(v === 0 ? '' : String(v))}
-                                clearValue=""
+                                onChange={(v) => setAddModelType(v ?? '')}
                               />
                             </div>
                           </div>
@@ -1432,8 +1436,8 @@ export default function SettingsPage() {
             {TASK_GROUPS.map((group) => {
               const GroupIcon = group.icon
               const isMultimodal = group.id === 'multimodal'
-              const subIcons: Record<string, any> = { speech_to_text: Mic, vision: Eye, embedding: Brain }
-              const subLabels: Record<string, string> = { speech_to_text: '语音转写', vision: '图像理解', embedding: '向量化' }
+              const subIcons: Record<string, any> = { speech_to_text: Mic, vision: Eye, invoice_ocr: Receipt, embedding: Brain }
+              const subLabels: Record<string, string> = { speech_to_text: '语音转写', vision: '图像理解', invoice_ocr: '发票识别', embedding: '向量化' }
               // 提取所有 sub-tasks 的 task_keys（普通组是 1 个，多模态是 3 个）
               const rowTasks = isMultimodal
                 ? group.taskKeys.map((tk) => ({ key: tk, label: subLabels[tk] || tk, icon: subIcons[tk] || Sparkles, isShared: false }))
@@ -1496,7 +1500,7 @@ export default function SettingsPage() {
                           <SearchableSelect
                             className="flex-1 min-w-[180px] max-w-[340px]"
                             options={[
-                              { id: '', label: '选择模型…' },
+                              { value: '', label: '选择模型…' },
                               ...getActiveProviders().flatMap((p) => {
                                 const pModels = providerModels[p.id] || []
                                 const filtered = isMultimodal
@@ -1505,15 +1509,15 @@ export default function SettingsPage() {
                                     ? pModels.filter((m) => modelSupportsAnyOf(m, group.compatibleTypes))
                                     : pModels)
                                 return filtered.map((m) => ({
-                                  id: `${p.id}|${m.model_name}`,
+                                  value: `${p.id}|${m.model_name}`,
                                   label: m.model_name,
-                                  sub: `${p.name} · ${TYPE_LABEL[m.model_type] || m.model_type}`,
+                                  hint: `${p.name} · ${TYPE_LABEL[m.model_type] || m.model_type}`,
                                 }))
                               }),
                             ]}
                             value={combinedValue}
                             onChange={(v) => {
-                              const val = v === 0 ? '' : String(v)
+                              const val = v ?? ''
                               if (!val) {
                                 if (isMultimodal) saveTaskConfig(tk, null, '')
                                 else saveTaskConfig(group.taskKeys, null, '')
@@ -1525,7 +1529,6 @@ export default function SettingsPage() {
                                 else saveTaskConfig(group.taskKeys, pid, mn)
                               }
                             }}
-                            clearValue=""
                           />
                           {/* 类型不匹配警告 / 已配置状态 */}
                           {cfg?.model_name && !providerDeleted && !modelDeleted && (
@@ -1681,12 +1684,11 @@ export default function SettingsPage() {
                           <label className="text-xs text-gray-400">编辑范围：</label>
                           <SearchableSelect
                             options={[
-                              { id: 'user', label: '个人提示词（仅影响自己）' },
-                              { id: 'global', label: '全局默认（影响所有新用户）' },
+                              { value: 'user', label: '个人提示词（仅影响自己）' },
+                              { value: 'global', label: '全局默认（影响所有新用户）' },
                             ]}
                             value={promptScope[taskType] || 'user'}
-                            onChange={(v) => setPromptScope(prev => ({ ...prev, [taskType]: v === 0 ? 'user' : String(v) }))}
-                            clearValue=""
+                            onChange={(v) => setPromptScope(prev => ({ ...prev, [taskType]: v ?? 'user' }))}
                           />
                         </div>
                       )}
@@ -1768,6 +1770,7 @@ export default function SettingsPage() {
 
       {/* ==================== 系统配置 ==================== */}
       {activeTab === 'system' && (
+        <ErrorBoundary sectionName="系统配置">
         <>
       {/* 品牌自定义 */}
       {canEditSettings && (
@@ -2263,6 +2266,12 @@ export default function SettingsPage() {
         <EmailConfigSection showToast={showToast} />
       )}
       </>
+      </ErrorBoundary>
+      )}
+
+      {/* ==================== 报销设置（公司主体 + 员工借款） ==================== */}
+      {activeTab === 'expense' && canEditSettings && (
+        <ExpenseSettingsTab showToast={showToast} />
       )}
 
       {/* ==================== 个人账户 ==================== */}
@@ -2494,18 +2503,17 @@ export default function SettingsPage() {
                 <span className="text-sm text-gray-400">默认首页:</span>
                 <SearchableSelect
                   options={[
-                    ...(hasPermission('report:read') ? [{ id: '/reports', label: '日报周报' }] : []),
-                    ...(hasPermission('project:read') ? [{ id: '/projects', label: '项目管理' }] : []),
-                    ...(hasPermission('meeting:read') ? [{ id: '/meetings', label: '会议纪要' }] : []),
-                    ...(hasPermission('dashboard:read') ? [{ id: '/dashboard', label: '数据看板' }] : []),
-                    ...(hasPermission('ai:use') ? [{ id: '/ai', label: 'AI 中心' }] : []),
-                    ...(hasPermission('wiki:read') ? [{ id: '/wiki', label: 'AI 笔记' }] : []),
-                    ...(hasPermission('customer:read') ? [{ id: '/customers', label: '客户管理' }] : []),
-                    ...(hasPermission('monitor:read') ? [{ id: '/monitor', label: '运维监控' }] : []),
+                    ...(hasPermission('report:read') ? [{ value: '/reports', label: '日报周报' }] : []),
+                    ...(hasPermission('project:read') ? [{ value: '/projects', label: '项目管理' }] : []),
+                    ...(hasPermission('meeting:read') ? [{ value: '/meetings', label: '会议纪要' }] : []),
+                    ...(hasPermission('dashboard:read') ? [{ value: '/dashboard', label: '数据看板' }] : []),
+                    ...(hasPermission('ai:use') ? [{ value: '/ai', label: 'AI 中心' }] : []),
+                    ...(hasPermission('wiki:read') ? [{ value: '/wiki', label: 'AI 笔记' }] : []),
+                    ...(hasPermission('customer:read') ? [{ value: '/customers', label: '客户管理' }] : []),
+                    ...(hasPermission('monitor:read') ? [{ value: '/monitor', label: '运维监控' }] : []),
                   ]}
                   value={homePage}
-                  onChange={(v) => setHomePage(v === 0 ? '' : String(v))}
-                  clearValue=""
+                  onChange={(v) => setHomePage(v ?? '')}
                 />
                 <button
                   onClick={handleSaveHomePage}
@@ -2781,16 +2789,15 @@ export default function SettingsPage() {
                   <label className="block text-xs text-gray-400 mb-1.5">Thinking Mode</label>
                   <SearchableSelect
                     options={[
-                      { id: '', label: '不设置' },
-                      { id: 'off', label: '关闭' },
-                      { id: 'low', label: '低' },
-                      { id: 'medium', label: '中' },
-                      { id: 'high', label: '高' },
-                      { id: 'auto', label: '自动' },
+                      { value: '', label: '不设置' },
+                      { value: 'off', label: '关闭' },
+                      { value: 'low', label: '低' },
+                      { value: 'medium', label: '中' },
+                      { value: 'high', label: '高' },
+                      { value: 'auto', label: '自动' },
                     ]}
                     value={presetForm.thinking_mode}
-                    onChange={(v) => setPresetForm({ ...presetForm, thinking_mode: v === 0 ? '' : String(v) })}
-                    clearValue=""
+                    onChange={(v) => setPresetForm({ ...presetForm, thinking_mode: v ?? '' })}
                   />
                 </div>
                 <div>
@@ -2805,13 +2812,12 @@ export default function SettingsPage() {
                 <label className="block text-xs text-gray-400 mb-1.5">Response Format</label>
                 <SearchableSelect
                   options={[
-                    { id: '', label: '不设置' },
-                    { id: 'text', label: '纯文本' },
-                    { id: 'json_object', label: 'JSON 对象' },
+                    { value: '', label: '不设置' },
+                    { value: 'text', label: '纯文本' },
+                    { value: 'json_object', label: 'JSON 对象' },
                   ]}
                   value={presetForm.response_format}
-                  onChange={(v) => setPresetForm({ ...presetForm, response_format: v === 0 ? '' : String(v) })}
-                  clearValue=""
+                  onChange={(v) => setPresetForm({ ...presetForm, response_format: v ?? '' })}
                 />
               </div>
             </div>
@@ -2829,6 +2835,487 @@ export default function SettingsPage() {
       )}
         </div>
       </div>
+    </div>
+  )
+}
+
+/* ════════════════════════════════════════════
+   报销设置：管理公司主体 + 员工借款台账
+════════════════════════════════════════════ */
+function ExpenseSettingsTab({
+  showToast,
+}: { showToast: (m: string, t?: 'success' | 'error' | 'info' | 'warning') => void }) {
+  const [subTab, setSubTab] = useState<'basic' | 'entities' | 'loans'>('basic')
+  return (
+    <div className="rounded-xl bg-bg-card border border-border p-5">
+      <h3 className="text-base font-semibold mb-1">报销设置</h3>
+      <p className="text-xs text-gray-500 mb-4">管理公司基础信息、公司主体（发票的我方名义）与员工借款台账。报销单据会自动联动。</p>
+      <div className="flex items-center gap-2 mb-4 border-b border-border -mx-5 px-5">
+        <button
+          onClick={() => setSubTab('basic')}
+          className={`px-4 py-2 text-sm border-b-2 -mb-px transition-colors ${
+            subTab === 'basic'
+              ? 'border-accent-blue text-accent-blue'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          公司基础信息
+        </button>
+        <button
+          onClick={() => setSubTab('entities')}
+          className={`px-4 py-2 text-sm border-b-2 -mb-px transition-colors ${
+            subTab === 'entities'
+              ? 'border-accent-blue text-accent-blue'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          公司主体
+        </button>
+        <button
+          onClick={() => setSubTab('loans')}
+          className={`px-4 py-2 text-sm border-b-2 -mb-px transition-colors ${
+            subTab === 'loans'
+              ? 'border-accent-blue text-accent-blue'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          员工借款
+        </button>
+      </div>
+      {subTab === 'basic' ? (
+        <InvoiceCompanyBasic showToast={showToast} />
+      ) : subTab === 'entities' ? (
+        <LegalEntityManager showToast={showToast} />
+      ) : (
+        <EmployeeLoanManager showToast={showToast} />
+      )}
+    </div>
+  )
+}
+
+/* 公司基础信息：默认开票公司全称/简称/税号，存到 system_preference 并同步到默认 legal_entity */
+function InvoiceCompanyBasic({ showToast }: { showToast: (m: string, t?: 'success' | 'error' | 'info' | 'warning') => void }) {
+  const [info, setInfo] = useState<{ name: string; short_name: string; tax_id: string } | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({ name: '', short_name: '', tax_id: '' })
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true)
+      try {
+        const data = await expenseService.getInvoiceCompany()
+        setInfo(data)
+        setForm({
+          name: data.name || '',
+          short_name: data.short_name || '',
+          tax_id: data.tax_id || '',
+        })
+      } catch { showToast('加载公司基础信息失败', 'error') }
+      finally { setLoading(false) }
+    })()
+  }, [])
+
+  const save = async () => {
+    if (!form.name.trim()) { showToast('请填写公司全称', 'warning'); return }
+    setSaving(true)
+    try {
+      const res = await expenseService.updateInvoiceCompany({
+        name: form.name.trim(),
+        short_name: form.short_name.trim(),
+        tax_id: form.tax_id.trim(),
+      })
+      showToast(res.message || '已保存', 'success')
+      setInfo({ name: res.name, short_name: res.short_name, tax_id: res.tax_id })
+    } catch (e: any) {
+      showToast(e?.message || '保存失败', 'error')
+    } finally { setSaving(false) }
+  }
+
+  if (loading) {
+    return <div className="text-center text-xs text-gray-500 py-8">加载中…</div>
+  }
+  const isPlaceholder = info?.name === '请在系统设置中配置公司主体'
+  return (
+    <div className="space-y-4 max-w-xl">
+      <div className="px-3 py-2 rounded-lg bg-accent-blue/5 border border-accent-blue/20 text-[12px] text-gray-700 dark:text-gray-300">
+        这里配置的「公司全称/简称/税号」会作为默认开票主体，存到全局系统偏好并自动同步到默认公司主体。
+        报销表单的「发票的我方名义」下拉将直接使用此配置。
+      </div>
+      {isPlaceholder && (
+        <div className="px-3 py-2 rounded-lg bg-amber-500/5 border border-amber-500/30 text-[12px] text-amber-500">
+          ⚠️ 当前为占位主体，请尽快配置真实公司信息。
+        </div>
+      )}
+      <div>
+        <label className="block text-xs text-gray-500 mb-1">
+          公司全称 <span className="text-red-400">*</span>
+        </label>
+        <input
+          value={form.name}
+          onChange={e => setForm((p) => ({ ...p, name: e.target.value }))}
+          maxLength={200}
+          placeholder="如：XX 科技股份有限公司"
+          className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-bg-card outline-none focus:border-accent-blue"
+        />
+      </div>
+      <div>
+        <label className="block text-xs text-gray-500 mb-1">公司简称</label>
+        <input
+          value={form.short_name}
+          onChange={e => setForm((p) => ({ ...p, short_name: e.target.value }))}
+          maxLength={50}
+          placeholder="如：XX 科技"
+          className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-bg-card outline-none focus:border-accent-blue"
+        />
+      </div>
+      <div>
+        <label className="block text-xs text-gray-500 mb-1">税号 / 统一社会信用代码</label>
+        <input
+          value={form.tax_id}
+          onChange={e => setForm((p) => ({ ...p, tax_id: e.target.value }))}
+          maxLength={50}
+          placeholder="如：91330100MA000000X0"
+          className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-bg-card outline-none focus:border-accent-blue"
+        />
+      </div>
+      <div className="flex justify-end pt-2">
+        <button
+          onClick={save}
+          disabled={saving}
+          className="px-4 py-1.5 text-xs rounded-lg bg-accent-blue text-white hover:bg-blue-600 disabled:opacity-50 inline-flex items-center gap-1"
+        >
+          {saving && <Loader2 size={11} className="animate-spin" />}
+          保存
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function LegalEntityManager({ showToast }: { showToast: (m: string, t?: 'success' | 'error' | 'info' | 'warning') => void }) {
+  const [list, setList] = useState<LegalEntity[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState<LegalEntity | null>(null)
+  const [creating, setCreating] = useState(false)
+  const [form, setForm] = useState<Partial<LegalEntity>>({ name: '', short_name: '', tax_id: '', balance: 0, is_default: false, is_active: true, sort_order: 0 })
+
+  const reload = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await expenseService.listLegalEntities(true)
+      setList(data || [])
+    } catch { showToast('加载失败', 'error') }
+    finally { setLoading(false) }
+  }, [showToast])
+
+  useEffect(() => { reload() }, [reload])
+
+  const openCreate = () => {
+    setForm({ name: '', short_name: '', tax_id: '', balance: 0, is_default: false, is_active: true, sort_order: 0 })
+    setEditing(null)
+    setCreating(true)
+  }
+
+  const openEdit = (e: LegalEntity) => {
+    setForm({ ...e })
+    setEditing(e)
+    setCreating(true)
+  }
+
+  const handleSave = async () => {
+    if (!form.name?.trim() || !form.short_name?.trim()) { showToast('请填写名称和简称', 'warning'); return }
+    try {
+      if (editing) {
+        await expenseService.updateLegalEntity(editing.id, form)
+        showToast('已更新', 'success')
+      } else {
+        await expenseService.createLegalEntity(form)
+        showToast('已创建', 'success')
+      }
+      setCreating(false)
+      setEditing(null)
+      reload()
+    } catch (e: any) {
+      showToast(e?.message || '保存失败', 'error')
+    }
+  }
+
+  const handleDelete = async (e: LegalEntity) => {
+    if (!window.confirm(`确认删除「${e.name}」？`)) return
+    try {
+      await expenseService.deleteLegalEntity(e.id)
+      showToast('已删除', 'success')
+      reload()
+    } catch (err: any) {
+      showToast(err?.message || '删除失败', 'error')
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-xs text-gray-500">共 {list.length} 个主体</div>
+        <button
+          onClick={openCreate}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-blue text-white text-xs font-medium hover:bg-blue-600 transition-all"
+        >
+          <Plus size={14} /> 新增主体
+        </button>
+      </div>
+      <div className="rounded-lg border border-border overflow-hidden">
+        <table className="w-full text-xs">
+          <thead className="bg-bg-hover/50 text-gray-500">
+            <tr>
+              <th className="px-3 py-2 text-left font-medium">名称</th>
+              <th className="px-3 py-2 text-left font-medium">简称</th>
+              <th className="px-3 py-2 text-left font-medium">税号</th>
+              <th className="px-3 py-2 text-right font-medium">账户余额</th>
+              <th className="px-3 py-2 text-center font-medium">默认</th>
+              <th className="px-3 py-2 text-center font-medium">状态</th>
+              <th className="px-3 py-2 text-center font-medium w-24">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={7} className="px-3 py-6 text-center text-gray-400">加载中…</td></tr>
+            ) : list.length === 0 ? (
+              <tr><td colSpan={7} className="px-3 py-6 text-center text-gray-400">暂无数据</td></tr>
+            ) : list.map((e) => (
+              <tr key={e.id} className="border-t border-border/50">
+                <td className="px-3 py-2 font-medium">{e.name}</td>
+                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{e.short_name}</td>
+                <td className="px-3 py-2 text-gray-600 dark:text-gray-400 font-mono">{e.tax_id || '-'}</td>
+                <td className="px-3 py-2 text-right tabular-nums">¥{e.balance.toFixed(2)}</td>
+                <td className="px-3 py-2 text-center">{e.is_default ? <span className="text-accent-blue">★</span> : '-'}</td>
+                <td className="px-3 py-2 text-center">
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] ${e.is_active ? 'bg-green-500/10 text-green-500' : 'bg-gray-500/10 text-gray-500'}`}>
+                    {e.is_active ? '启用' : '停用'}
+                  </span>
+                </td>
+                <td className="px-3 py-2 text-center">
+                  <button onClick={() => openEdit(e)} className="text-accent-blue hover:underline mr-2">编辑</button>
+                  <button onClick={() => handleDelete(e)} className="text-red-500 hover:underline">删除</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {creating && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-bg-card rounded-xl shadow-2xl w-[480px] max-w-[92vw] p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold">{editing ? '编辑' : '新增'}公司主体</h3>
+              <button onClick={() => setCreating(false)} className="p-1 rounded hover:bg-bg-hover text-gray-500">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">公司名称 *</label>
+                <input value={form.name || ''} onChange={e => setForm({ ...form, name: e.target.value })}
+                  className="w-full px-3 py-1.5 rounded-lg border border-border bg-bg-card text-sm focus:border-accent-blue outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">简称 *</label>
+                <input value={form.short_name || ''} onChange={e => setForm({ ...form, short_name: e.target.value })}
+                  className="w-full px-3 py-1.5 rounded-lg border border-border bg-bg-card text-sm focus:border-accent-blue outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">税号</label>
+                <input value={form.tax_id || ''} onChange={e => setForm({ ...form, tax_id: e.target.value })}
+                  className="w-full px-3 py-1.5 rounded-lg border border-border bg-bg-card text-sm focus:border-accent-blue outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">账户余额（元）</label>
+                <input type="number" step="0.01" value={form.balance ?? ''} onChange={e => {
+                    const v = e.target.value
+                    setForm({ ...form, balance: v === '' ? null : parseFloat(v) || 0 })
+                  }}
+                  className="w-full px-3 py-1.5 rounded-lg border border-border bg-bg-card text-sm focus:border-accent-blue outline-none" />
+              </div>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 text-xs text-gray-600">
+                  <input type="checkbox" checked={!!form.is_default} onChange={e => setForm({ ...form, is_default: e.target.checked })} className="accent-blue" />
+                  设为默认
+                </label>
+                <label className="flex items-center gap-2 text-xs text-gray-600">
+                  <input type="checkbox" checked={form.is_active !== false} onChange={e => setForm({ ...form, is_active: e.target.checked })} className="accent-blue" />
+                  启用
+                </label>
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setCreating(false)}
+                className="px-4 py-1.5 text-xs rounded-lg border border-border bg-bg-card text-gray-600 hover:border-accent-blue/50 hover:text-accent-blue">
+                取消
+              </button>
+              <button onClick={handleSave}
+                className="px-4 py-1.5 text-xs rounded-lg bg-accent-blue text-white hover:bg-blue-600">
+                保存
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function EmployeeLoanManager({ showToast }: { showToast: (m: string, t?: 'success' | 'error' | 'info' | 'warning') => void }) {
+  const [list, setList] = useState<EmployeeLoan[]>([])
+  const [entities, setEntities] = useState<LegalEntity[]>([])
+  const [users, setUsers] = useState<Array<{ id: number; name: string }>>([])
+  const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
+  const [form, setForm] = useState({ user_id: 0, entity_id: 0, amount: 0, loan_date: new Date().toISOString().slice(0, 10), reason: '' })
+
+  const reload = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await expenseService.listAllLoans(undefined, false)
+      setList(data || [])
+    } catch { showToast('加载失败', 'error') }
+    finally { setLoading(false) }
+  }, [showToast])
+
+  useEffect(() => {
+    reload()
+    expenseService.listLegalEntities(true).then(setEntities).catch(() => {})
+    apiFetch<any[]>('/api/v1/users?simple=1').then((d) => setUsers(d || [])).catch(() => {})
+  }, [reload])
+
+  const handleCreate = async () => {
+    if (!form.user_id || !form.entity_id || form.amount <= 0) { showToast('请填写完整', 'warning'); return }
+    try {
+      await expenseService.createLoan(form)
+      showToast('已录入', 'success')
+      setCreating(false)
+      setForm({ user_id: 0, entity_id: 0, amount: 0, loan_date: new Date().toISOString().slice(0, 10), reason: '' })
+      reload()
+    } catch (e: any) {
+      showToast(e?.message || '创建失败', 'error')
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-xs text-gray-500">共 {list.length} 条借款记录</div>
+        <button
+          onClick={() => setCreating(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-blue text-white text-xs font-medium hover:bg-blue-600 transition-all"
+        >
+          <Plus size={14} /> 录入借款
+        </button>
+      </div>
+      <div className="rounded-lg border border-border overflow-hidden">
+        <table className="w-full text-xs">
+          <thead className="bg-bg-hover/50 text-gray-500">
+            <tr>
+              <th className="px-3 py-2 text-left font-medium">借款人</th>
+              <th className="px-3 py-2 text-left font-medium">主体</th>
+              <th className="px-3 py-2 text-left font-medium">借款日期</th>
+              <th className="px-3 py-2 text-right font-medium">本金</th>
+              <th className="px-3 py-2 text-right font-medium">已抵消</th>
+              <th className="px-3 py-2 text-right font-medium">剩余</th>
+              <th className="px-3 py-2 text-center font-medium">状态</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={7} className="px-3 py-6 text-center text-gray-400">加载中…</td></tr>
+            ) : list.length === 0 ? (
+              <tr><td colSpan={7} className="px-3 py-6 text-center text-gray-400">暂无数据</td></tr>
+            ) : list.map((l) => (
+              <tr key={l.id} className="border-t border-border/50">
+                <td className="px-3 py-2 font-medium">{l.user_name || `#${l.user_id}`}</td>
+                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{l.entity_name || `#${l.entity_id}`}</td>
+                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{l.loan_date}</td>
+                <td className="px-3 py-2 text-right tabular-nums">¥{l.amount.toFixed(2)}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-gray-500">¥{l.used_amount.toFixed(2)}</td>
+                <td className={`px-3 py-2 text-right tabular-nums font-medium ${l.remaining > 0 ? 'text-amber-500' : 'text-gray-400'}`}>
+                  ¥{l.remaining.toFixed(2)}
+                </td>
+                <td className="px-3 py-2 text-center">
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] ${
+                    l.status === '已结清' ? 'bg-green-500/10 text-green-500'
+                    : l.status === '部分抵消' ? 'bg-amber-500/10 text-amber-500'
+                    : 'bg-blue-500/10 text-blue-500'
+                  }`}>
+                    {l.status}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {creating && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-bg-card rounded-xl shadow-2xl w-[480px] max-w-[92vw] p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold">录入员工借款</h3>
+              <button onClick={() => setCreating(false)} className="p-1 rounded hover:bg-bg-hover text-gray-500">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">借款人 *</label>
+                <SearchableSelect
+                  value={form.user_id || null}
+                  onChange={(v) => setForm({ ...form, user_id: (v as number) || 0 })}
+                  options={users.map(u => ({ value: u.id, label: u.name }))}
+                  placeholder="选择借款人..."
+                  emptyText="无匹配人员"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">公司主体 *</label>
+                <SearchableSelect
+                  value={form.entity_id || null}
+                  onChange={(v) => setForm({ ...form, entity_id: (v as number) || 0 })}
+                  options={entities.map(e => ({ value: e.id, label: e.name }))}
+                  placeholder="选择公司主体..."
+                  emptyText="无匹配主体"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">金额（元） *</label>
+                  <input type="number" step="0.01" value={form.amount || ''} onChange={e => {
+                    const v = e.target.value
+                    setForm({ ...form, amount: v === '' ? 0 : parseFloat(v) || 0 })
+                  }}
+                    className="w-full px-3 py-1.5 rounded-lg border border-border bg-bg-card text-sm focus:border-accent-blue outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">借款日期 *</label>
+                  <input type="date" value={form.loan_date} onChange={e => setForm({ ...form, loan_date: e.target.value })}
+                    className="w-full px-3 py-1.5 rounded-lg border border-border bg-bg-card text-sm focus:border-accent-blue outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">借款事由</label>
+                <textarea value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })} rows={2}
+                  className="w-full px-3 py-1.5 rounded-lg border border-border bg-bg-card text-sm focus:border-accent-blue outline-none resize-none" />
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setCreating(false)}
+                className="px-4 py-1.5 text-xs rounded-lg border border-border bg-bg-card text-gray-600 hover:border-accent-blue/50 hover:text-accent-blue">
+                取消
+              </button>
+              <button onClick={handleCreate}
+                className="px-4 py-1.5 text-xs rounded-lg bg-accent-blue text-white hover:bg-blue-600">
+                保存
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

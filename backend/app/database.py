@@ -57,6 +57,9 @@ def init_db():
             # HR 档案日期（参加工作日期→法定年假工龄；入职日期→司龄）
             conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS first_work_date DATE DEFAULT NULL;'))
             conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS hire_date DATE DEFAULT NULL;'))
+            # 报销明细与关联出差申请
+            conn.execute(text('ALTER TABLE expense_request ADD COLUMN IF NOT EXISTS items TEXT DEFAULT NULL;'))
+            conn.execute(text('ALTER TABLE expense_request ADD COLUMN IF NOT EXISTS trip_id INTEGER DEFAULT NULL REFERENCES business_trip_request(id);'))
             conn.commit()
         except Exception as e:
             logger.debug("ALTER TABLE skipped: %s", e)
@@ -82,6 +85,8 @@ def init_db():
     _init_rbac_data(engine)
     # 初始化审批流预置模板
     _init_approval_flows(engine)
+    # 初始化默认公司主体（幂等：按 name 唯一）
+    _init_legal_entities(engine)
 
 
 def _ensure_admin_user(engine):
@@ -358,6 +363,11 @@ ROLE_DEFS = {
             # 管理总览与分享
             "management:console",
             "share:create", "share:read", "share:comment",
+            # OA 办公：部门领导需查看下属请假/加班/报销/出差/采购申请
+            "leave:view_all", "overtime:view_all",
+            "expense:view_all", "trip:view_all", "purchase:view_all",
+            # 资产查看
+            "asset:read",
         ],
     },
     "sales": {
@@ -372,6 +382,8 @@ ROLE_DEFS = {
             "wiki:read",
             "dashboard:read",
             "share:create", "share:read", "share:comment",
+            # 资产查看
+            "asset:read",
         ],
     },
     "tech": {
@@ -385,6 +397,8 @@ ROLE_DEFS = {
             "report:read", "report:create", "report:submit",
             "dashboard:read",
             "share:create", "share:read", "share:comment",
+            # 资产查看
+            "asset:read",
         ],
     },
     "operations": {
@@ -399,6 +413,8 @@ ROLE_DEFS = {
             "ai:use",
             "dashboard:read",
             "share:read", "share:comment",
+            # 资产查看
+            "asset:read",
         ],
     },
     "business": {
@@ -413,6 +429,8 @@ ROLE_DEFS = {
             "ai:use",
             "dashboard:read",
             "share:create", "share:read", "share:comment",
+            # 资产查看
+            "asset:read",
         ],
     },
     "finance": {
@@ -430,6 +448,12 @@ ROLE_DEFS = {
             "share:create", "share:read", "share:comment",
             # 财务作为付款/盖章审批链的财务初审节点，需查看全部申请
             "payment:view_all", "seal:view_all",
+            # OA 办公：财务作为报销/采购审批链的财务节点，需查看全部申请
+            "expense:view_all", "purchase:view_all",
+            # 差旅报销核对需要查看出差申请
+            "trip:view_all",
+            # 资产查看
+            "asset:read",
         ],
     },
     "legal": {
@@ -445,6 +469,8 @@ ROLE_DEFS = {
             "share:create", "share:read", "share:comment",
             # 法务作为盖章审批链的法务初审节点，需查看全部盖章申请
             "seal:view_all",
+            # 资产查看
+            "asset:read",
         ],
     },
     "boss": {
@@ -474,7 +500,8 @@ ROLE_DEFS = {
             "leave:view_all", "overtime:view_all",
             # P2 OA 模块全局查看
             "expense:view_all", "trip:view_all", "purchase:view_all",
-            "asset:read",
+            "purchase_supplier:read",
+            "asset:read", "asset:manage",
         ],
     },
     "hr": {
@@ -487,6 +514,8 @@ ROLE_DEFS = {
             "overtime:view_all",
             "purchase_supplier:read",
             "expense:view_all", "trip:view_all",
+            # 人事负责资产领用管理（办公设备分配）
+            "asset:read", "asset:manage",
             "report:read", "report:submit",
             "meeting:read",
             "wiki:read",
@@ -506,6 +535,8 @@ ROLE_DEFS = {
             "dashboard:read",
             "ai:use",
             "share:read", "share:comment",
+            # 资产查看
+            "asset:read",
         ],
     },
     "seal_keeper": {
@@ -517,6 +548,8 @@ ROLE_DEFS = {
             "dashboard:read",
             "ai:use",
             "share:read", "share:comment",
+            # 资产查看
+            "asset:read",
         ],
     },
     "user": {
@@ -530,6 +563,8 @@ ROLE_DEFS = {
             "wiki:read",
             "dashboard:read",
             "share:read", "share:comment",
+            # 资产查看
+            "asset:read",
         ],
     },
 }
@@ -1114,6 +1149,131 @@ def _seed_contract_templates(db_engine):
                 description=tpl.get("description", ""),
                 content=tpl["content"],
                 is_active=True,
+            ))
+        session.commit()
+
+
+# ──────────────────────────────────────────────────
+# 公司主体（legal_entity）预制数据
+# 注意：默认公司名通过系统偏好 invoice_company_name / invoice_company_short_name 配置。
+# 首次部署若未设置偏好，则创建一个占位主体，提示管理员在「系统设置 → 报销设置 → 公司基础信息」中配置。
+# ──────────────────────────────────────────────────
+_PLACEHOLDER_LEGAL_ENTITY = {
+    "name": "请在系统设置中配置公司主体",
+    "short_name": "待配置",
+    "tax_id": "",
+    "balance": 0,
+    "is_default": True,
+    "is_active": True,
+    "sort_order": 0,
+}
+
+
+def _get_system_pref(session, key: str, default: str = "") -> str:
+    """读取全局系统偏好（user_id is None）"""
+    from app.models.system_preference import SystemPreference
+    pref = session.exec(
+        select(SystemPreference).where(
+            SystemPreference.key == key,
+            SystemPreference.user_id == None,  # noqa: E711
+        )
+    ).first()
+    return pref.value if pref else default
+
+
+def _set_system_pref(session, key: str, value: str) -> None:
+    """写入全局系统偏好（user_id is None），存在则更新"""
+    from app.models.system_preference import SystemPreference
+    pref = session.exec(
+        select(SystemPreference).where(
+            SystemPreference.key == key,
+            SystemPreference.user_id == None,  # noqa: E711
+        )
+    ).first()
+    if pref:
+        pref.value = value
+    else:
+        session.add(SystemPreference(key=key, value=value, user_id=None))
+
+
+def _init_legal_entities(engine):
+    """幂等写入预制公司主体。默认公司名称从系统偏好读取（避免硬编码）。
+
+    处理历史脏数据：
+    - 「杭州远石科技有限公司」是早期样例名，迁移后自动删除（避免用户看到）
+    - 若存在占位主体「请在系统设置中配置公司主体」，按当前系统偏好改名
+    - 保证全表只有一条 is_default=True
+    """
+    from app.models.legal_entity import LegalEntity
+    from sqlmodel import Session, select
+
+    with Session(engine) as session:
+        # 1) 读取配置的默认公司名（管理员在「系统设置 → 报销设置 → 公司基础信息」设置）
+        name = _get_system_pref(session, "invoice_company_name", "").strip()
+        short = _get_system_pref(session, "invoice_company_short_name", "").strip()
+        tax_id = _get_system_pref(session, "invoice_company_tax_id", "").strip()
+        target_name = name or _PLACEHOLDER_LEGAL_ENTITY["name"]
+        target_short = short or _PLACEHOLDER_LEGAL_ENTITY["short_name"]
+
+        all_ents = session.exec(select(LegalEntity)).all()
+        if not all_ents:
+            # 全新库：直接创建
+            session.add(LegalEntity(
+                name=target_name, short_name=target_short, tax_id=tax_id,
+                balance=0, is_default=True, is_active=True, sort_order=0,
+            ))
+            session.commit()
+            return
+
+        # 2) 清理历史样例名「杭州远石科技有限公司」（早期硬编码遗留）
+        legacy = session.exec(
+            select(LegalEntity).where(LegalEntity.name == "杭州远石科技有限公司")
+        ).all()
+        for ent in legacy:
+            # 如果当前表里没有同名的「真实主体」，则删除样例
+            session.delete(ent)
+
+        # 3) 找到「占位主体」并按系统偏好改名（用户首次配置时触发）
+        placeholder = session.exec(
+            select(LegalEntity).where(
+                LegalEntity.name == _PLACEHOLDER_LEGAL_ENTITY["name"]
+            )
+        ).first()
+        if placeholder:
+            placeholder.name = target_name
+            placeholder.short_name = target_short
+            placeholder.tax_id = tax_id
+
+        # 4) 若有「当前同名」主体已存在 → 不动；否则把第一条非占位主体改成目标名
+        same = session.exec(
+            select(LegalEntity).where(LegalEntity.name == target_name)
+        ).first()
+        if not same:
+            # 找一条非样例/非占位的主体作为升级目标
+            base = session.exec(select(LegalEntity).order_by(LegalEntity.id)).first()
+            if base:
+                base.name = target_name
+                base.short_name = target_short
+                base.tax_id = tax_id
+
+        # 5) 保证全表只有一条 is_default=True（取消其它）
+        all_ents_now = session.exec(select(LegalEntity)).all()
+        defaults = [e for e in all_ents_now if e.is_default]
+        # 优先保留「目标名」那条
+        keep = None
+        for e in all_ents_now:
+            if e.name == target_name:
+                keep = e
+                break
+        if not keep and all_ents_now:
+            keep = all_ents_now[0]
+        for e in all_ents_now:
+            e.is_default = (e is keep)
+        # 6) 若整表空了，兜底建一条
+        if not all_ents_now:
+            session.add(LegalEntity(
+                name=target_name, short_name=target_short, tax_id=tax_id,
+                balance=0, is_default=True, is_active=True, sort_order=0,
             ))
         session.commit()
 

@@ -16,29 +16,44 @@
 
 ### 下拉选择框
 
-不使用原生 `<select>`，根据场景二选一：
+**全站统一标准**：禁止使用原生 `<select>`，所有业务下拉框一律使用 `SearchableSelect` 组件（`frontend/src/components/SearchableSelect.tsx`），不论选项多少，保持视觉风格一致。
 
-| 场景 | 组件 | 说明 |
-|---|---|---|
-| **全部业务下拉** | `SearchableSelect` | 统一使用，不论选项多少，保持视觉风格一致 |
-| 货币选择器（仅此一处例外） | `CurrencySelector`（内部组件） | `appearance-none` + `ChevronDown`，因币种无需搜索且展示格式特殊 |
+> 参考样板：会议纪要新建中「关联客户」下拉框。该样式为全站唯一标准，后续开发不得引入其他下拉组件或原生 `<select>`。
 
-**`SearchableSelect` 单选字符串字段用法：**
+**option 数据格式**（注意是 `value`/`label`，不是 `id`/`sub`）：
 ```tsx
+import SearchableSelect from '../components/SearchableSelect'
+
+// 数字 ID 场景
 <SearchableSelect
-  options={[{ id: '', label: '不指定' }, ...list.map(s => ({ id: s, label: s }))]}
-  value={form.field}
-  onChange={(v) => updateField('field', v === 0 ? '' : String(v))}
-  clearValue=""
+  options={customers.map(c => ({ value: c.id, label: c.name }))}
+  value={form.customer_id || null}
+  onChange={(v) => setForm({ ...form, customer_id: (v as number) || 0 })}
+  placeholder="选择客户..."
+  emptyText="无匹配客户"
+/>
+
+// 字符串场景
+<SearchableSelect
+  options={[{ value: '', label: '不指定' }, ...list.map(s => ({ value: s, label: s }))]}
+  value={form.field || null}
+  onChange={(v) => updateField('field', v ?? '')}
+  placeholder="选择..."
 />
 ```
 
-**`StyledSelect` 用法（用于月调用量单位等固定枚举）：**
-```tsx
-<StyledSelect value={form.unit} onChange={(e) => updateField('unit', e.target.value)}>
-  {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-</StyledSelect>
-```
+**组件特性**：
+- 折叠态：显示选中项 label + 清空按钮(X) + 下拉箭头
+- 展开态：顶部搜索框 + 滚动选项列表 + 底部计数提示
+- 模糊搜索：匹配 label + hint
+- 键盘快捷键：↑↓ 移动、Enter 确认、Esc 关闭、Backspace 清空
+- 支持自定义渲染：`renderTrigger`、`renderOption`
+- 尺寸：`size="sm"`（表格内紧凑）或 `size="md"`（默认）
+
+**禁止**：
+- 使用原生 `<select>`
+- 传 `id`/`sub` 字段（组件只认 `value`/`label`/`hint`）
+- 传 `clearValue` prop（组件用 `onChange(null)` 清空，无需额外属性）
 
 ### 信息网格（图标 + 标签 + 值）对齐规范
 
@@ -68,11 +83,115 @@
 
 **禁止**在次操作按钮上使用半透明彩色背景（如 `bg-purple-500/15 text-purple-300`）——浅色模式下颜色对比度差，视觉干扰大。次操作统一用中性边框样式，hover 时借用主色呼应即可。
 
+### 全局样式统一约束（按钮 / 选中态 / 标签）
+
+> **核心原则**：整站只允许一个主色（`accent-blue` / `blue-500`）作为操作主色，禁止每个业务模块自创渐变和颜色。颜色服务于语义，不服务于页面装饰。
+
+#### 按钮层级（全站仅 4 种，颜色锁死）
+
+| 层级 | 用途 | 必用样式 | 禁止 |
+|---|---|---|---|
+| **primary** | 核心创建/保存/确认 | `bg-accent-blue hover:bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium shadow-sm hover:shadow-lg hover:shadow-blue-500/30` | 渐变色（from-purple、from-emerald、from-orange 等一律禁止）；裸色值 `bg-[#3B82F6]`、`bg-[#8B5CF6]`、`bg-indigo-600` |
+| **secondary** | 取消/关闭/历史归档/筛选 | `border border-border bg-bg-card text-gray-600 dark:text-gray-400 rounded-lg px-3 py-1.5 text-xs hover:border-accent-blue/50 hover:text-accent-blue` | 半透明彩色底；`text-gray-500 hover:text-gray-800` 单独成派 |
+| **danger** | 删除/作废 | `bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 rounded-lg px-3 py-1.5 text-xs` | 实色 `bg-red-500 text-white font-bold`（除非是确认弹窗内的最终执行按钮）；`bg-bg-hover text-red-400` 中性底变体 |
+| **icon** | 图标按钮（编辑/复制/查看） | `p-1.5 rounded-lg text-gray-500 hover:text-accent-blue hover:bg-accent-blue/10` | hover 时换 brand 色（purple/emerald 等） |
+
+**禁止行为**：
+- 同一页面顶部操作区出现两种以上主色按钮（如新建用蓝、导出用紫、归档用橙）
+- 业务模块按"主题色"配按钮（付款用绿、盖章用红、合同用蓝）——按钮颜色只表示层级，不表示业务
+- `rounded-xl ... hover:scale-105` 等装饰性放大效果
+
+#### 选中 / Active 态（全站仅 2 种）
+
+| 类型 | 用途 | 必用样式 |
+|---|---|---|
+| **chip / tab 选中** | Tabs、Filter chips、Tag 选择器、Toggle 按钮 | `bg-accent-blue/15 text-accent-blue border border-accent-blue/30`（暗色主题下 `text-blue-300`） |
+| **list row 选中** | 树节点、列表行、下拉项 hover/selected | `bg-accent-blue/10 text-accent-blue font-medium` + 可选左侧 `w-0.5` 高亮条 |
+
+**禁止**：`bg-blue-500/20 text-blue-400 border-blue-500/40`、`bg-purple-500/15 text-purple-300`、`from-cyan-500 to-blue-500` 渐变 underline 等多色变体并存。Tab 的 active 下划线统一用 `bg-accent-blue`（不再每页换渐变）。
+
+#### 业务类型标签 / 状态徽章（仅此处允许彩色）
+
+业务类型标签（合同/付款/盖章/月结/供应商/通道/项目）和状态徽章（待审批/已通过/已驳回/进行中/已完成）**允许使用语义色**，因为颜色本身承载信息（如盖章用红、付款用绿、危险状态用红）。但必须：
+- 从 `theme/tokens.ts` 的 `TONES` 中取色，禁止裸色值
+- 使用 `StatusBadge` / `IconBox` 组件，不内联 className
+
+#### 实施要求
+
+- 新增/修改页面时，按钮和选中态必须从上述 4+2 种中选，不得引入新颜色
+- 已存在的多色变体在迭代到对应页面时统一收敛到本规范
+- 后续将补齐 `Button`、`Tabs`、`Chip` 基础组件封装，强制走 `TONES`，届时禁止再内联 className
+
 ### 表单整体原则
 
 - 组件样式与现有卡片主题保持一致，不单独引入新款式
 - 输入框统一用 `rounded-lg bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15`
 - 新建表单中，**销售负责人默认填入当前登录用户**（`user?.name`）
+
+### 卡片与页面配色规范（浅色/深色双主题）
+
+> **核心原则**：所有页面必须同时适配浅色与深色主题，禁止只写深色样式（`text-white`、`bg-white/5`、`border-white/10`）。浅色模式下文字需深色（`text-gray-900`），深色模式下文字需浅色（`dark:text-white`），保证两种主题下都有足够的对比度。
+
+**参考样板**：`ApprovalFlowsPage.tsx`（审批流配置页）。该页面的配色与对比度为全站执行标准，后续开发新页面或重构旧页面时必须对齐。
+
+#### 文字颜色（按层级）
+
+| 层级 | 用途 | 必用样式 |
+|---|---|---|
+| **标题/主名称** | 页面标题、卡片标题、节点名称 | `text-gray-900 dark:text-white` |
+| **正文/重要值** | 描述文字、金额、审批人 | `text-gray-700 dark:text-gray-200` |
+| **次要文字/标签** | 辅助说明、标签文字、计数 | `text-gray-500 dark:text-gray-400` |
+| **占位/提示** | 空状态、placeholder、禁用 | `text-gray-400 dark:text-gray-600` |
+| **图标** | 普通图标 | `text-gray-600 dark:text-gray-400` |
+
+**禁止**：
+- 只写 `text-white`（浅色模式下不可见）
+- 只写 `text-gray-500`（浅色模式下对比度不足，用作正文时）
+- `text-gray-300` 用于正文（浅色模式下几乎不可见）
+
+#### 背景与边框（按容器）
+
+| 容器 | 背景 | 边框 |
+|---|---|---|
+| **页面卡片** | `bg-bg-card` | `border border-border` |
+| **内嵌区块**（触发条件区、节点编辑器） | `bg-bg-hover/30` | `border border-border` |
+| **输入框** | `bg-bg-input` | `border border-border focus:border-accent-blue` |
+| **标签/徽章底** | `bg-bg-hover`（中性）或 `bg-accent-blue/10`（主色） | `border-transparent` 或 `border-accent-blue/20` |
+
+**禁止**：
+- `bg-white/[0.03]`、`bg-white/5`、`bg-white/[0.02]` 等深色专用半透明底（浅色模式下完全透明，无层次感）
+- `border-white/10`、`border-white/5` 等深色专用半透明边框
+- 每个业务类型分配不同背景色（如合同蓝底、付款绿底）——背景一律中性，颜色只用于状态徽章
+
+#### 状态徽章（仅此处允许彩色，但必须双主题）
+
+| 状态 | 浅色模式 | 深色模式 |
+|---|---|---|
+| **启用/成功** | `bg-emerald-50 text-emerald-700 border-emerald-200` | `dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20` |
+| **停用/中性** | `bg-gray-100 text-gray-500 border-gray-200` | `dark:bg-gray-500/10 dark:text-gray-400 dark:border-gray-500/20` |
+| **警告/触发条件** | `bg-amber-50 text-amber-700 border-amber-200` | `dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20` |
+| **危险/错误** | `bg-red-50 text-red-700 border-red-200` | `dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20` |
+
+**关键**：徽章必须同时写浅色和深色两套样式，用 `dark:` 前缀切换。禁止只写 `bg-emerald-500/15 text-emerald-400`（浅色模式下背景过淡、文字过淡）。
+
+#### 节点/标签统一中性化
+
+审批节点、业务类型标签、序号圆圈等**不再按类型分配花哨颜色**（如蓝/绿/黄/紫/粉五色），统一用中性灰：
+- 节点容器：`border border-border bg-bg-hover`
+- 序号圆圈：`bg-bg-hover text-gray-700 dark:text-gray-300 border border-border`
+- 业务类型标签：`bg-bg-hover text-gray-600 dark:text-gray-400`
+
+颜色只用于**状态语义**（成功=绿、警告=黄、危险=红），不用于**类型区分**。
+
+#### 操作按钮 hover 态
+
+| 按钮 | 默认色 | hover 色 |
+|---|---|---|
+| 编辑 | `text-gray-400 dark:text-gray-500` | `hover:text-accent-blue hover:bg-accent-blue/10` |
+| 删除 | `text-gray-400 dark:text-gray-500` | `hover:text-red-500 hover:bg-red-500/10` |
+| 启停 | `text-gray-400 dark:text-gray-500` | `hover:text-gray-700 dark:hover:text-white hover:bg-bg-hover` |
+
+**禁止**：hover 时切换到非主色（如 `hover:text-purple-300`、`hover:text-emerald-400`）。
 
 ### 项目表单字段命名约定
 
@@ -183,7 +302,8 @@ now_dt = now()
 | `v2.5.0` | OA 办公模块全量上线：请假、加班、报销、出差、采购（含供应商台账）、资产管理；假期额度账户（LeaveBalance + LeaveBalanceLog）；审批引擎回调接入 OA 各模块；Alembic 迁移两批次（P1+P2） |
 | `v2.5.1` | 修复向量索引误用 LLM_BASE_URL（Google）导致 /v1/embeddings 404；扩展 googleapis.com 全域过滤；AI 交互中心卡片按权限过滤（去日报，加项目/客户/审批/合同/会议/假期）；侧边栏 AI 入口紧凑化 |
 | `v2.5.2` | 修复角色权限容器重启后回退（仅对本次新建权限码补默认授权，不再覆盖管理员手动增删）；修复 8 处 AI 功能未用各自任务模型（日报/会议/项目分析/公司信息/看板洞察/周报均误读 chat），并在解析器内置「专属 task_type→chat」回落；Agent 对话改用 resolve_chat_params（温度/参数配置生效）；修复看板洞察对 Vertex 供应商永远返回空 |
-| `v2.6.0` (latest) | OA 落地增强：员工档案加「参加工作日期/入职日期」；年假按法定累计工龄档位（5/10/15 天）HR 一键批量生成草稿→确认发放；资产管理加完整流转履历（领用/归还/调拨/维修/报废，AssetRecord 留痕可追溯历任使用人）；新增迁移 r1h2r3o4a5s6 |
+| `v2.6.0` | OA 落地增强：员工档案加「参加工作日期/入职日期」；年假按法定累计工龄档位（5/10/15 天）HR 一键批量生成草稿→确认发放；资产管理加完整流转履历（领用/归还/调拨/维修/报废，AssetRecord 留痕可追溯历任使用人）；新增迁移 r1h2r3o4a5s6 |
+| `v2.7.0` (latest) | OA 审批与报销增强：审批流配置页浅色/深色双主题重构（去五颜六色、统一中性色、加深对比度）；报销申请优化（费用时间精确到分钟、个人欠款汇总显示、抵消借款逻辑修复含撤销重算、发票抬头/抵扣/关联单合并一行、移除账户余额暴露）；权限体系系统化更新（13 个角色权限映射补齐 OA view_all + asset:read 全员下放、权限矩阵补齐 OA 模块图标与 ACTION_LABELS）；系统配置白屏修复（EmailConfigSection 缺 useAuth）；下拉框样式标准与卡片配色规范写入 CLAUDE.md |
 
 ### 版本号规范
 

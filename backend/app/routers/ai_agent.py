@@ -322,3 +322,45 @@ def chat(request: ChatRequest, db: Session = Depends(get_session), current_user:
         write_log("error", "ai", f"通用AI对话失败: {str(e)[:150]}", details=str(e), db=db)
         reply = f"AI 调用失败: {str(e)[:200]}"
     return ChatResponse(reply=reply)
+
+
+# ===== 发票/票据识别（使用 invoice_ocr 任务类型） =====
+from fastapi import UploadFile, File, Form
+
+@router.post("/invoice-ocr")
+async def invoice_ocr(
+    file: UploadFile = File(...),
+    hint: str = Form(""),
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """从发票/票据图片或 PDF 抽取结构化字段（金额/日期/城市/类别等）
+
+    - 使用「invoice_ocr」任务类型指定的模型（需 vision 能力）
+    - 允许的文件类型：image/*、application/pdf
+    - 上限 10MB
+    """
+    if not file or not file.filename:
+        raise HTTPException(400, "未收到文件")
+    # 类型校验
+    ct = (file.content_type or "").lower()
+    if not (ct.startswith("image/") or ct == "application/pdf"):
+        raise HTTPException(400, f"不支持的文件类型：{ct}（仅 image/* 与 application/pdf）")
+    # 读字节并限制大小
+    raw = await file.read()
+    if len(raw) > 10 * 1024 * 1024:
+        raise HTTPException(413, "文件过大（上限 10MB）")
+    mime = ct or "image/jpeg"
+    try:
+        from app.services.ai_service import recognize_invoice_image
+        result = recognize_invoice_image(
+            file_bytes=raw,
+            mime_type=mime,
+            hint=hint or "",
+            db=db,
+            user_id=current_user.id,
+        )
+    except Exception as e:
+        write_log("error", "ai", f"发票识别失败: {str(e)[:150]}", details=str(e), db=db)
+        raise HTTPException(500, f"识别失败：{str(e)[:200]}")
+    return {"ok": True, "filename": file.filename, "data": result}

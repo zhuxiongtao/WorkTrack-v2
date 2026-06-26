@@ -28,6 +28,7 @@ import ExpensesPage from '../../pages/ExpensesPage'
 import BusinessTripsPage from '../../pages/BusinessTripsPage'
 import PurchasesPage from '../../pages/PurchasesPage'
 import AssetsPage from '../../pages/AssetsPage'
+import OACenterPage from '../../pages/OACenterPage'
 
 interface AppRoutesProps {
   homePage: string
@@ -61,6 +62,9 @@ function AppRoutes({ homePage }: AppRoutesProps) {
       <Route path="/feedback"      element={<FeedbackPage />} />
       <Route path="/payments"      element={<PaymentsPage />} />
       <Route path="/seals"         element={<SealsPage />} />
+      {/* OA 办公中心（统一入口，菜单只展示此项） */}
+      <Route path="/oa"            element={<OACenterPage />} />
+      {/* OA 子模块页面保留可访问（不在菜单展示，用于详细管理如销假/撤回/付款等操作） */}
       <Route path="/leaves"        element={<LeavesPage />} />
       <Route path="/overtimes"     element={<OvertimesPage />} />
       <Route path="/leave-balances" element={<LeaveBalancesPage />} />

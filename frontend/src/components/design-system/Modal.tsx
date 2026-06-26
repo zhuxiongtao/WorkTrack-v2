@@ -37,7 +37,7 @@ export interface ModalProps {
   tone?: ModalTone
   onClose: () => void
   /** 限制最大宽度，默认 max-w-2xl（可用 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl'） */
-  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl'
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl' | 'full'
   children: React.ReactNode
 }
 
@@ -48,6 +48,9 @@ const SIZE_CLASS: Record<NonNullable<ModalProps['size']>, string> = {
   xl: 'max-w-3xl',
   '2xl': 'max-w-4xl',
   '3xl': 'max-w-5xl',
+  '4xl': 'max-w-6xl',
+  '5xl': 'max-w-7xl',
+  full: 'max-w-[95vw]',
 }
 
 /** Header 的 tone 渐变背景 — 半透明，主色淡 */

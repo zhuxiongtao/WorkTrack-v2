@@ -323,7 +323,7 @@ export default function LeaveBalancesPage() {
             </button>
             <button
               onClick={() => openAdjust()}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-violet-500 text-white text-sm font-medium hover:opacity-90 transition-opacity"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-blue text-white text-sm font-medium hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 transition-all"
             >
               <Plus size={16} /> 调整额度
             </button>
@@ -583,7 +583,7 @@ export default function LeaveBalancesPage() {
               <button
                 onClick={submitAdjust}
                 disabled={saving}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-violet-500 text-white text-xs font-bold hover:opacity-90 disabled:opacity-50 transition-opacity"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-blue text-white text-xs font-medium hover:bg-blue-600 disabled:opacity-50 transition-all"
               >
                 {saving && <Loader2 size={14} className="animate-spin" />}
                 确认调整
@@ -688,7 +688,7 @@ export default function LeaveBalancesPage() {
               <button
                 onClick={submitGenerate}
                 disabled={genApplying || genLoading}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold hover:opacity-90 disabled:opacity-50 transition-opacity"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-blue text-white text-xs font-medium hover:bg-blue-600 disabled:opacity-50 transition-all"
               >
                 {genApplying ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                 确认发放 {genRows.filter(r => !r.missing_first_work_date).length} 人

@@ -1,164 +1,247 @@
-import { useState, useRef, useEffect } from 'react'
-import { Search, X, Check, ChevronDown } from 'lucide-react'
+import { useEffect, useRef, useState, useMemo, useCallback, ReactNode } from 'react'
+import { Search, ChevronDown, Check, X } from 'lucide-react'
 
-type SelectValue = string | number
-
-interface SearchableSelectProps {
-  options: { id: SelectValue; label: string; sub?: string }[]
-  value: SelectValue | SelectValue[]  // single or multiple
-  onChange: (val: SelectValue | SelectValue[]) => void
-  placeholder?: string
-  emptyText?: string
-  searchPlaceholder?: string
-  multiple?: boolean
-  className?: string
-  clearValue?: SelectValue  // value emitted when cleared in single mode, default 0
+export type SearchableSelectOption<T = any> = {
+  value: string | number
+  label: string
+  meta?: ReactNode   // 列表项中显示的补充信息（图标签/小字等）
+  badge?: ReactNode  // 选中项中显示的小徽章（如「默认」）
+  hint?: string      // 用于模糊搜索的补充关键词
+  disabled?: boolean
 }
 
-export default function SearchableSelect({
-  options,
+type Props<T> = {
+  value: T | null | undefined
+  onChange: (v: T | null) => void
+  options: SearchableSelectOption<T>[]
+  placeholder?: string
+  /** 自定义列表项渲染（拿到 option，可渲染多行内容） */
+  renderOption?: (opt: SearchableSelectOption<T>, active: boolean, selected: boolean) => ReactNode
+  /** 自定义触发器（折叠态）显示内容。默认显示 option.label */
+  renderTrigger?: (selected: SearchableSelectOption<T> | null) => ReactNode
+  /** 自定义空状态文案 */
+  emptyText?: string
+  /** 整行小尺寸（适配表格内） */
+  size?: 'sm' | 'md'
+  /** 触发器 className */
+  className?: string
+  /** 面板宽度（默认与触发器同宽，可指定 '240px' / '100%' 等） */
+  panelWidth?: string
+  /** 失焦时是否清空搜索关键字 */
+  resetSearchOnClose?: boolean
+}
+
+/**
+ * 通用可搜索下拉组件
+ * - 折叠态：显示当前选中项的 label（可被 renderTrigger 覆盖）
+ * - 展开态：顶部搜索框 + 可滚动的选项列表
+ * - 模糊匹配：label + hint 一起匹配（不区分大小写、支持中文）
+ * - 键盘：Esc 关闭、Enter 选中高亮项
+ * - 点击外部自动关闭
+ */
+export default function SearchableSelect<T extends string | number>({
   value,
   onChange,
-  placeholder = '请选择...',
-  emptyText = '无匹配结果',
-  searchPlaceholder = '输入关键词搜索...',
-  multiple = false,
+  options,
+  placeholder = '请选择',
+  renderOption,
+  renderTrigger,
+  emptyText = '无匹配项',
+  size = 'md',
   className = '',
-  clearValue = 0,
-}: SearchableSelectProps) {
+  panelWidth,
+  resetSearchOnClose = true,
+}: Props<T>) {
   const [open, setOpen] = useState(false)
-  const [keyword, setKeyword] = useState('')
-  const containerRef = useRef<HTMLDivElement>(null)
+  const [kw, setKw] = useState('')
+  const [highlight, setHighlight] = useState(0)
+  const rootRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+
+  // 找到当前选中项
+  const selected = useMemo(
+    () => options.find((o) => o.value === value) || null,
+    [options, value]
+  )
+
+  // 过滤后的选项
+  const filtered = useMemo(() => {
+    if (!kw.trim()) return options
+    const k = kw.trim().toLowerCase()
+    return options.filter((o) => {
+      const hay = [o.label, o.hint || ''].join(' ').toLowerCase()
+      return hay.includes(k)
+    })
+  }, [options, kw])
 
   // 点击外部关闭
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+    if (!open) return
+    const onDoc = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
         setOpen(false)
-        setKeyword('')
+        if (resetSearchOnClose) setKw('')
       }
     }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [open, resetSearchOnClose])
 
-  // 打开时聚焦搜索框
+  // 打开时聚焦输入框 + 重置高亮
   useEffect(() => {
     if (open) {
-      setKeyword('')
-      setTimeout(() => inputRef.current?.focus(), 50)
-    }
-  }, [open])
-
-  const filtered = options.filter((o) => {
-    if (!keyword.trim()) return true
-    const k = keyword.toLowerCase()
-    return o.label.toLowerCase().includes(k) || (o.sub && o.sub.toLowerCase().includes(k))
-  })
-
-  const selectedIds: SelectValue[] = multiple ? (value as SelectValue[]) : (value ? [value as SelectValue] : [])
-  const idSet = new Set(selectedIds.filter(Boolean))
-
-  const getDisplay = () => {
-    if (multiple) {
-      const count = idSet.size
-      if (count === 0) return placeholder
-      const names = options.filter((o) => idSet.has(o.id)).map((o) => o.label)
-      if (names.length <= 2) return names.join(', ')
-      return `${names[0]}, ${names[1]} 等 ${count} 项`
-    }
-    const found = options.find((o) => o.id === value)
-    return found ? found.label : placeholder
-  }
-
-  const handleSelect = (id: SelectValue) => {
-    if (multiple) {
-      const next = new Set(idSet)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      onChange(Array.from(next))
+      setTimeout(() => inputRef.current?.focus(), 30)
+      setHighlight(0)
     } else {
-      onChange(id)
+      if (resetSearchOnClose) setKw('')
+    }
+  }, [open, resetSearchOnClose])
+
+  const choose = useCallback(
+    (opt: SearchableSelectOption<T>) => {
+      if (opt.disabled) return
+      onChange(opt.value)
       setOpen(false)
-      setKeyword('')
+    },
+    [onChange]
+  )
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      setOpen(false)
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setHighlight((h) => Math.min(filtered.length - 1, h + 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setHighlight((h) => Math.max(0, h - 1))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      const opt = filtered[highlight]
+      if (opt) choose(opt)
+    } else if (e.key === 'Backspace' && !kw && selected) {
+      // 退格清空当前选项（贴近原生 select 体验）
+      onChange(null)
     }
   }
 
-  const handleClear = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    onChange(multiple ? [] : clearValue)
-  }
-
-  const hasValue = multiple ? idSet.size > 0 : !!value
+  // 尺寸
+  const isSm = size === 'sm'
+  const triggerH = isSm ? 'h-7 text-xs px-2' : 'h-9 text-sm px-3'
 
   return (
-    <div ref={containerRef} className={`relative ${className}`}>
+    <div ref={rootRef} className={`relative ${className}`}>
+      {/* 触发器 */}
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => setOpen(!open)}
-        className="w-full h-10 px-3.5 rounded-xl bg-gray-50 dark:bg-bg-input border border-gray-200 dark:border-border/60 text-xs text-left outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all flex items-center justify-between gap-2 font-semibold"
+        onClick={() => setOpen((o) => !o)}
+        onKeyDown={onKeyDown}
+        className={`w-full flex items-center justify-between gap-1.5 rounded-lg border border-border bg-bg-card
+                    hover:border-accent-blue/50 focus:border-accent-blue focus:outline-none
+                    transition-colors ${triggerH}
+                    ${open ? 'border-accent-blue' : ''}`}
       >
-        <span className={hasValue ? 'text-gray-800 dark:text-gray-300 truncate' : 'text-gray-400 dark:text-gray-600 truncate'}>
-          {getDisplay()}
-        </span>
-        <span className="flex items-center gap-1 flex-shrink-0">
-          {hasValue && (
-            <X size={14} className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300" onClick={handleClear} />
+        <span className="flex-1 text-left truncate flex items-center gap-1.5 min-w-0">
+          {selected ? (
+            <>
+              {selected.badge && <span className="shrink-0">{selected.badge}</span>}
+              {renderTrigger ? (
+                renderTrigger(selected)
+              ) : (
+                <span className="truncate">{selected.label}</span>
+              )}
+            </>
+          ) : (
+            <span className="text-gray-400 truncate">{placeholder}</span>
           )}
-          <ChevronDown size={14} className={`text-gray-400 dark:text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} />
         </span>
+        <div className="flex items-center gap-1 shrink-0">
+          {selected && !isSm && (
+            <span
+              role="button"
+              tabIndex={-1}
+              onClick={(e) => { e.stopPropagation(); onChange(null) }}
+              className="p-0.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-500/10 cursor-pointer"
+              title="清空"
+            >
+              <X size={12} />
+            </span>
+          )}
+          <ChevronDown
+            size={isSm ? 12 : 14}
+            className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`}
+          />
+        </div>
       </button>
 
+      {/* 展开面板 */}
       {open && (
-        <div className="absolute z-50 mt-1.5 left-0 w-full rounded-xl bg-bg-card border border-gray-200 dark:border-border/60 shadow-xl overflow-hidden">
+        <div
+          className="absolute z-50 left-0 right-0 mt-1 rounded-lg border border-border bg-bg-card shadow-xl
+                      overflow-hidden flex flex-col"
+          style={{ maxHeight: '320px', minWidth: panelWidth || undefined }}
+        >
           {/* 搜索框 */}
-          <div className="flex items-center gap-2 px-3 py-2.5 border-b border-gray-200/60 dark:border-border/40 bg-gray-50 dark:bg-bg-hover/10 rounded-t-xl">
-            <Search size={13} className="text-gray-400 dark:text-gray-500 flex-shrink-0" />
-            <input
-              ref={inputRef}
-              type="text"
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              placeholder={searchPlaceholder}
-              className="bg-transparent text-sm text-gray-800 dark:text-gray-300 outline-none flex-1 placeholder-gray-400 dark:placeholder-gray-600"
-            />
+          <div className="px-2 py-1.5 border-b border-border bg-bg-hover/40">
+            <div className="relative flex items-center">
+              <Search size={13} className="absolute left-2 text-gray-400 pointer-events-none" />
+              <input
+                ref={inputRef}
+                value={kw}
+                onChange={(e) => { setKw(e.target.value); setHighlight(0) }}
+                onKeyDown={onKeyDown}
+                placeholder="输入关键词搜索…"
+                className="w-full pl-7 pr-2 py-1.5 text-xs rounded-md border border-transparent bg-bg-card
+                           outline-none focus:border-accent-blue"
+              />
+            </div>
           </div>
-
           {/* 列表 */}
-          <div className="max-h-48 overflow-y-auto py-1">
+          <div className="flex-1 overflow-y-auto">
             {filtered.length === 0 ? (
-              <p className="text-xs text-gray-400 dark:text-gray-500 text-center py-4">{emptyText}</p>
+              <div className="px-3 py-4 text-center text-xs text-gray-400">{emptyText}</div>
             ) : (
-              filtered.map((o) => {
-                const selected = idSet.has(o.id)
+              filtered.map((opt, idx) => {
+                const isSel = opt.value === value
+                const isActive = idx === highlight
                 return (
                   <button
-                    key={o.id}
+                    key={String(opt.value)}
                     type="button"
-                    onClick={() => handleSelect(o.id)}
-                    className={`w-full text-left flex items-center gap-2 px-3.5 py-2 text-sm transition-colors cursor-pointer ${
-                      selected
-                        ? 'bg-blue-50 dark:bg-accent-blue/10 text-blue-600 dark:text-blue-400 font-medium'
-                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-bg-hover hover:text-gray-900 dark:hover:text-gray-100'
-                    }`}
+                    onClick={() => choose(opt)}
+                    onMouseEnter={() => setHighlight(idx)}
+                    disabled={opt.disabled}
+                    className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2
+                                ${opt.disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                                ${isActive ? 'bg-bg-hover' : ''}
+                                ${isSel ? 'text-accent-blue' : 'text-gray-700 dark:text-gray-200'}
+                                hover:bg-bg-hover transition-colors`}
                   >
-                    {multiple && (
-                      <span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 text-[11px] transition-colors ${
-                        selected ? 'bg-accent-blue border-accent-blue text-white' : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-transparent'
-                      }`}>
-                        {selected && <Check size={10} />}
-                      </span>
-                    )}
-                    <span className="truncate">{o.label}</span>
-                    {o.sub && (
-                      <span className="text-[11px] text-gray-400 dark:text-gray-500 truncate flex-shrink-0 ml-auto max-w-[40%]">{o.sub}</span>
+                    {renderOption ? (
+                      renderOption(opt, isActive, isSel)
+                    ) : (
+                      <>
+                        <span className="flex-1 truncate">{opt.label}</span>
+                        {opt.badge && <span className="shrink-0">{opt.badge}</span>}
+                        {isSel && <Check size={12} className="text-accent-blue shrink-0" />}
+                      </>
                     )}
                   </button>
                 )
               })
             )}
           </div>
+          {/* 底部小提示 */}
+          {filtered.length > 0 && (
+            <div className="px-3 py-1.5 border-t border-border bg-bg-hover/40
+                            text-[10px] text-gray-400 flex items-center justify-between">
+              <span>共 {filtered.length} 项</span>
+              <span className="hidden sm:inline">↑↓ 选择 · Enter 确认 · Esc 关闭</span>
+            </div>
+          )}
         </div>
       )}
     </div>

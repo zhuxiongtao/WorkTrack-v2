@@ -9,6 +9,9 @@ const MODULE_ICONS: Record<string, string> = {
   management: '🛡️', share: '🔗',
   upstream: '🔗', reconcile: '🧮', model: '🔄',
   feedback: '💬', payment: '💰', seal: '🔏',
+  // OA 办公模块
+  leave: '🌴', overtime: '⏰', expense: '🧾', trip: '✈️',
+  purchase: '🛒', asset: '📦', purchase_supplier: '🏷️',
 }
 
 interface RoleDetailProps {

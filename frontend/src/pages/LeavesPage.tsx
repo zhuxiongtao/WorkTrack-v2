@@ -28,6 +28,23 @@ interface LeaveItem {
 
 const DEFAULT_LEAVE_TYPES = ['年假', '事假', '病假', '调休', '婚假', '产假', '陪产假', '丧假']
 
+// 法定天数映射（婚假/产假/陪产假/丧假；因地区差异取常见值，仅作前端提示，以 HR 核准为准）
+const STATUTORY_DAYS: Record<string, number> = {
+  '婚假': 3,
+  '产假': 158,
+  '陪产假': 15,
+  '丧假': 3,
+}
+
+// 假期余额接口返回项
+interface LeaveBalanceItem {
+  leave_type: string
+  total_hours: number
+  used_hours: number
+  remaining_hours: number
+  year: number
+}
+
 const STATUS_META: Record<string, { label: string; cls: string }> = {
   草稿:   { label: '草稿',   cls: 'text-gray-400 bg-gray-500/10 border-gray-500/30' },
   审批中: { label: '审批中', cls: 'text-amber-400 bg-amber-500/10 border-amber-500/30' },
@@ -102,6 +119,7 @@ export default function LeavesPage() {
   const [list, setList] = useState<LeaveItem[]>([])
   const [loading, setLoading] = useState(true)
   const [leaveTypes, setLeaveTypes] = useState<string[]>(DEFAULT_LEAVE_TYPES)
+  const [balances, setBalances] = useState<LeaveBalanceItem[]>([])
 
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -134,6 +152,58 @@ export default function LeavesPage() {
 
   useEffect(() => { load() }, [load])
   useEffect(() => { loadTypes() }, [loadTypes])
+
+  // 加载当前用户假期余额（用于表单中选择类型后提示可休时间）
+  const loadBalances = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/v1/leave-balances/my?year=${new Date().getFullYear()}`)
+      if (res.ok) {
+        const data = await res.json()
+        setBalances(Array.isArray(data) ? data : [])
+      }
+    } catch { /* ignore */ }
+  }, [])
+
+  useEffect(() => { loadBalances() }, [loadBalances])
+
+  // 根据请假类型返回可休时间提示
+  const getLeaveHint = (type: string): { text: string; tone: 'info' | 'warn' | 'danger' } | null => {
+    const bal = balances.find(b => b.leave_type === type)
+    const HOURS_PER_DAY = 8
+
+    // 年假、调休：有余额限制，显示剩余天数
+    if (type === '年假' || type === '调休') {
+      if (!bal || bal.total_hours === 0) {
+        return { text: `无可用${type}额度，请联系 HR 确认`, tone: 'danger' }
+      }
+      const remainingDays = Math.round((bal.remaining_hours / HOURS_PER_DAY) * 10) / 10
+      const usedDays = Math.round((bal.used_hours / HOURS_PER_DAY) * 10) / 10
+      const totalDays = Math.round((bal.total_hours / HOURS_PER_DAY) * 10) / 10
+      // 若表单已填时长，检查是否超额
+      const formHours = parseFloat(form.hours) || 0
+      if (formHours > 0 && formHours > bal.remaining_hours) {
+        return { text: `剩余 ${remainingDays} 天，本次申请 ${Math.round(formHours / HOURS_PER_DAY * 10) / 10} 天将超额透支`, tone: 'danger' }
+      }
+      return { text: `剩余 ${remainingDays} 天 / 总额 ${totalDays} 天（已用 ${usedDays} 天）`, tone: remainingDays > 0 ? 'info' : 'warn' }
+    }
+
+    // 事假、病假：无额度限制
+    if (type === '事假' || type === '病假') {
+      return { text: '无额度限制，按需申请（病假建议附医院证明）', tone: 'info' }
+    }
+
+    // 婚假、产假、陪产假、丧假：按法定天数
+    const statutory = STATUTORY_DAYS[type]
+    if (statutory !== undefined) {
+      if (bal && bal.total_hours > 0) {
+        const remainingDays = Math.round((bal.remaining_hours / HOURS_PER_DAY) * 10) / 10
+        return { text: `法定 ${statutory} 天，剩余 ${remainingDays} 天`, tone: 'info' }
+      }
+      return { text: `法定 ${statutory} 天，需 HR 核准后发放额度`, tone: 'info' }
+    }
+
+    return null
+  }
 
   const openCreate = () => {
     setEditingId(null); setForm({ ...emptyForm }); setShowForm(true)
@@ -258,7 +328,7 @@ export default function LeavesPage() {
         right={
           <button
             onClick={openCreate}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-purple-500 to-violet-500 text-white text-sm font-medium hover:opacity-90 transition-opacity"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-blue text-white text-sm font-medium hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 transition-all"
           >
             <Plus size={16} /> 新建请假
           </button>
@@ -445,6 +515,21 @@ export default function LeavesPage() {
                   </button>
                 ))}
               </div>
+              {/* 可休时间提示 */}
+              {(() => {
+                const hint = getLeaveHint(form.leave_type)
+                if (!hint) return null
+                const toneCls = {
+                  info: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
+                  warn: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+                  danger: 'text-red-400 bg-red-500/10 border-red-500/20',
+                }[hint.tone]
+                return (
+                  <div className={`mt-2 px-3 py-2 rounded-lg border text-[11px] ${toneCls}`}>
+                    {hint.text}
+                  </div>
+                )
+              })()}
             </div>
 
             <Field label="请假事由" required>
@@ -512,7 +597,7 @@ export default function LeavesPage() {
               <button
                 onClick={save}
                 disabled={saving}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-purple-500 to-violet-500 text-white text-xs font-bold hover:opacity-90 disabled:opacity-50 transition-opacity"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-blue text-white text-xs font-medium hover:bg-blue-600 disabled:opacity-50 transition-all"
               >
                 {saving ? <Loader2 size={14} className="animate-spin" /> : null}
                 {editingId ? '保存' : '创建草稿'}

@@ -337,7 +337,7 @@ export default function AssetsPage() {
           canManage ? (
             <button
               onClick={openCreate}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-purple-500 to-violet-500 text-white text-sm font-medium hover:opacity-90 transition-opacity"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-blue text-white text-sm font-medium hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 transition-all"
             >
               <Plus size={16} /> 新建资产
             </button>
@@ -541,7 +541,7 @@ export default function AssetsPage() {
                       <button
                         onClick={submitAction}
                         disabled={actionBusy}
-                        className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-gradient-to-r from-indigo-500 to-violet-500 text-white text-xs font-bold hover:opacity-90 disabled:opacity-50 transition-opacity"
+                        className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-accent-blue text-white text-xs font-medium hover:bg-blue-600 disabled:opacity-50 transition-all"
                       >
                         {actionBusy && <Loader2 size={13} className="animate-spin" />}
                         确认{action}
@@ -781,7 +781,7 @@ export default function AssetsPage() {
               <button
                 onClick={save}
                 disabled={saving}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-purple-500 to-violet-500 text-white text-xs font-bold hover:opacity-90 disabled:opacity-50 transition-opacity"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-blue text-white text-xs font-medium hover:bg-blue-600 disabled:opacity-50 transition-all"
               >
                 {saving && <Loader2 size={14} className="animate-spin" />}
                 {editingId ? '保存' : '创建资产'}

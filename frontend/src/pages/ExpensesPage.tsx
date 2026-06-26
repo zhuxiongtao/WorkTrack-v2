@@ -27,6 +27,15 @@ interface ExpenseItem {
   paid_by_name: string | null
   created_at: string
   updated_at: string
+  // V2 统计字段
+  invoice_entity_id?: number | null
+  invoice_entity_name?: string | null
+  priority_offset_loan?: boolean
+  offset_loan_amount?: number
+  account_balance?: number
+  company_should_pay?: number
+  actual_pay_amount?: number
+  company_owes_personal?: number
 }
 
 const DEFAULT_EXPENSE_TYPES = ['差旅', '交通', '餐饮', '办公用品', '通讯', '培训', '其他']
@@ -230,7 +239,7 @@ export default function ExpensesPage() {
         right={
           <button
             onClick={openCreate}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-green-500 text-white text-sm font-medium hover:opacity-90 transition-opacity"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-blue text-white text-sm font-medium hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 transition-all"
           >
             <Plus size={16} /> 新建报销
           </button>
@@ -307,8 +316,11 @@ export default function ExpensesPage() {
             <div className="grid grid-cols-2 gap-2 text-xs">
               <Info label="费用类型" value={detail.expense_type || '—'} />
               <Info label="费用日期" value={detail.expense_date ? fmtExpenseDate(detail.expense_date) : '—'} />
-              <Info label="金额" value={fmtAmount(detail.amount, detail.currency, detail.amount_unit)} />
+              <Info label="票据总金额" value={fmtAmount(detail.amount, detail.currency, detail.amount_unit)} />
               <Info label="申请人" value={detail.user_name || '—'} />
+              {detail.invoice_entity_name && (
+                <Info label="发票主体" value={detail.invoice_entity_name} />
+              )}
               {detail.status === '已付款' && (
                 <>
                   <Info label="付款时间" value={detail.paid_at ? fmtExpenseDate(detail.paid_at) : '—'} />
@@ -316,6 +328,38 @@ export default function ExpensesPage() {
                 </>
               )}
             </div>
+
+            {/* V2 抵扣统计 */}
+            {detail.priority_offset_loan && (detail.offset_loan_amount ?? 0) > 0 && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-amber-500">抵消借款</span>
+                  <span className="tabular-nums text-amber-600 dark:text-amber-400 font-medium">
+                    -¥{(detail.offset_loan_amount ?? 0).toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">公司应支付</span>
+                  <span className="tabular-nums text-gray-700 dark:text-gray-300 font-medium">
+                    ¥{(detail.company_should_pay ?? 0).toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">个人实发</span>
+                  <span className="tabular-nums text-emerald-500 font-medium">
+                    ¥{(detail.actual_pay_amount ?? 0).toFixed(2)}
+                  </span>
+                </div>
+                {(detail.company_owes_personal ?? 0) > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">实报后公司欠个人</span>
+                    <span className="tabular-nums text-red-500 font-medium">
+                      ¥{(detail.company_owes_personal ?? 0).toFixed(2)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
 
             {detail.reason && (
               <div>
@@ -374,7 +418,7 @@ export default function ExpensesPage() {
                 <button
                   onClick={() => pay(detail)}
                   disabled={acting}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-green-500 text-white text-xs font-bold hover:opacity-90 disabled:opacity-50 transition-opacity"
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-blue text-white text-xs font-medium hover:bg-blue-600 disabled:opacity-50 transition-all"
                 >
                   {acting ? <Loader2 size={14} className="animate-spin" /> : <CreditCard size={14} />} 执行付款
                 </button>
@@ -495,7 +539,7 @@ export default function ExpensesPage() {
               <button
                 onClick={save}
                 disabled={saving}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-green-500 text-white text-xs font-bold hover:opacity-90 disabled:opacity-50 transition-opacity"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-blue text-white text-xs font-medium hover:bg-blue-600 disabled:opacity-50 transition-all"
               >
                 {saving ? <Loader2 size={14} className="animate-spin" /> : null}
                 {editingId ? '保存' : '创建草稿'}

@@ -180,6 +180,14 @@ export const MODULE_LABELS: Record<string, string> = {
   feedback: '意见反馈',
   payment: '付款申请',
   seal: '盖章申请',
+  // OA 办公模块
+  leave: '请假管理',
+  overtime: '加班管理',
+  expense: '报销管理',
+  trip: '出差管理',
+  purchase: '采购管理',
+  asset: '资产管理',
+  purchase_supplier: '采购供应商',
 }
 
 export const PERM_GROUPS = [
@@ -187,4 +195,6 @@ export const PERM_GROUPS = [
   'report', 'meeting', 'ai', 'wiki', 'settings', 'model',
   'dashboard', 'task', 'log', 'monitor', 'data',
   'management', 'share', 'feedback', 'payment', 'seal',
+  // OA 办公模块
+  'leave', 'overtime', 'expense', 'trip', 'purchase', 'asset', 'purchase_supplier',
 ] as const

@@ -9,6 +9,7 @@ from app.routers import project_follow_ups
 from app.routers import purchase_suppliers
 from app.routers import leaves, overtimes, leave_balances
 from app.routers import expenses, business_trips, purchases, assets
+from app.routers import legal_entities, employee_loans
 from app.rate_limit import limiter
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -278,7 +279,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="WorkTrack",
         description="个人工作管理平台 - 日报、客户项目、会议纪要，集成 AI 与 MCP 服务",
-        version="2.6.0",
+        version="2.7.0",
         docs_url="/docs" if app_settings.cors_origins != "*" else None,
         redoc_url=None,
         openapi_url="/openapi.json" if app_settings.cors_origins != "*" else None,
@@ -376,6 +377,8 @@ def create_app() -> FastAPI:
     app.include_router(business_trips.router)
     app.include_router(purchases.router)
     app.include_router(assets.router)
+    app.include_router(legal_entities.router)
+    app.include_router(employee_loans.router)
 
     # 挂载 MCP 服务（带 API Key 认证）
     from app.mcp_server import mcp, MCPAuthMiddleware
@@ -383,7 +386,7 @@ def create_app() -> FastAPI:
 
     @app.get("/")
     def root():
-        return {"message": "WorkTrack API is running", "version": "2.6.0"}
+        return {"message": "WorkTrack API is running", "version": "2.7.0"}
 
     @app.get("/health")
     def health_check():

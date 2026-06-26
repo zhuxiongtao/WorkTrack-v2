@@ -19,6 +19,9 @@ const MODULE_ICONS: Record<string, string> = {
   task: '⏰', log: '📜', monitor: '🖥️', data: '💾',
   upstream: '🔗', reconcile: '🧮', model: '🔄', management: '🗂️', share: '🔁',
   feedback: '💬', payment: '💰', seal: '🔏',
+  // OA 办公模块
+  leave: '🌴', overtime: '⏰', expense: '🧾', trip: '✈️',
+  purchase: '🛒', asset: '📦', purchase_supplier: '🏷️',
 }
 
 const ACTION_LABELS: Record<string, string> = {
@@ -27,6 +30,8 @@ const ACTION_LABELS: Record<string, string> = {
   use: '使用', manage_own: '管理自有', manage_shared: '管理共享',
   manage_space: '管理空间', export: '导出', import: '导入',
   manage: '管理', process: '处理', console: '总览', comment: '评论',
+  pay: '执行付款', follow_tech: '技术跟进', archive: '归档',
+  submit: '提交', clear: '清空',
 }
 
 export function RoleFormModal({ isOpen, editingRole, permissions, onClose }: RoleFormModalProps) {

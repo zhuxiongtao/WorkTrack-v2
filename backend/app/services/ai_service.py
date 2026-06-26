@@ -164,8 +164,26 @@ class _VertexCompletions:
                 elif isinstance(content, list):
                     parts = []
                     for p in content:
-                        if isinstance(p, dict) and "text" in p:
+                        if not isinstance(p, dict):
+                            continue
+                        if "text" in p:
                             parts.append(types.Part(text=p["text"]))
+                        elif "image_url" in p:
+                            # OpenAI 格式 image_url: {"url": "data:mime;base64,..."}
+                            img_url = (p.get("image_url") or {}).get("url", "")
+                            if img_url.startswith("data:"):
+                                # 解析 data URL: data:<mime>;base64,<data>
+                                header, b64data = img_url.split(",", 1)
+                                mime_match = header.split(":")[1].split(";")[0] if ":" in header else "image/jpeg"
+                                try:
+                                    import base64 as _b64
+                                    raw_bytes = _b64.b64decode(b64data)
+                                    parts.append(types.Part(inline_data=types.Blob(
+                                        mime_type=mime_match,
+                                        data=raw_bytes,
+                                    )))
+                                except Exception:
+                                    pass
                     if parts:
                         contents.append(types.Content(role="user", parts=parts))
             elif role == "assistant":
@@ -381,14 +399,39 @@ class _AnthropicClient:
         temperature = kwargs.get("temperature", 0.7)
         stream = kwargs.get("stream", False)
 
-        # 转换系统提示
+        # 转换系统提示 + 多模态 content（OpenAI 格式 → Anthropic 格式）
         system_prompt = ""
         new_messages = []
         for msg in messages:
             if msg.get("role") == "system":
-                system_prompt = msg.get("content", "")
+                content = msg.get("content", "")
+                system_prompt = content if isinstance(content, str) else ""
             else:
-                new_messages.append(msg)
+                content = msg.get("content", "")
+                if isinstance(content, list):
+                    # 多模态：把 OpenAI 格式转成 Anthropic 格式
+                    blocks = []
+                    for p in content:
+                        if not isinstance(p, dict):
+                            continue
+                        if "text" in p:
+                            blocks.append({"type": "text", "text": p["text"]})
+                        elif "image_url" in p:
+                            img_url = (p.get("image_url") or {}).get("url", "")
+                            if img_url.startswith("data:"):
+                                header, b64data = img_url.split(",", 1)
+                                mime_match = header.split(":")[1].split(";")[0] if ":" in header else "image/jpeg"
+                                blocks.append({
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": mime_match,
+                                        "data": b64data,
+                                    },
+                                })
+                    new_messages.append({"role": msg.get("role", "user"), "content": blocks})
+                else:
+                    new_messages.append(msg)
         messages = new_messages
 
         if stream:
@@ -441,18 +484,40 @@ class _GeminiClient:
         self.chat.completions.create = self.create
 
     def _convert_messages(self, messages: list) -> tuple:
-        """将 OpenAI 格式消息转换为 Gemini 格式"""
+        """将 OpenAI 格式消息转换为 Gemini 格式（支持多模态 image_url）"""
         contents = []
         system_instruction = None
         for msg in messages:
             role = msg.get("role", "user")
             content = msg.get("content", "")
             if role == "system":
-                system_instruction = content
+                system_instruction = content if isinstance(content, str) else ""
             elif role == "user":
-                contents.append({"role": "user", "parts": [{"text": content}]})
+                if isinstance(content, str):
+                    contents.append({"role": "user", "parts": [{"text": content}]})
+                elif isinstance(content, list):
+                    parts = []
+                    for p in content:
+                        if not isinstance(p, dict):
+                            continue
+                        if "text" in p:
+                            parts.append({"text": p["text"]})
+                        elif "image_url" in p:
+                            img_url = (p.get("image_url") or {}).get("url", "")
+                            if img_url.startswith("data:"):
+                                header, b64data = img_url.split(",", 1)
+                                mime_match = header.split(":")[1].split(";")[0] if ":" in header else "image/jpeg"
+                                try:
+                                    import base64 as _b64
+                                    raw_bytes = _b64.b64decode(b64data)
+                                    parts.append({"inline_data": {"mime_type": mime_match, "data": raw_bytes}})
+                                except Exception:
+                                    pass
+                    if parts:
+                        contents.append({"role": "user", "parts": parts})
             elif role == "assistant":
-                contents.append({"role": "model", "parts": [{"text": content}]})
+                if isinstance(content, str):
+                    contents.append({"role": "model", "parts": [{"text": content}]})
         return contents, system_instruction
 
     def create(self, **kwargs):
@@ -932,6 +997,73 @@ def ai_chat(messages: list[dict], db: Session, user_id: int = 0) -> str:
     )
     _record_usage_silent(db, response, user_id, getattr(provider, 'id', None), model, "chat")
     return _extract_message_text(response.choices[0].message)
+
+
+def recognize_invoice_image(
+    file_bytes: bytes,
+    mime_type: str,
+    hint: str,
+    db: Session,
+    user_id: int = 0,
+) -> dict:
+    """发票票据识别：从图片/PDF 中抽取金额/日期/城市/类别等结构化字段
+
+    模型复用「vision」任务配置的视觉模型（用户在任务模型配置里选 vision 任务时指定的模型）。
+    提示词仍用「invoice_ocr」专用 prompt（保证返回结构化字段格式稳定）。
+    内部按 OpenAI 兼容格式发起请求：user 消息 content 同时包含 text + image_url (base64)。
+    """
+    import base64 as _b64
+    base_url, api_key, model, provider = _get_active_provider(db, "vision", user_id)
+    client = _get_client(base_url, api_key, provider)
+    # 1) 读取任务提示词（系统 + 用户模板）
+    from app.routers.settings import _resolve_ai_prompt
+    resolved = _resolve_ai_prompt(db, user_id, "invoice_ocr")
+    system_prompt = (resolved or {}).get("system_prompt", "")
+    user_template = (resolved or {}).get("user_prompt_template", "请识别这张发票。{hint}")
+    user_content = user_template.replace("{hint}", hint or "").strip()
+    # 2) 构造 user 消息：text + image_url
+    img_b64 = _b64.b64encode(file_bytes).decode("ascii")
+    data_url = f"data:{mime_type};base64,{img_b64}"
+    user_message = {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": user_content},
+            {"type": "image_url", "image_url": {"url": data_url}},
+        ],
+    }
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append(user_message)
+    # 3) 调模型（低温度 = 更稳定）
+    response = client.chat.completions.create(
+        model=model,
+        messages=messages,
+        temperature=0.1,
+    )
+    _record_usage_silent(db, response, user_id, getattr(provider, 'id', None), model, "invoice_ocr")
+    text = _extract_message_text(response.choices[0].message)
+    # 4) 解析模型返回的 JSON
+    import re, json as _json
+    m = re.search(r"\{[\s\S]*\}", text or "")
+    if not m:
+        return {"raw": text, "expense_type": "", "amount": None, "expense_date": "",
+                "city": "", "note": "", "invoice_no": "", "seller": ""}
+    try:
+        obj = _json.loads(m.group(0))
+    except Exception:
+        return {"raw": text, "expense_type": "", "amount": None, "expense_date": "",
+                "city": "", "note": "", "invoice_no": "", "seller": ""}
+    # 字段归一化
+    return {
+        "expense_type": obj.get("expense_type") or "",
+        "amount": obj.get("amount") if isinstance(obj.get("amount"), (int, float)) else None,
+        "expense_date": obj.get("expense_date") or "",
+        "city": obj.get("city") or "",
+        "note": obj.get("note") or "",
+        "invoice_no": obj.get("invoice_no") or "",
+        "seller": obj.get("seller") or "",
+    }
 
 
 def transcribe_audio(audio_path: str, db: Session, user_id: int = 0) -> str:

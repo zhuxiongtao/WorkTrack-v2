@@ -1406,6 +1406,30 @@ DEFAULT_PROMPTS = {
         "user_prompt_template": "",
         "variables": [],
     },
+    "invoice_ocr": {
+        "task_type": "invoice_ocr",
+        "label": "🧾 发票票据识别",
+        "desc": "从发票/票据图片或 PDF 中识别金额、日期、城市、类别等关键字段（需 vision 模型）",
+        "system_prompt": (
+            "你是一个专业的发票/票据识别助手。请从用户上传的发票图片、扫描件或电子发票截图中，"
+            "准确抽取以下关键信息，并以严格的 JSON 格式返回（不要包含任何 markdown 包装）。\n\n"
+            "字段说明：\n"
+            "- expense_type: 报销类别（必须从 ['差旅', '交通', '餐饮', '住宿', '办公用品', '通讯', '培训', '招待', '其他'] 中选择最匹配的一项）\n"
+            "- amount: 票据上的含税总金额（数字，无单位；若小计/合计/总计有多个，优先选「合计」或「价税合计」）\n"
+            "- expense_date: 票据上的开票日期 YYYY-MM-DD\n"
+            "- city: 票据上的开票城市或消费发生地（消费类发票写消费地）\n"
+            "- note: 票据主要内容的简短描述（商品/服务名）\n"
+            "- invoice_no: 发票号码（可选）\n"
+            "- seller: 销售方名称（可选）\n\n"
+            "要求：\n"
+            "1. 只返回 JSON，不要解释、不要 markdown\n"
+            "2. 字段值为字符串，金额字段为数字\n"
+            "3. 若图中无法识别某字段，填空字符串（数字字段填 null）\n"
+            "4. 优先识别「价税合计」「小计」「合计」等汇总金额，避免误识别为单项金额"
+        ),
+        "user_prompt_template": "请识别这张发票/票据的关键信息。{hint}",
+        "variables": ["{hint}"],
+    },
     "embedding": {
         "task_type": "embedding",
         "label": "🧬 文本向量化",
@@ -1415,6 +1439,41 @@ DEFAULT_PROMPTS = {
         "variables": [],
     },
 }
+
+
+def _resolve_ai_prompt(db: Session, user_id: int, task_type: str) -> dict:
+    """合并三层提示词（用户自定义 > 全局 > 代码默认）并返回最终 system + user_template
+
+    给业务侧（ai_service、ai_agent）调用；只读，不影响原 get_ai_prompts 接口。
+    """
+    from app.models.ai_prompt import AIPrompt
+    default = DEFAULT_PROMPTS.get(task_type)
+    if not default:
+        return {}
+    system_prompt = default["system_prompt"]
+    user_template = default["user_prompt_template"]
+    # 第2层：全局
+    gp = db.exec(
+        select(AIPrompt).where(AIPrompt.user_id == 0, AIPrompt.task_type == task_type)
+    ).first()
+    if gp:
+        if gp.system_prompt: system_prompt = gp.system_prompt
+        if gp.user_prompt_template: user_template = gp.user_prompt_template
+    # 第3层：用户
+    if user_id:
+        up = db.exec(
+            select(AIPrompt).where(AIPrompt.user_id == user_id, AIPrompt.task_type == task_type)
+        ).first()
+        if up:
+            if up.system_prompt: system_prompt = up.system_prompt
+            if up.user_prompt_template: user_template = up.user_prompt_template
+    return {
+        "task_type": task_type,
+        "label": default["label"],
+        "system_prompt": system_prompt,
+        "user_prompt_template": user_template,
+        "variables": default.get("variables", []),
+    }
 
 
 @router.get("/ai-prompts")
@@ -2091,3 +2150,97 @@ def test_email_config(
     if not result["ok"]:
         raise HTTPException(400, result["message"])
     return result
+
+
+# ──────────────────────────────────────────────────
+# 报销：公司基础信息（用于默认开票主体）
+# ──────────────────────────────────────────────────
+class InvoiceCompanyInfo(BaseModel):
+    name: str
+    short_name: str = ""
+    tax_id: str = ""
+
+
+@router.get("/invoice-company")
+def get_invoice_company(db: Session = Depends(get_session),
+                        _user: User = Depends(get_current_user)):
+    """读取公司基础信息（仅供「系统设置」使用，全员可读以在前端显示当前默认值）"""
+    from app.models.legal_entity import LegalEntity
+    # 优先取「当前 default」的 legal_entity
+    default = db.exec(
+        select(LegalEntity).where(LegalEntity.is_default == True)  # noqa: E712
+    ).first()
+    if default:
+        return {
+            "name": default.name,
+            "short_name": default.short_name or "",
+            "tax_id": default.tax_id or "",
+            "source": "legal_entity",
+        }
+    # 退化到系统偏好（极少见）
+    return {
+        "name": _get_global_pref(db, "invoice_company_name", ""),
+        "short_name": _get_global_pref(db, "invoice_company_short_name", ""),
+        "tax_id": _get_global_pref(db, "invoice_company_tax_id", ""),
+        "source": "preference",
+    }
+
+
+def _get_global_pref(db: Session, key: str, default: str = "") -> str:
+    pref = db.exec(
+        select(SystemPreference).where(
+            SystemPreference.key == key,
+            SystemPreference.user_id == None,  # noqa: E711
+        )
+    ).first()
+    return pref.value if pref else default
+
+
+def _set_global_pref(db: Session, key: str, value: str) -> None:
+    pref = db.exec(
+        select(SystemPreference).where(
+            SystemPreference.key == key,
+            SystemPreference.user_id == None,  # noqa: E711
+        )
+    ).first()
+    if pref:
+        pref.value = value
+    else:
+        db.add(SystemPreference(key=key, value=value, user_id=None))
+
+
+@router.put("/invoice-company")
+def update_invoice_company(
+    data: InvoiceCompanyInfo,
+    db: Session = Depends(get_session),
+    _admin: User = Depends(require_permission("settings:edit")),
+):
+    """更新公司基础信息（仅管理员）：同时落「系统偏好」与「默认 legal_entity」两份，保证显示与种子一致"""
+    if not data.name or not data.name.strip():
+        raise HTTPException(400, "公司全称不能为空")
+    name = data.name.strip()
+    short = (data.short_name or "").strip() or name[:8]
+    tax_id = (data.tax_id or "").strip()
+
+    from app.models.legal_entity import LegalEntity
+    # 1) 同步系统偏好（用于 init_db 种子读取）
+    _set_global_pref(db, "invoice_company_name", name)
+    _set_global_pref(db, "invoice_company_short_name", short)
+    _set_global_pref(db, "invoice_company_tax_id", tax_id)
+    # 2) 同步到「当前默认」或「唯一」legal_entity
+    default = db.exec(
+        select(LegalEntity).where(LegalEntity.is_default == True)  # noqa: E712
+    ).first()
+    if default:
+        default.name = name
+        default.short_name = short
+        default.tax_id = tax_id
+    else:
+        # 没有任何 default → 新建
+        db.add(LegalEntity(
+            name=name, short_name=short, tax_id=tax_id,
+            balance=0, is_default=True, is_active=True, sort_order=0,
+        ))
+    db.commit()
+    return {"name": name, "short_name": short, "tax_id": tax_id,
+            "message": "公司基础信息已保存"}

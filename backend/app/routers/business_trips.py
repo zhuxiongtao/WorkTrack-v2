@@ -55,6 +55,23 @@ def list_types():
     return {"transport_types": TRANSPORT_TYPES}
 
 
+@router.get("/approved")
+def list_approved_trips(current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+    """获取当前用户已批准的出差申请（供报销关联选择）"""
+    rows = db.exec(
+        select(BusinessTripRequest)
+        .where(BusinessTripRequest.user_id == current_user.id)
+        .where(BusinessTripRequest.status == "已批准")
+        .order_by(BusinessTripRequest.created_at.desc())
+    ).all()
+    return [
+        {"id": t.id, "title": t.title, "destination": t.destination,
+         "start_date": t.start_date.isoformat() if t.start_date else None,
+         "end_date": t.end_date.isoformat() if t.end_date else None}
+        for t in rows
+    ]
+
+
 @router.get("", response_model=list[BusinessTripOut])
 def list_trips(
     scope: str = Query("mine"),

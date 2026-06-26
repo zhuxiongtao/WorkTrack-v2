@@ -45,6 +45,10 @@ from app.models.business_trip_request import BusinessTripRequest
 from app.models.purchase_request import PurchaseRequest
 from app.models.asset import Asset
 from app.models.asset_record import AssetRecord
+from app.models.legal_entity import LegalEntity
+from app.models.employee_loan import EmployeeLoan
+from app.models.expense_item import ExpenseItem
+from app.models.expense_relation import ExpenseRelation
 
 __all__ = [
     "User",
@@ -112,4 +116,9 @@ __all__ = [
     "BusinessTripRequest",
     "PurchaseRequest",
     "Asset",
+    "AssetRecord",
+    "LegalEntity",
+    "EmployeeLoan",
+    "ExpenseItem",
+    "ExpenseRelation",
 ]

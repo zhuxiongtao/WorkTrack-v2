@@ -35,13 +35,13 @@ interface UserBrief { id: number; name: string; username: string; department_nam
 
 /* ──── 业务类型映射 ──── */
 const BUSINESS_TYPES = [
-  { value: 'contract',          label: '合同审批',       icon: FileText,    color: '#3B82F6' },
-  { value: 'payment',           label: '付款申请审批',   icon: Wallet,      color: '#10B981' },
-  { value: 'seal',              label: '盖章申请审批',   icon: Stamp,       color: '#EF4444' },
-  { value: 'reconcile_summary', label: '财务月结复核',   icon: Calculator,  color: '#F59E0B' },
-  { value: 'supplier',          label: '供应商入驻审批', icon: Layers,      color: '#8B5CF6' },
-  { value: 'channel',           label: '通道价格变更审批', icon: Briefcase, color: '#06B6D4' },
-  { value: 'project',           label: '项目立项审批',   icon: Briefcase,   color: '#EC4899' },
+  { value: 'contract',          label: '合同审批',       icon: FileText,    color: '#4B5563' },
+  { value: 'payment',           label: '付款申请审批',   icon: Wallet,      color: '#4B5563' },
+  { value: 'seal',              label: '盖章申请审批',   icon: Stamp,       color: '#4B5563' },
+  { value: 'reconcile_summary', label: '财务月结复核',   icon: Calculator,  color: '#4B5563' },
+  { value: 'supplier',          label: '供应商入驻审批', icon: Layers,      color: '#4B5563' },
+  { value: 'channel',           label: '通道价格变更审批', icon: Briefcase, color: '#4B5563' },
+  { value: 'project',           label: '项目立项审批',   icon: Briefcase,   color: '#4B5563' },
 ]
 
 const BIZ_TYPE_MAP: Record<string, typeof BUSINESS_TYPES[number]> = Object.fromEntries(
@@ -55,14 +55,6 @@ const APPROVER_TYPES = [
   { value: 'dept_manager',  label: '部门负责人', icon: Building2,   desc: '发起人所属部门的负责人（动态解析）' },
   { value: 'dept_or_leader',label: '部门负责人或上级', icon: Users, desc: '优先部门负责人，无则取直属上级（动态解析）' },
 ] as const
-
-const TYPE_COLOR: Record<string, { bg: string; text: string; border: string }> = {
-  role:         { bg: 'rgba(59,130,246,0.1)',  text: '#60A5FA', border: 'rgba(96,165,250,0.3)' },
-  user:         { bg: 'rgba(16,185,129,0.1)',  text: '#34D399', border: 'rgba(52,211,153,0.3)' },
-  leader:       { bg: 'rgba(245,158,11,0.1)',  text: '#FBBF24', border: 'rgba(251,191,36,0.3)' },
-  dept_manager: { bg: 'rgba(139,92,246,0.1)',  text: '#A78BFA', border: 'rgba(167,139,250,0.3)' },
-  dept_or_leader: { bg: 'rgba(236,72,153,0.1)', text: '#F472B6', border: 'rgba(244,114,182,0.3)' },
-}
 
 /* ──── 主页面 ──── */
 export default function ApprovalFlowsPage() {
@@ -133,29 +125,29 @@ export default function ApprovalFlowsPage() {
       {/* 页面标题 */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-lg font-bold text-white flex items-center gap-2">
-            <GitBranch size={20} className="text-purple-400" />
+          <h1 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <GitBranch size={20} className="text-gray-700 dark:text-gray-300" />
             审批流配置
           </h1>
-          <p className="text-xs text-gray-500 mt-1">为不同业务场景配置多级审批节点，支持按角色、指定用户、直属上级、部门负责人等方式</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">为不同业务场景配置多级审批节点，支持按角色、指定用户、直属上级、部门负责人等方式</p>
         </div>
         <button
           onClick={() => { setEditing(null); setShowForm(true) }}
-          className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-gradient-to-r from-purple-500 to-indigo-500 rounded-lg hover:opacity-90 transition-opacity shadow-lg shadow-purple-500/20"
+          className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-accent-blue rounded-lg hover:bg-blue-600 transition-colors"
         >
           <Plus size={14} />新建审批流
         </button>
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20 text-gray-500">
+        <div className="flex items-center justify-center py-20 text-gray-500 dark:text-gray-400">
           <Loader2 size={20} className="animate-spin mr-2" />加载中…
         </div>
       ) : flows.length === 0 ? (
         <div className="text-center py-20">
-          <GitBranch size={40} className="mx-auto text-gray-700 mb-3" />
-          <p className="text-sm text-gray-500">还没有审批流配置</p>
-          <p className="text-xs text-gray-600 mt-1">点击右上角「新建审批流」开始配置</p>
+          <GitBranch size={40} className="mx-auto text-gray-300 dark:text-gray-700 mb-3" />
+          <p className="text-sm text-gray-500 dark:text-gray-400">还没有审批流配置</p>
+          <p className="text-xs text-gray-400 dark:text-gray-600 mt-1">点击右上角「新建审批流」开始配置</p>
         </div>
       ) : (
         <div className="space-y-8">
@@ -163,9 +155,9 @@ export default function ApprovalFlowsPage() {
             <div key={group.value}>
               {/* 分组标题 */}
               <div className="flex items-center gap-2 mb-3">
-                <group.icon size={16} style={{ color: group.color }} />
-                <span className="text-sm font-semibold text-white">{group.label}</span>
-                <span className="text-[11px] text-gray-600">({group.flows.length})</span>
+                <group.icon size={16} className="text-gray-600 dark:text-gray-400" />
+                <span className="text-sm font-semibold text-gray-900 dark:text-white">{group.label}</span>
+                <span className="text-[11px] text-gray-400 dark:text-gray-600">({group.flows.length})</span>
               </div>
 
               <div className="space-y-3">
@@ -217,8 +209,8 @@ function FlowCard({
   return (
     <div className={`rounded-xl border transition-all ${
       flow.is_active
-        ? 'border-white/10 bg-white/[0.03] hover:bg-white/[0.05]'
-        : 'border-white/5 bg-white/[0.01] opacity-50'
+        ? 'border-border bg-bg-card hover:bg-bg-hover/50'
+        : 'border-border bg-bg-card opacity-50'
     }`}>
       <div className="p-4">
         {/* 卡片头部 */}
@@ -227,27 +219,26 @@ function FlowCard({
             <div className="flex items-center gap-2 flex-wrap">
               {bizType && (
                 <span
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold"
-                  style={{ background: bizType.color + '18', color: bizType.color }}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-gray-600 dark:text-gray-400 bg-bg-hover"
                 >
                   <bizType.icon size={11} />
                   {bizType.label}
                 </span>
               )}
-              <span className="text-sm font-bold text-white">{flow.name}</span>
+              <span className="text-sm font-bold text-gray-900 dark:text-white">{flow.name}</span>
               {flow.is_system && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-semibold border border-indigo-500/20">
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-blue/10 text-accent-blue font-medium border border-accent-blue/20">
                   系统预置
                 </span>
               )}
             </div>
             {flow.description && (
-              <p className="text-[11px] text-gray-500 mt-1.5 leading-relaxed line-clamp-2">{flow.description}</p>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1.5 leading-relaxed line-clamp-2">{flow.description}</p>
             )}
             {flow.trigger_condition && (
-              <div className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">
-                <AlertCircle size={10} className="text-amber-400" />
-                <span className="text-[10px] text-amber-400/80">
+              <div className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20">
+                <AlertCircle size={10} className="text-amber-600 dark:text-amber-400" />
+                <span className="text-[10px] text-amber-700 dark:text-amber-400">
                   触发条件: {flow.trigger_condition.field} {flow.trigger_condition.op} {flow.trigger_condition.value}
                 </span>
               </div>
@@ -258,24 +249,24 @@ function FlowCard({
           <div className="flex items-center gap-1.5 shrink-0">
             <span className={`text-[11px] px-2 py-1 rounded-lg font-medium flex items-center gap-1 ${
               flow.is_active
-                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
-                : 'bg-gray-500/15 text-gray-400 border border-gray-500/20'
+                ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20'
+                : 'bg-gray-100 dark:bg-gray-500/10 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-500/20'
             }`}>
               {flow.is_active ? <CheckCircle2 size={11} /> : <X size={11} />}
               {flow.is_active ? '启用' : '已停用'}
             </span>
             <button onClick={onToggle}
-              className="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-white/10 transition-colors"
+              className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-white hover:bg-bg-hover transition-colors"
               title={flow.is_active ? '停用' : '启用'}>
               {flow.is_active ? <PowerOff size={14} /> : <Power size={14} />}
             </button>
             <button onClick={onEdit}
-              className="p-1.5 rounded-lg text-gray-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors">
+              className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:text-accent-blue hover:bg-accent-blue/10 transition-colors">
               <Edit3 size={14} />
             </button>
             {!flow.is_system && (
               <button onClick={onDelete}
-                className="p-1.5 rounded-lg text-gray-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors">
+                className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-colors">
                 <Trash2 size={14} />
               </button>
             )}
@@ -284,10 +275,9 @@ function FlowCard({
 
         {/* 节点流程图 */}
         {flow.nodes.length > 0 && (
-          <div className="border-t border-white/5 pt-3">
+          <div className="border-t border-border pt-3">
             <div className="flex items-center gap-0 flex-wrap">
               {flow.nodes.map((node, i) => {
-                const tc = TYPE_COLOR[node.approver_type] || TYPE_COLOR.role
                 const typeLabel = APPROVER_TYPES.find(t => t.value === node.approver_type)?.label || node.approver_type
                 const valueLabel = node.approver_type === 'role'
                   ? (roleMap[node.approver_value] || node.approver_value)
@@ -296,13 +286,12 @@ function FlowCard({
                   : ''
                 return (
                   <div key={i} className="flex items-center">
-                    <div className="rounded-lg px-3 py-2 text-[11px] border"
-                      style={{ borderColor: tc.border, background: tc.bg }}>
-                      <div className="font-semibold" style={{ color: tc.text }}>
-                        <span className="text-[10px] opacity-60 mr-1">{i + 1}.</span>
+                    <div className="rounded-lg px-3 py-2 text-[11px] border border-border bg-bg-hover">
+                      <div className="font-semibold text-gray-900 dark:text-white">
+                        <span className="text-[10px] text-gray-400 mr-1">{i + 1}.</span>
                         {node.name}
                       </div>
-                      <div className="mt-0.5 flex items-center gap-1" style={{ color: tc.text, opacity: 0.7 }}>
+                      <div className="mt-0.5 flex items-center gap-1 text-gray-500 dark:text-gray-400">
                         {(() => {
                           const at = APPROVER_TYPES.find(t => t.value === node.approver_type)
                           return at ? <at.icon size={9} /> : null
@@ -311,11 +300,11 @@ function FlowCard({
                         {valueLabel && <span>· {valueLabel}</span>}
                       </div>
                       {node.node_kind === 'execution' && node.action_label && (
-                        <div className="mt-0.5 text-[10px] text-amber-400/70">执行: {node.action_label}</div>
+                        <div className="mt-0.5 text-[10px] text-amber-600 dark:text-amber-400">执行: {node.action_label}</div>
                       )}
                     </div>
                     {i < flow.nodes.length - 1 && (
-                      <div className="px-1.5 text-gray-600 text-xs">→</div>
+                      <div className="px-1.5 text-gray-400 dark:text-gray-600 text-xs">→</div>
                     )}
                   </div>
                 )
@@ -324,8 +313,8 @@ function FlowCard({
           </div>
         )}
         {flow.nodes.length === 0 && (
-          <div className="border-t border-white/5 pt-3">
-            <span className="text-[11px] text-gray-600 italic">无审批节点（发起即通过）</span>
+          <div className="border-t border-border pt-3">
+            <span className="text-[11px] text-gray-400 dark:text-gray-600 italic">无审批节点（发起即通过）</span>
           </div>
         )}
       </div>
@@ -438,63 +427,61 @@ function FlowFormModal({
         <div className="grid grid-cols-2 gap-4">
           {!flow && (
             <div>
-              <label className="block text-[11px] font-medium text-gray-400 mb-1.5">唯一标识 <span className="text-rose-400">*</span></label>
+              <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1.5">唯一标识 <span className="text-red-500">*</span></label>
               <input value={code} onChange={e => setCode(e.target.value)}
                 placeholder="如 contract_approval"
-                className="w-full px-3 py-2 text-xs bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-gray-600 focus:outline-none focus:border-purple-500/50 transition-colors" />
+                className="w-full px-3 py-2 text-xs bg-bg-input border border-border rounded-lg text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:outline-none focus:border-accent-blue transition-colors" />
             </div>
           )}
           <div>
-            <label className="block text-[11px] font-medium text-gray-400 mb-1.5">审批流名称 <span className="text-rose-400">*</span></label>
+            <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1.5">审批流名称 <span className="text-red-500">*</span></label>
             <input value={name} onChange={e => setName(e.target.value)}
               placeholder="如 合同审批流"
-              className="w-full px-3 py-2 text-xs bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-gray-600 focus:outline-none focus:border-purple-500/50 transition-colors" />
+              className="w-full px-3 py-2 text-xs bg-bg-input border border-border rounded-lg text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:outline-none focus:border-accent-blue transition-colors" />
           </div>
           <div>
-            <label className="block text-[11px] font-medium text-gray-400 mb-1.5">业务场景</label>
+            <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1.5">业务场景</label>
             <SearchableSelect
               options={[
-                ...BUSINESS_TYPES.map(t => ({ id: t.value, label: t.label })),
-                ...(!BUSINESS_TYPES.find(t => t.value === businessType) ? [{ id: businessType, label: businessType }] : []),
+                ...BUSINESS_TYPES.map(t => ({ value: t.value, label: t.label })),
+                ...(!BUSINESS_TYPES.find(t => t.value === businessType) ? [{ value: businessType, label: businessType }] : []),
               ]}
               value={businessType}
-              onChange={(v) => !flow && setBusinessType(v === 0 ? '' : String(v))}
-              clearValue=""
+              onChange={(v) => !flow && setBusinessType((v as string) || '')}
             />
           </div>
         </div>
 
         <div>
-          <label className="block text-[11px] font-medium text-gray-400 mb-1.5">描述说明</label>
+          <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1.5">描述说明</label>
           <input value={description} onChange={e => setDescription(e.target.value)}
             placeholder="简要说明该审批流的用途"
-            className="w-full px-3 py-2 text-xs bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-gray-600 focus:outline-none focus:border-purple-500/50 transition-colors" />
+            className="w-full px-3 py-2 text-xs bg-bg-input border border-border rounded-lg text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:outline-none focus:border-accent-blue transition-colors" />
         </div>
 
         {/* 触发条件 */}
-        <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
+        <div className="rounded-xl border border-border bg-bg-hover/30 p-4">
           <div className="flex items-center gap-2 mb-3">
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={hasCond} onChange={e => setHasCond(e.target.checked)}
-                className="rounded border-white/20 bg-white/5" />
-              <span className="text-xs font-semibold text-white">设置触发条件</span>
+                className="rounded border-border accent-accent-blue" />
+              <span className="text-xs font-semibold text-gray-900 dark:text-white">设置触发条件</span>
             </label>
-            <span className="text-[11px] text-gray-500">（不设置则该业务所有数据均触发此审批流）</span>
+            <span className="text-[11px] text-gray-400 dark:text-gray-500">（不设置则该业务所有数据均触发此审批流）</span>
           </div>
           {hasCond && (
             <div className="flex items-center gap-2">
               <input value={condField} onChange={e => setCondField(e.target.value)}
                 placeholder="字段名，如 amount"
-                className="flex-1 px-3 py-2 text-xs bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-gray-600 focus:outline-none focus:border-purple-500/50 transition-colors" />
+                className="flex-1 px-3 py-2 text-xs bg-bg-input border border-border rounded-lg text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:outline-none focus:border-accent-blue transition-colors" />
               <SearchableSelect
-                options={['>=', '>', '<=', '<', '==', '!='].map(op => ({ id: op, label: op }))}
+                options={['>=', '>', '<=', '<', '==', '!='].map(op => ({ value: op, label: op }))}
                 value={condOp}
-                onChange={(v) => setCondOp(v === 0 ? '' : String(v))}
-                clearValue=""
+                onChange={(v) => setCondOp((v as string) || '>=')}
               />
               <input value={condValue} onChange={e => setCondValue(e.target.value)}
                 placeholder="值，如 500000"
-                className="flex-1 px-3 py-2 text-xs bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-gray-600 focus:outline-none focus:border-purple-500/50 transition-colors" />
+                className="flex-1 px-3 py-2 text-xs bg-bg-input border border-border rounded-lg text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:outline-none focus:border-accent-blue transition-colors" />
             </div>
           )}
         </div>
@@ -502,16 +489,16 @@ function FlowFormModal({
         {/* 审批节点 */}
         <div>
           <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-semibold text-white">审批节点</span>
+            <span className="text-xs font-semibold text-gray-900 dark:text-white">审批节点</span>
             <button onClick={addNode}
-              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-purple-300 border border-purple-500/30 bg-purple-500/10 rounded-lg hover:bg-purple-500/20 transition-colors">
+              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-accent-blue border border-accent-blue/30 bg-accent-blue/10 rounded-lg hover:bg-accent-blue/20 transition-colors">
               <Plus size={12} />添加节点
             </button>
           </div>
 
           {nodes.length === 0 ? (
-            <div className="text-center py-8 text-xs text-gray-500 border border-dashed border-white/10 rounded-xl">
-              <GitBranch size={20} className="mx-auto text-gray-700 mb-2" />
+            <div className="text-center py-8 text-xs text-gray-400 dark:text-gray-500 border border-dashed border-border rounded-xl">
+              <GitBranch size={20} className="mx-auto text-gray-300 dark:text-gray-700 mb-2" />
               无审批节点，发起申请后将直接通过
             </div>
           ) : (
@@ -537,8 +524,8 @@ function FlowFormModal({
         {/* 启用状态 */}
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)}
-            className="rounded border-white/20 bg-white/5" />
-          <span className="text-xs text-gray-300">创建后立即启用</span>
+            className="rounded border-border accent-accent-blue" />
+          <span className="text-xs text-gray-700 dark:text-gray-300">创建后立即启用</span>
         </label>
       </div>
 
@@ -567,22 +554,19 @@ function NodeEditor({
   onMoveUp: () => void
   onMoveDown: () => void
 }) {
-  const tc = TYPE_COLOR[node.approver_type] || TYPE_COLOR.role
   const approverType = APPROVER_TYPES.find(t => t.value === node.approver_type)
 
   return (
-    <div className="rounded-xl border p-3.5 bg-white/[0.02] flex gap-3 items-start transition-colors hover:bg-white/[0.04]"
-      style={{ borderColor: tc.border }}>
+    <div className="rounded-xl border border-border p-3.5 bg-bg-card flex gap-3 items-start transition-colors hover:bg-bg-hover/30">
       {/* 序号 + 排序 */}
       <div className="flex flex-col items-center gap-0.5 shrink-0 pt-0.5">
-        <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
-          style={{ background: tc.bg, color: tc.text, border: `1px solid ${tc.border}` }}>
+        <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-bg-hover text-gray-700 dark:text-gray-300 border border-border">
           {index + 1}
         </div>
         <button onClick={onMoveUp} disabled={index === 0}
-          className="text-gray-600 hover:text-gray-300 disabled:opacity-20 transition-colors"><ChevronUp size={12} /></button>
+          className="text-gray-400 dark:text-gray-600 hover:text-gray-700 dark:hover:text-gray-300 disabled:opacity-20 transition-colors"><ChevronUp size={12} /></button>
         <button onClick={onMoveDown} disabled={index === total - 1}
-          className="text-gray-600 hover:text-gray-300 disabled:opacity-20 transition-colors"><ChevronDown size={12} /></button>
+          className="text-gray-400 dark:text-gray-600 hover:text-gray-700 dark:hover:text-gray-300 disabled:opacity-20 transition-colors"><ChevronDown size={12} /></button>
       </div>
 
       {/* 节点配置 */}
@@ -592,7 +576,7 @@ function NodeEditor({
           value={node.name}
           onChange={e => onChange({ name: e.target.value })}
           placeholder="节点名称，如「法务审批」"
-          className="w-full px-3 py-2 text-xs bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-gray-600 focus:outline-none focus:border-purple-500/50 transition-colors"
+          className="w-full px-3 py-2 text-xs bg-bg-input border border-border rounded-lg text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:outline-none focus:border-accent-blue transition-colors"
         />
 
         {/* 审批人类型 */}
@@ -600,12 +584,11 @@ function NodeEditor({
           {APPROVER_TYPES.map(t => (
             <button key={t.value}
               onClick={() => onChange({ approver_type: t.value, approver_value: '' })}
-              className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold flex items-center gap-1 justify-center transition-all ${
+              className={`px-2 py-1.5 rounded-lg text-[11px] font-medium flex items-center gap-1 justify-center transition-all border ${
                 node.approver_type === t.value
-                  ? 'shadow-sm'
-                  : 'text-gray-500 hover:text-gray-300 bg-white/5 hover:bg-white/10'
+                  ? 'bg-accent-blue/10 text-accent-blue border-accent-blue/30'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 bg-bg-input hover:bg-bg-hover border-transparent'
               }`}
-              style={node.approver_type === t.value ? { background: tc.bg, color: tc.text, border: `1px solid ${tc.border}` } : { border: '1px solid transparent' }}
               title={t.desc}>
               <t.icon size={11} />
               {t.label}
@@ -616,22 +599,22 @@ function NodeEditor({
         {/* 根据类型展示选择器 */}
         {node.approver_type === 'role' && (
           <SearchableSelect
-            options={[{ id: '', label: '请选择角色' }, ...roles.map(r => ({ id: r.code, label: `${r.name}（${r.code}）` }))]}
-            value={node.approver_value}
-            onChange={(v) => onChange({ approver_value: v === 0 ? '' : String(v) })}
-            clearValue=""
+            options={roles.map(r => ({ value: r.code, label: `${r.name}（${r.code}）` }))}
+            value={node.approver_value || null}
+            onChange={(v) => onChange({ approver_value: (v as string) || '' })}
+            placeholder="请选择角色"
           />
         )}
         {node.approver_type === 'user' && (
           <SearchableSelect
-            options={[{ id: '', label: '请选择审批人' }, ...users.map(u => ({ id: String(u.id), label: `${u.name || u.username}${u.department_name ? `（${u.department_name}）` : ''}` }))]}
-            value={node.approver_value}
-            onChange={(v) => onChange({ approver_value: v === 0 ? '' : String(v) })}
-            clearValue=""
+            options={users.map(u => ({ value: String(u.id), label: `${u.name || u.username}${u.department_name ? `（${u.department_name}）` : ''}` }))}
+            value={node.approver_value || null}
+            onChange={(v) => onChange({ approver_value: (v as string) || '' })}
+            placeholder="请选择审批人"
           />
         )}
         {(node.approver_type === 'leader' || node.approver_type === 'dept_manager' || node.approver_type === 'dept_or_leader') && (
-          <div className="text-[11px] text-gray-500 px-1 flex items-center gap-1.5">
+          <div className="text-[11px] text-gray-500 dark:text-gray-400 px-1 flex items-center gap-1.5">
             {approverType && <approverType.icon size={11} />}
             {approverType?.desc}
           </div>
@@ -640,7 +623,7 @@ function NodeEditor({
 
       {/* 删除 */}
       <button onClick={onRemove}
-        className="p-1 text-gray-600 hover:text-rose-400 shrink-0 mt-0.5 transition-colors">
+        className="p-1 text-gray-400 dark:text-gray-600 hover:text-red-500 shrink-0 mt-0.5 transition-colors">
         <X size={14} />
       </button>
     </div>
