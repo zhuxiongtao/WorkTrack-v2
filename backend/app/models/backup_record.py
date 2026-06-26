@@ -6,6 +6,9 @@ from app.utils.time import now
 
 
 class BackupRecord(SQLModel, table=True):
+    """备份历史记录（表名显式声明，避免 SQLModel 默认从类名推导为 backuprecord）"""
+    __tablename__ = "backup_record"
+
     id: Optional[int] = Field(default=None, primary_key=True)
     # 备份类型：json=JSON结构化 / sql=SQL dump / excel=Excel模块导出
     backup_type: str = Field(default="json", index=True)
