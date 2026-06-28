@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Share2, X, User, Calendar, Send, Trash2 } from 'lucide-react'
 import SearchableSelect from './SearchableSelect'
+import { useAuth } from '../contexts/AuthContext'
 
 interface ShareDialogProps {
   targetType: 'report' | 'meeting' | 'project' | 'customer' | 'contract'
@@ -30,6 +31,7 @@ interface SimpleUser {
 }
 
 export default function ShareDialog({ targetType, targetId, targetTitle, open, onClose }: ShareDialogProps) {
+  const { fetchWithAuth } = useAuth()
   const [shares, setShares] = useState<ShareRecord[]>([])
   const [users, setUsers] = useState<SimpleUser[]>([])
   const [selectedUserId, setSelectedUserId] = useState<number | ''>('')
@@ -49,7 +51,7 @@ export default function ShareDialog({ targetType, targetId, targetTitle, open, o
   const loadShares = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/v1/shares/target/${targetType}/${targetId}`)
+      const res = await fetchWithAuth(`/api/v1/shares/target/${targetType}/${targetId}`)
       if (res.ok) {
         const data = await res.json()
         setShares(data)
@@ -63,7 +65,7 @@ export default function ShareDialog({ targetType, targetId, targetTitle, open, o
 
   const loadUsers = async () => {
     try {
-      const res = await fetch('/api/v1/users/simple')
+      const res = await fetchWithAuth('/api/v1/users/simple')
       if (res.ok) {
         const data = await res.json()
         setUsers(data)
@@ -78,7 +80,7 @@ export default function ShareDialog({ targetType, targetId, targetTitle, open, o
     setError('')
     setSubmitting(true)
     try {
-      const body: any = {
+      const body: Record<string, unknown> = {
         target_type: targetType,
         target_id: targetId,
         shared_to: Number(selectedUserId),
@@ -87,9 +89,8 @@ export default function ShareDialog({ targetType, targetId, targetTitle, open, o
       if (expiresAt) {
         body.expires_at = new Date(expiresAt).toISOString()
       }
-      const res = await fetch('/api/v1/shares', {
+      const res = await fetchWithAuth('/api/v1/shares', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
       if (res.ok) {
@@ -109,7 +110,7 @@ export default function ShareDialog({ targetType, targetId, targetTitle, open, o
 
   const handleRevoke = async (shareId: number) => {
     try {
-      const res = await fetch(`/api/v1/shares/${shareId}`, { method: 'DELETE' })
+      const res = await fetchWithAuth(`/api/v1/shares/${shareId}`, { method: 'DELETE' })
       if (res.ok) {
         setShares(prev => prev.filter(s => s.id !== shareId))
       }

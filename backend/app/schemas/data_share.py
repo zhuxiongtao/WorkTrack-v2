@@ -19,7 +19,8 @@ class DataShareOut(BaseModel):
     target_id: int
     shared_by: int
     shared_to: int
-    shared_to_name: str = ""
+    shared_by_name: str = ""   # 分享者姓名
+    shared_to_name: str = ""   # 接收者姓名
     permission: str
     expires_at: Optional[datetime] = None
     created_at: datetime

@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Share2, FileText, Users, Briefcase, Building2, FileCheck, Calendar, MessageSquare, Send, X, Loader2, Clock, Eye } from 'lucide-react'
+import { Share2, FileText, Users, Briefcase, Building2, FileCheck, Calendar, MessageSquare, Send, X, Loader2, Clock, UserCircle, ExternalLink, ArrowUpRight, ArrowDownLeft, Trash2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
-import MarkdownRenderer from '../components/MarkdownRenderer'
+import { useNavigate } from 'react-router-dom'
 
 interface ShareItem {
   id: number
@@ -10,6 +10,7 @@ interface ShareItem {
   target_id: number
   shared_by: number
   shared_to: number
+  shared_by_name: string
   shared_to_name: string
   permission: string
   expires_at: string | null
@@ -27,92 +28,124 @@ interface Comment {
   created_at: string
 }
 
-const TYPE_CONFIG: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
-  report: { label: '日报', icon: <FileText size={14} />, color: 'text-blue-400 bg-blue-500/10' },
-  meeting: { label: '会议', icon: <Users size={14} />, color: 'text-purple-400 bg-purple-500/10' },
-  project: { label: '项目', icon: <Briefcase size={14} />, color: 'text-green-400 bg-green-500/10' },
-  customer: { label: '客户', icon: <Building2 size={14} />, color: 'text-orange-400 bg-orange-500/10' },
-  contract: { label: '合同', icon: <FileCheck size={14} />, color: 'text-pink-400 bg-pink-500/10' },
+const TYPE_CONFIG: Record<string, { label: string; icon: React.ReactNode; color: string; path: string }> = {
+  report:   { label: '日报',   icon: <FileText size={13} />,  color: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20',   path: '/reports' },
+  meeting:  { label: '会议纪要', icon: <Users size={13} />,    color: 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-500/10 border-purple-200 dark:border-purple-500/20', path: '/meetings' },
+  project:  { label: '项目',   icon: <Briefcase size={13} />, color: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20', path: '/projects' },
+  customer: { label: '客户',   icon: <Building2 size={13} />, color: 'text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-500/10 border-orange-200 dark:border-orange-500/20', path: '/customers' },
+  contract: { label: '合同',   icon: <FileCheck size={13} />, color: 'text-pink-600 dark:text-pink-400 bg-pink-50 dark:bg-pink-500/10 border-pink-200 dark:border-pink-500/20',   path: '/contracts' },
 }
 
 const TABS = [
   { key: '', label: '全部' },
   { key: 'report', label: '日报' },
-  { key: 'meeting', label: '会议' },
+  { key: 'meeting', label: '会议纪要' },
   { key: 'project', label: '项目' },
   { key: 'customer', label: '客户' },
   { key: 'contract', label: '合同' },
 ]
 
+function extractSummary(type: string, data: Record<string, unknown>): { lines: { label: string; value: string }[]; body?: string } {
+  const lines: { label: string; value: string }[] = []
+  const str = (v: unknown) => (v != null && v !== '' ? String(v) : null)
+
+  if (type === 'report') {
+    if (str(data.date)) lines.push({ label: '日期', value: str(data.date)! })
+    if (str(data.user_name)) lines.push({ label: '提交人', value: str(data.user_name)! })
+    return { lines, body: str(data.content_md) || str(data.content) || undefined }
+  }
+  if (type === 'meeting') {
+    if (str(data.title)) lines.push({ label: '主题', value: str(data.title)! })
+    if (str(data.meeting_date)) lines.push({ label: '时间', value: str(data.meeting_date)! })
+    if (str(data.location)) lines.push({ label: '地点', value: str(data.location)! })
+    if (str(data.participants)) lines.push({ label: '参会人', value: str(data.participants)! })
+    return { lines, body: str(data.content_md) || str(data.summary) || undefined }
+  }
+  if (type === 'project') {
+    if (str(data.name)) lines.push({ label: '项目名', value: str(data.name)! })
+    if (str(data.status)) lines.push({ label: '状态', value: str(data.status)! })
+    if (str(data.customer_name)) lines.push({ label: '客户', value: str(data.customer_name)! })
+    if (str(data.deal_amount)) lines.push({ label: '金额', value: `${data.deal_amount}${data.deal_amount_unit || ''}` })
+    if (str(data.start_date)) lines.push({ label: '开始', value: str(data.start_date)! })
+    return { lines, body: str(data.description) || str(data.background) || undefined }
+  }
+  if (type === 'customer') {
+    if (str(data.name)) lines.push({ label: '客户名', value: str(data.name)! })
+    if (str(data.industry)) lines.push({ label: '行业', value: str(data.industry)! })
+    if (str(data.region)) lines.push({ label: '地区', value: str(data.region)! })
+    if (str(data.contact_name)) lines.push({ label: '联系人', value: str(data.contact_name)! })
+    return { lines, body: str(data.notes) || str(data.description) || undefined }
+  }
+  if (type === 'contract') {
+    if (str(data.contract_no)) lines.push({ label: '合同号', value: str(data.contract_no)! })
+    if (str(data.title)) lines.push({ label: '名称', value: str(data.title)! })
+    if (str(data.status)) lines.push({ label: '状态', value: str(data.status)! })
+    if (str(data.contract_amount)) lines.push({ label: '金额', value: `${data.contract_amount}${data.amount_unit || ''}` })
+    if (str(data.sign_date)) lines.push({ label: '签署日期', value: str(data.sign_date)! })
+    return { lines, body: str(data.notes) || str(data.description) || undefined }
+  }
+  return { lines }
+}
+
 export default function SharedWithMePage() {
-  const { hasPermission } = useAuth()
+  const { hasPermission, fetchWithAuth } = useAuth()
   const { toast: showToast } = useToast()
+  const navigate = useNavigate()
+
+  const [direction, setDirection] = useState<'sent' | 'received'>('sent')
   const [shares, setShares] = useState<ShareItem[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('')
   const [selectedShare, setSelectedShare] = useState<ShareItem | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
-  const [detailContent, setDetailContent] = useState<string>('')
+  const [detailData, setDetailData] = useState<{ lines: { label: string; value: string }[]; body?: string } | null>(null)
   const [comments, setComments] = useState<Comment[]>([])
   const [newComment, setNewComment] = useState('')
   const [sendingComment, setSendingComment] = useState(false)
 
   const loadShares = useCallback(() => {
     setLoading(true)
-    const url = '/api/v1/shares/received' + (activeTab ? `?target_type=${activeTab}` : '')
-    fetch(url)
+    const base = direction === 'sent' ? '/api/v1/shares/sent' : '/api/v1/shares/received'
+    const url = base + (activeTab ? `?target_type=${activeTab}` : '')
+    fetchWithAuth(url)
       .then(r => r.json())
       .then(data => setShares(Array.isArray(data) ? data : []))
       .catch(() => showToast('加载分享列表失败', 'error'))
       .finally(() => setLoading(false))
-  }, [activeTab, showToast])
+  }, [direction, activeTab, fetchWithAuth, showToast])
 
   useEffect(() => { loadShares() }, [loadShares])
 
   const openDetail = async (share: ShareItem) => {
     setSelectedShare(share)
     setDetailLoading(true)
-    setDetailContent('')
+    setDetailData(null)
     setComments([])
 
-    // 加载详情内容
-    try {
-      let url = ''
-      if (share.target_type === 'report') {
-        url = `/api/v1/reports/${share.target_id}`
-      } else if (share.target_type === 'meeting') {
-        url = `/api/v1/meetings/${share.target_id}`
-      } else if (share.target_type === 'project') {
-        url = `/api/v1/projects/${share.target_id}`
-      } else if (share.target_type === 'customer') {
-        url = `/api/v1/customers/${share.target_id}/overview`
-      } else if (share.target_type === 'contract') {
-        url = `/api/v1/contracts/${share.target_id}`
-      }
-      if (url) {
-        const res = await fetch(url)
+    const urlMap: Record<string, string> = {
+      report:   `/api/v1/reports/${share.target_id}`,
+      meeting:  `/api/v1/meetings/${share.target_id}`,
+      project:  `/api/v1/projects/${share.target_id}`,
+      customer: `/api/v1/customers/${share.target_id}/overview`,
+      contract: `/api/v1/contracts/${share.target_id}`,
+    }
+    const url = urlMap[share.target_type]
+    if (url) {
+      try {
+        const res = await fetchWithAuth(url)
         if (res.ok) {
           const data = await res.json()
-          if (data.content_md) {
-            setDetailContent(data.content_md)
-          } else if (data.description) {
-            setDetailContent(data.description)
-          } else if (data.notes) {
-            setDetailContent(data.notes)
-          } else {
-            setDetailContent(JSON.stringify(data, null, 2))
-          }
+          setDetailData(extractSummary(share.target_type, data))
         } else {
-          setDetailContent('无法加载详情内容')
+          setDetailData({ lines: [], body: '无法加载详情，可能没有访问权限' })
         }
+      } catch {
+        setDetailData({ lines: [], body: '加载失败' })
       }
-    } catch {
-      setDetailContent('加载失败')
     }
 
-    // 加载评论
     try {
-      const res = await fetch(`/api/v1/shares/${share.id}/comments`)
+      const res = await fetchWithAuth(`/api/v1/shares/${share.id}/comments`)
       if (res.ok) {
         const data = await res.json()
         setComments(Array.isArray(data) ? data : [])
@@ -124,7 +157,7 @@ export default function SharedWithMePage() {
 
   const closeDetail = () => {
     setSelectedShare(null)
-    setDetailContent('')
+    setDetailData(null)
     setComments([])
     setNewComment('')
   }
@@ -133,9 +166,8 @@ export default function SharedWithMePage() {
     if (!selectedShare || !newComment.trim()) return
     setSendingComment(true)
     try {
-      const res = await fetch(`/api/v1/shares/${selectedShare.id}/comments`, {
+      const res = await fetchWithAuth(`/api/v1/shares/${selectedShare.id}/comments`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: newComment.trim() }),
       })
       if (!res.ok) {
@@ -153,36 +185,77 @@ export default function SharedWithMePage() {
     }
   }
 
+  const revokeShare = async (shareId: number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      const res = await fetchWithAuth(`/api/v1/shares/${shareId}`, { method: 'DELETE' })
+      if (res.ok) {
+        showToast('已撤销分享', 'success')
+        setShares(prev => prev.filter(s => s.id !== shareId))
+      } else {
+        const err = await res.json()
+        showToast(err.detail || '撤销失败', 'error')
+      }
+    } catch {
+      showToast('撤销请求失败', 'error')
+    }
+  }
+
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr)
     return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
   }
 
   return (
-    <div>
+    <div className="space-y-6 pb-12">
       {/* 头部 */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/20">
-            <Share2 size={22} className="text-indigo-400" />
+          <div className="p-2 rounded-xl bg-accent-blue/10 border border-accent-blue/20">
+            <Share2 size={20} className="text-accent-blue" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-white">我的分享</h2>
-            <p className="text-sm text-gray-500 mt-0.5">{shares.length} 条分享内容</p>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">协作分享</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+              {direction === 'sent' ? '我分享出去的内容' : '别人分享给我的内容'}
+            </p>
           </div>
+        </div>
+        {/* 发出 / 收到 切换 */}
+        <div className="inline-flex p-1 rounded-xl bg-bg-hover/80 border border-gray-200 dark:border-border/20">
+          <button
+            onClick={() => { setDirection('sent'); setActiveTab('') }}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all border ${
+              direction === 'sent'
+                ? 'bg-bg-card text-gray-900 dark:text-gray-100 shadow-md border-gray-200 dark:border-border/30'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+            }`}
+          >
+            <ArrowUpRight size={14} /> 我发出的
+          </button>
+          <button
+            onClick={() => { setDirection('received'); setActiveTab('') }}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all border ${
+              direction === 'received'
+                ? 'bg-bg-card text-gray-900 dark:text-gray-100 shadow-md border-gray-200 dark:border-border/30'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+            }`}
+          >
+            <ArrowDownLeft size={14} /> 收到的
+          </button>
         </div>
       </div>
 
       {/* 标签筛选 */}
-      <div className="flex gap-2 mb-6 flex-wrap">
+      <div className="flex gap-2 flex-wrap">
         {TABS.map(tab => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
               activeTab === tab.key
-                ? 'bg-[#3B82F6] text-[#fff] shadow-lg shadow-blue-500/20'
-                : 'bg-bg-card border border-border text-gray-400 hover:text-white hover:border-gray-600'
+                ? 'bg-accent-blue/15 text-accent-blue border-accent-blue/30'
+                : 'bg-bg-card border-border text-gray-500 dark:text-gray-400 hover:border-accent-blue/50 hover:text-accent-blue'
             }`}
           >
             {tab.label}
@@ -192,58 +265,76 @@ export default function SharedWithMePage() {
 
       {/* 内容列表 */}
       {loading ? (
-        <div className="text-center py-20 text-gray-500">
-          <Loader2 size={28} className="mx-auto animate-spin mb-3" />
-          加载中...
+        <div className="text-center py-20 text-gray-400">
+          <Loader2 size={24} className="mx-auto animate-spin mb-3" />
+          <span className="text-sm">加载中...</span>
         </div>
       ) : shares.length === 0 ? (
         <div className="text-center py-20">
-          <Share2 size={48} className="mx-auto text-gray-600 mb-4" />
-          <p className="text-gray-500 mb-2">暂无分享的内容</p>
-          <p className="text-xs text-gray-600">当其他用户分享数据给你时，会在这里显示</p>
+          <Share2 size={40} className="mx-auto text-gray-300 dark:text-gray-600 mb-4" />
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">
+            {direction === 'sent' ? '还没有发出分享' : '暂无收到的分享'}
+          </p>
+          <p className="text-xs text-gray-400 dark:text-gray-600">
+            {direction === 'sent' ? '在日报、会议、项目等详情页中可以分享给同事' : '其他用户分享给你的内容会在这里显示'}
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {shares.map(share => {
-            const config = TYPE_CONFIG[share.target_type] || TYPE_CONFIG.report
+            const cfg = TYPE_CONFIG[share.target_type] || TYPE_CONFIG.report
             return (
               <div
                 key={share.id}
                 onClick={() => openDetail(share)}
-                className="group p-4 rounded-xl bg-bg-card border border-border hover:border-[#3B82F6]/50 transition-all cursor-pointer min-h-[140px] flex flex-col"
+                className="group p-4 rounded-xl bg-bg-card border border-border hover:border-accent-blue/40 hover:shadow-sm transition-all cursor-pointer flex flex-col gap-3"
               >
-                <div className="flex items-start justify-between mb-3">
-                  <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium ${config.color}`}>
-                    {config.icon}
-                    {config.label}
+                {/* 类型标签 + 权限 / 撤销按钮 */}
+                <div className="flex items-center justify-between">
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border ${cfg.color}`}>
+                    {cfg.icon} {cfg.label}
                   </span>
-                  {share.permission === 'commenter' && (
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs text-emerald-400 bg-emerald-500/10">
-                      <MessageSquare size={10} />
-                      可评论
+                  {direction === 'sent' ? (
+                    <button
+                      onClick={e => revokeShare(share.id, e)}
+                      className="p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100"
+                      title="撤销分享"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  ) : share.permission === 'commenter' ? (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20">
+                      <MessageSquare size={10} /> 可评论
                     </span>
+                  ) : null}
+                </div>
+
+                {/* 标题 */}
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 group-hover:text-accent-blue transition-colors">
+                  {share.target_title || `#${share.target_id}`}
+                </p>
+
+                {/* 元信息 */}
+                <div className="flex flex-col gap-1 mt-auto">
+                  <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    <UserCircle size={12} />
+                    {direction === 'sent' ? (
+                      <span>分享给 <span className="font-medium text-gray-700 dark:text-gray-300">{share.shared_to_name || '未知'}</span></span>
+                    ) : (
+                      <span>来自 <span className="font-medium text-gray-700 dark:text-gray-300">{share.shared_by_name || '未知'}</span></span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
+                    <Calendar size={12} />
+                    <span>{formatDate(share.created_at)}</span>
+                  </div>
+                  {share.expires_at && (
+                    <div className="flex items-center gap-1.5 text-xs text-amber-500">
+                      <Clock size={12} />
+                      <span>有效期至 {formatDate(share.expires_at)}</span>
+                    </div>
                   )}
                 </div>
-                <h3 className="text-sm font-medium text-white mb-2 line-clamp-2 group-hover:text-[#3B82F6] transition-colors">
-                  {share.target_title || `#${share.target_id}`}
-                </h3>
-                <div className="flex items-center gap-2 text-xs text-gray-500">
-                  <span className="flex items-center gap-1">
-                    <Eye size={11} />
-                    {share.shared_to_name}
-                  </span>
-                  <span>·</span>
-                  <span className="flex items-center gap-1">
-                    <Calendar size={11} />
-                    {formatDate(share.created_at)}
-                  </span>
-                </div>
-                {share.expires_at && (
-                  <div className="mt-2 flex items-center gap-1 text-xs text-amber-500/70">
-                    <Clock size={11} />
-                    有效期至 {formatDate(share.expires_at)}
-                  </div>
-                )}
               </div>
             )
           })}
@@ -252,93 +343,146 @@ export default function SharedWithMePage() {
 
       {/* 详情弹窗 */}
       {selectedShare && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={closeDetail}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={closeDetail}>
           <div
             className="bg-bg-card border border-border rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden shadow-2xl flex flex-col"
             onClick={e => e.stopPropagation()}
           >
             {/* 弹窗头部 */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-              <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
                 {(() => {
-                  const config = TYPE_CONFIG[selectedShare.target_type] || TYPE_CONFIG.report
+                  const cfg = TYPE_CONFIG[selectedShare.target_type] || TYPE_CONFIG.report
                   return (
-                    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium ${config.color}`}>
-                      {config.icon}
-                      {config.label}
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border shrink-0 ${cfg.color}`}>
+                      {cfg.icon} {cfg.label}
                     </span>
                   )
                 })()}
-                <h3 className="text-base font-medium text-white">{selectedShare.target_title}</h3>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                  {selectedShare.target_title || `#${selectedShare.target_id}`}
+                </h3>
               </div>
-              <button onClick={closeDetail} className="text-gray-500 hover:text-white transition-colors">
-                <X size={20} />
-              </button>
+              <div className="flex items-center gap-2 shrink-0 ml-3">
+                {/* 跳转到原始记录 */}
+                {(() => {
+                  const cfg = TYPE_CONFIG[selectedShare.target_type]
+                  if (!cfg) return null
+                  return (
+                    <button
+                      onClick={() => { navigate(cfg.path); closeDetail() }}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-border text-gray-500 dark:text-gray-400 hover:border-accent-blue/50 hover:text-accent-blue transition-colors"
+                      title="在原页面中查看"
+                    >
+                      <ExternalLink size={12} /> 查看原记录
+                    </button>
+                  )
+                })()}
+                <button onClick={closeDetail} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-bg-hover transition-colors">
+                  <X size={16} />
+                </button>
+              </div>
             </div>
 
             {/* 内容区 */}
-            <div className="flex-1 overflow-y-auto px-6 py-4">
+            <div className="flex-1 overflow-y-auto">
               {detailLoading ? (
-                <div className="text-center py-10 text-gray-500">
-                  <Loader2 size={24} className="mx-auto animate-spin mb-2" />
-                  加载中...
+                <div className="text-center py-12 text-gray-400">
+                  <Loader2 size={22} className="mx-auto animate-spin mb-2" />
+                  <span className="text-sm">加载中...</span>
                 </div>
-              ) : (
-                <div className="prose prose-invert prose-sm max-w-none">
-                  <MarkdownRenderer content={detailContent || '暂无内容'} />
+              ) : detailData ? (
+                <div className="px-5 py-4 space-y-4">
+                  {/* 分享来源 */}
+                  <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 pb-3 border-b border-border">
+                    <UserCircle size={13} />
+                    {direction === 'sent' ? (
+                      <span>你于 {formatDate(selectedShare.created_at)} 分享给 <span className="font-medium text-gray-700 dark:text-gray-300">{selectedShare.shared_to_name}</span></span>
+                    ) : (
+                      <span>由 <span className="font-medium text-gray-700 dark:text-gray-300">{selectedShare.shared_by_name}</span> 于 {formatDate(selectedShare.created_at)} 分享给你</span>
+                    )}
+                    {selectedShare.permission === 'commenter'
+                      ? <span className="ml-auto text-emerald-600 dark:text-emerald-400 font-medium">可评论</span>
+                      : <span className="ml-auto text-gray-400">仅查看</span>
+                    }
+                  </div>
+
+                  {/* 结构化摘要 */}
+                  {detailData.lines.length > 0 && (
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                      {detailData.lines.map(({ label, value }) => (
+                        <div key={label} className="flex gap-1.5 text-xs">
+                          <span className="text-gray-400 dark:text-gray-500 shrink-0 w-[4em]">{label}</span>
+                          <span className="text-gray-700 dark:text-gray-200 break-words min-w-0 flex-1">{value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* 正文内容 */}
+                  {detailData.body && (
+                    <div className="pt-3 border-t border-border">
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">内容摘要</p>
+                      <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap line-clamp-10 leading-relaxed">
+                        {detailData.body.replace(/#+\s/g, '').replace(/\*\*/g, '').replace(/\n{3,}/g, '\n\n')}
+                      </p>
+                    </div>
+                  )}
+
+                  {!detailData.lines.length && !detailData.body && (
+                    <p className="text-sm text-gray-400 py-4 text-center">暂无可展示的内容</p>
+                  )}
                 </div>
-              )}
+              ) : null}
 
               {/* 评论区 */}
-              <div className="mt-6 pt-4 border-t border-border">
-                <h4 className="text-sm font-medium text-gray-300 mb-3 flex items-center gap-2">
-                  <MessageSquare size={14} />
-                  评论 ({comments.length})
-                </h4>
-                {comments.length > 0 ? (
-                  <div className="space-y-3 mb-4">
-                    {comments.map(c => (
-                      <div key={c.id} className="flex gap-3">
-                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-[#fff] text-xs font-medium shrink-0">
-                          {(c.user_name || '?')[0]}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <span className="text-xs font-medium text-gray-300">{c.user_name}</span>
-                            <span className="text-xs text-gray-600">{formatDate(c.created_at)}</span>
+              <div className="px-5 pb-5">
+                <div className="border-t border-border pt-4">
+                  <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-3 flex items-center gap-1.5">
+                    <MessageSquare size={12} /> 评论 ({comments.length})
+                  </h4>
+                  {comments.length > 0 && (
+                    <div className="space-y-3 mb-4">
+                      {comments.map(c => (
+                        <div key={c.id} className="flex gap-2.5">
+                          <div className="w-6 h-6 rounded-full bg-accent-blue/20 flex items-center justify-center text-accent-blue text-[11px] font-bold shrink-0">
+                            {(c.user_name || '?')[0].toUpperCase()}
                           </div>
-                          <p className="text-sm text-gray-400 break-words">{c.content}</p>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{c.user_name}</span>
+                              <span className="text-[11px] text-gray-400">{formatDate(c.created_at)}</span>
+                            </div>
+                            <p className="text-sm text-gray-600 dark:text-gray-400 break-words">{c.content}</p>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-600 mb-4">暂无评论</p>
-                )}
+                      ))}
+                    </div>
+                  )}
+                  {comments.length === 0 && <p className="text-xs text-gray-400 mb-3">暂无评论</p>}
 
-                {/* 评论输入框 */}
-                {selectedShare.permission === 'commenter' && hasPermission('share:comment') && (
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newComment}
-                      onChange={e => setNewComment(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && !e.shiftKey && submitComment()}
-                      placeholder="输入评论..."
-                      className="flex-1 px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6] transition-colors"
-                    />
-                    <button
-                      onClick={submitComment}
-                      disabled={sendingComment || !newComment.trim()}
-                      className="px-3 py-2 rounded-lg bg-[#3B82F6] text-[#fff] text-sm hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {sendingComment ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                    </button>
-                  </div>
-                )}
-                {selectedShare.permission !== 'commenter' && (
-                  <p className="text-xs text-gray-600 italic">当前分享权限为只读，无法评论</p>
-                )}
+                  {selectedShare.permission === 'commenter' && hasPermission('share:comment') ? (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newComment}
+                        onChange={e => setNewComment(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && !e.shiftKey && submitComment()}
+                        placeholder="输入评论，Enter 发送..."
+                        className="flex-1 px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-700 dark:text-gray-300 placeholder-gray-400 outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-colors"
+                      />
+                      <button
+                        onClick={submitComment}
+                        disabled={sendingComment || !newComment.trim()}
+                        className="px-3 py-2 rounded-lg bg-accent-blue text-white text-sm hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {sendingComment ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-400 italic">当前权限为只读，无法评论</p>
+                  )}
+                </div>
               </div>
             </div>
           </div>

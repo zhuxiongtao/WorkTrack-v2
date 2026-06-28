@@ -10,7 +10,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import AppSearch from './AppSearch'
 import { MENU_CATEGORIES } from './menuConfig'
 
-const APP_VERSION = 'v2.8.2'
+const APP_VERSION = 'v2.8.3'
 
 interface AppSidebarProps {
   sidebarOpen: boolean

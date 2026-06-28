@@ -24,7 +24,7 @@ interface ProjectBrief {
 }
 
 export default function MeetingsPage() {
-  const { hasPermission, user: currentUser } = useAuth()
+  const { hasPermission, user: currentUser, fetchWithAuth } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const { toast: showToast, confirm: showConfirm } = useToast()
   const [meetings, setMeetings] = useState<Meeting[]>([])
@@ -514,13 +514,13 @@ export default function MeetingsPage() {
 
   const loadSharePermissions = async (meetingId: number) => {
     try {
-      const res = await fetch(`/api/v1/meetings/${meetingId}/permissions`)
+      const res = await fetchWithAuth(`/api/v1/meetings/${meetingId}/permissions`)
       if (res.ok) {
         const data = await res.json()
         setSharePermissions(Array.isArray(data) ? data : [])
       }
     } catch { setSharePermissions([]) }
-    fetch('/api/v1/users/simple?scope=all')
+    fetchWithAuth('/api/v1/users/simple?scope=all')
       .then(r => r.json())
       .then(d => { if (Array.isArray(d)) setAllUsers(d) })
       .catch(() => {})
@@ -530,12 +530,21 @@ export default function MeetingsPage() {
     if (!shareUserId || !modalMeeting) return
     setShareLoading(true)
     try {
-      const res = await fetch(`/api/v1/meetings/${modalMeeting.id}/permissions`, {
+      const res = await fetchWithAuth(`/api/v1/meetings/${modalMeeting.id}/permissions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: shareUserId, permission: shareLevel }),
       })
       if (res.ok) {
+        // 同步写入 data_share，使"我的分享"页面可见
+        await fetchWithAuth('/api/v1/shares', {
+          method: 'POST',
+          body: JSON.stringify({
+            target_type: 'meeting',
+            target_id: modalMeeting.id,
+            shared_to: shareUserId,
+            permission: shareLevel === 'editor' ? 'commenter' : 'viewer',
+          }),
+        }).catch(() => { /* 不阻断主流程 */ })
         setShareUserId(0)
         setShareLevel('viewer')
         await loadSharePermissions(modalMeeting.id)
@@ -551,7 +560,7 @@ export default function MeetingsPage() {
   const handleRemoveShare = async (permId: number) => {
     if (!modalMeeting) return
     try {
-      const res = await fetch(`/api/v1/meetings/permissions/${permId}`, { method: 'DELETE' })
+      const res = await fetchWithAuth(`/api/v1/meetings/permissions/${permId}`, { method: 'DELETE' })
       if (res.ok) {
         await loadSharePermissions(modalMeeting.id)
         showToast('协作者已移除', 'success')

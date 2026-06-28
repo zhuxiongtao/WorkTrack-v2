@@ -116,6 +116,7 @@ def create_share(
         target_id=share.target_id,
         shared_by=share.shared_by,
         shared_to=share.shared_to,
+        shared_by_name=current_user.name or current_user.username,
         shared_to_name=target_user.name or target_user.username,
         permission=share.permission,
         expires_at=share.expires_at,
@@ -143,15 +144,17 @@ def list_shares_for_target(
     ).all()
     
     result = []
+    sharer_user = db.get(User, current_user.id)
     for s in shares:
-        user = db.get(User, s.shared_to)
+        recipient = db.get(User, s.shared_to)
         result.append(DataShareOut(
             id=s.id,
             target_type=s.target_type,
             target_id=s.target_id,
             shared_by=s.shared_by,
             shared_to=s.shared_to,
-            shared_to_name=(user.name or user.username) if user else "",
+            shared_by_name=(sharer_user.name or sharer_user.username) if sharer_user else "",
+            shared_to_name=(recipient.name or recipient.username) if recipient else "",
             permission=s.permission,
             expires_at=s.expires_at,
             created_at=s.created_at,
@@ -211,7 +214,38 @@ def list_received_shares(
             target_id=s.target_id,
             shared_by=s.shared_by,
             shared_to=s.shared_to,
-            shared_to_name=(sharer.name or sharer.username) if sharer else "",
+            shared_by_name=(sharer.name or sharer.username) if sharer else "",
+            shared_to_name=(current_user.name or current_user.username),
+            permission=s.permission,
+            expires_at=s.expires_at,
+            created_at=s.created_at,
+            target_title=_get_target_title(s.target_type, s.target_id, db),
+        ))
+    return result
+
+
+@router.get("/sent", response_model=list[DataShareOut])
+def list_sent_shares(
+    target_type: Optional[str] = Query(None),
+    current_user: User = Depends(require_permission("share:create")),
+    db: Session = Depends(get_session),
+):
+    """我发出的分享列表"""
+    query = select(DataShare).where(DataShare.shared_by == current_user.id)
+    if target_type:
+        query = query.where(DataShare.target_type == target_type)
+    shares = db.exec(query.order_by(DataShare.created_at.desc())).all()
+    result = []
+    for s in shares:
+        recipient = db.get(User, s.shared_to)
+        result.append(DataShareOut(
+            id=s.id,
+            target_type=s.target_type,
+            target_id=s.target_id,
+            shared_by=s.shared_by,
+            shared_to=s.shared_to,
+            shared_by_name=current_user.name or current_user.username,
+            shared_to_name=(recipient.name or recipient.username) if recipient else "",
             permission=s.permission,
             expires_at=s.expires_at,
             created_at=s.created_at,
