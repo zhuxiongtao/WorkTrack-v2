@@ -88,9 +88,9 @@ export function DepartmentFormModal({ isOpen, editingDepartment, parentDepartmen
     : flatDepts
 
   const parentOptions = [
-    { id: 'none', label: '无（一级部门）' },
+    { value: 'none', label: '无（一级部门）' },
     ...availableParents.map(d => ({
-      id: d.id,
+      value: d.id,
       label: d.name,
     })),
   ]
@@ -181,8 +181,8 @@ export function DepartmentFormModal({ isOpen, editingDepartment, parentDepartmen
             </label>
             <SearchableSelect
               options={[
-                { id: 0, label: '暂不指定负责人' },
-                ...departmentMembers.map(u => ({ id: u.id, label: `${u.name || u.username} (@${u.username})` })),
+                { value: 0, label: '暂不指定负责人' },
+                ...departmentMembers.map(u => ({ value: u.id, label: `${u.name || u.username} (@${u.username})` })),
               ]}
               value={managerId ?? 0}
               onChange={(v) => setManagerId(v && v !== 0 ? (v as number) : null)}

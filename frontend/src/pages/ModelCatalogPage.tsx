@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { PageHeader, SectionHeader, StatusBadge, IconBox, EmptyState } from '../components/design-system'
+import { PageHeader, StatusBadge, IconBox, EmptyState } from '../components/design-system'
 import { Cpu, RefreshCw, Globe, Zap, Check, X, Edit3, ExternalLink, Calendar, Sparkles, Loader2, AlertCircle, DollarSign } from 'lucide-react'
 import SearchableSelect from '../components/SearchableSelect'
 
@@ -44,7 +44,7 @@ interface RefreshStatus {
 }
 
 export default function ModelCatalogPage() {
-  const { fetchWithAuth, user } = useAuth()
+  const { fetchWithAuth } = useAuth()
   const [items, setItems] = useState<ModelCatalogItem[]>([])
   const [status, setStatus] = useState<RefreshStatus | null>(null)
   const [loading, setLoading] = useState(true)
@@ -289,22 +289,20 @@ export default function ModelCatalogPage() {
         <div className="flex items-center gap-2">
           <SearchableSelect
             options={[
-              { id: '', label: '全部地域' },
-              { id: 'domestic', label: '国内' },
-              { id: 'international', label: '国际' },
+              { value: '', label: '全部地域' },
+              { value: 'domestic', label: '国内' },
+              { value: 'international', label: '国际' },
             ]}
             value={regionFilter}
-            onChange={(v) => setRegionFilter(v === 0 ? '' : String(v))}
-            clearValue=""
+            onChange={(v) => setRegionFilter(v === null ? '' : String(v))}
           />
           <SearchableSelect
             options={[
-              { id: '', label: '全部提供方' },
-              ...providers.map(p => ({ id: p, label: p })),
+              { value: '', label: '全部提供方' },
+              ...providers.map(p => ({ value: p, label: p })),
             ]}
             value={providerFilter}
-            onChange={(v) => setProviderFilter(v === 0 ? '' : String(v))}
-            clearValue=""
+            onChange={(v) => setProviderFilter(v === null ? '' : String(v))}
           />
           <input
             type="text"
@@ -350,9 +348,8 @@ export default function ModelCatalogPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <IconBox
                         icon={Cpu}
-                        size={32}
-                        gradientFrom={item.region === 'domestic' ? '#EF4444' : '#3B82F6'}
-                        gradientTo={item.region === 'domestic' ? '#F472B6' : '#06B6D4'}
+                        size="md"
+                        tone={item.region === 'domestic' ? 'red' : 'blue'}
                       />
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -561,17 +558,9 @@ export default function ModelCatalogPage() {
 }
 
 function StatCard({ label, value, icon: Icon, tone }: { label: string; value: number; icon: any; tone: 'blue' | 'green' | 'orange' | 'cyan' | 'purple' }) {
-  const colors: Record<string, [string, string]> = {
-    blue: ['#3B82F6', '#06B6D4'],
-    green: ['#10B981', '#34D399'],
-    orange: ['#F59E0B', '#FBBF24'],
-    cyan: ['#06B6D4', '#22D3EE'],
-    purple: ['#8B5CF6', '#C084FC'],
-  }
-  const [from, to] = colors[tone]
   return (
     <div className="bg-bg-card border border-border rounded-xl p-3 flex items-center gap-3">
-      <IconBox icon={Icon} size={36} gradientFrom={from} gradientTo={to} />
+      <IconBox icon={Icon} size="lg" tone={tone} />
       <div>
         <div className="text-2xl font-bold text-gray-900 dark:text-white leading-tight">{value}</div>
         <div className="text-xs text-gray-500">{label}</div>

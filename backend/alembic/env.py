@@ -26,14 +26,17 @@ from app.models import (  # noqa: F401
     ModelProvider, TaskModelConfig, ProviderModel, ModelParamPreset, FieldOption,
     ChatConversation, ChatMessage, SystemPreference, LogEntry,
     AIPrompt, WeeklySummary,
+    LegalEntity,
     # Wiki 模型
     UserGroup, UserGroupMember, WikiSpace, WikiPage, WikiPermission, WikiPageVersion,
     # RBAC 模型
     Permission, Role, RolePermission, UserRole, GroupRole,
     # OA 模块模型
     PurchaseSupplier, LeaveBalance, LeaveBalanceLog, LeaveRequest, OvertimeRequest,
-    ExpenseRequest, BusinessTripRequest, PurchaseRequest, Asset,
+    ExpenseRequest, ExpenseItem, ExpenseRelation, BusinessTripRequest, PurchaseRequest,
+    Asset, AssetRecord, EmployeeLoan,
     BackupRecord,
+    HireRequest,
 )
 
 target_metadata = SQLModel.metadata

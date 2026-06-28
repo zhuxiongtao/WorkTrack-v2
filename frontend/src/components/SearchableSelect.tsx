@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, useMemo, useCallback, ReactNode } from 'react'
+import { useEffect, useRef, useState, useMemo, useCallback, type ReactNode } from 'react'
 import { Search, ChevronDown, Check, X } from 'lucide-react'
 
-export type SearchableSelectOption<T = any> = {
+export type SearchableSelectOption = {
   value: string | number
   label: string
   meta?: ReactNode   // 列表项中显示的补充信息（图标签/小字等）
@@ -11,14 +11,16 @@ export type SearchableSelectOption<T = any> = {
 }
 
 type Props<T> = {
-  value: T | null | undefined
+  value: T | T[] | null | undefined
   onChange: (v: T | null) => void
-  options: SearchableSelectOption<T>[]
+  options: SearchableSelectOption[]
+  /** 是否多选（value 传入数组） */
+  multiple?: boolean
   placeholder?: string
   /** 自定义列表项渲染（拿到 option，可渲染多行内容） */
-  renderOption?: (opt: SearchableSelectOption<T>, active: boolean, selected: boolean) => ReactNode
+  renderOption?: (opt: SearchableSelectOption, active: boolean, selected: boolean) => ReactNode
   /** 自定义触发器（折叠态）显示内容。默认显示 option.label */
-  renderTrigger?: (selected: SearchableSelectOption<T> | null) => ReactNode
+  renderTrigger?: (selected: SearchableSelectOption | null) => ReactNode
   /** 自定义空状态文案 */
   emptyText?: string
   /** 整行小尺寸（适配表格内） */
@@ -29,6 +31,8 @@ type Props<T> = {
   panelWidth?: string
   /** 失焦时是否清空搜索关键字 */
   resetSearchOnClose?: boolean
+  /** 搜索框占位文案（默认"输入关键词搜索…"） */
+  searchPlaceholder?: string
 }
 
 /**
@@ -51,6 +55,7 @@ export default function SearchableSelect<T extends string | number>({
   className = '',
   panelWidth,
   resetSearchOnClose = true,
+  searchPlaceholder = '输入关键词搜索…',
 }: Props<T>) {
   const [open, setOpen] = useState(false)
   const [kw, setKw] = useState('')
@@ -99,9 +104,9 @@ export default function SearchableSelect<T extends string | number>({
   }, [open, resetSearchOnClose])
 
   const choose = useCallback(
-    (opt: SearchableSelectOption<T>) => {
+    (opt: SearchableSelectOption) => {
       if (opt.disabled) return
-      onChange(opt.value)
+      onChange(opt.value as T)
       setOpen(false)
     },
     [onChange]
@@ -193,7 +198,7 @@ export default function SearchableSelect<T extends string | number>({
                 value={kw}
                 onChange={(e) => { setKw(e.target.value); setHighlight(0) }}
                 onKeyDown={onKeyDown}
-                placeholder="输入关键词搜索…"
+                placeholder={searchPlaceholder}
                 className="w-full pl-7 pr-2 py-1.5 text-xs rounded-md border border-transparent bg-bg-card
                            outline-none focus:border-accent-blue"
               />

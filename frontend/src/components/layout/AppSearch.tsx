@@ -55,7 +55,7 @@ function AppSearch() {
     return menuIndex.filter((m) => {
       const t = (m.title || '').toLowerCase()
       const s = (m.snippet || '').toLowerCase()
-      return t.includes(lower) || s.includes(lower) || m.id.toLowerCase().includes(lower)
+      return t.includes(lower) || s.includes(lower) || String(m.id).toLowerCase().includes(lower)
     })
   }
 

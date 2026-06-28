@@ -4,19 +4,12 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session, select, func
 from app.database import get_session
-from app.auth import get_current_user
+from app.auth import require_permission
 from app.models.user import User
 from app.models.model_usage_log import ModelUsageLog
 from app.models.model_provider import ModelProvider
 
 router = APIRouter(prefix="/api/v1/admin/model-usage", tags=["model-usage"])
-
-
-def _require_admin(current_user: User = Depends(get_current_user)):
-    if not current_user.is_admin:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=403, detail="无权访问")
-    return current_user
 
 
 def _since(days: int) -> datetime:
@@ -27,7 +20,7 @@ def _since(days: int) -> datetime:
 def usage_by_model(
     days: int = Query(default=30, ge=1, le=365),
     db: Session = Depends(get_session),
-    _: User = Depends(_require_admin),
+    _: User = Depends(require_permission("monitor:read")),
 ):
     """按 (provider_id, model_name) 汇总 token 消耗，返回每个模型的调用次数和各类 token 总量"""
     since = _since(days)
@@ -76,7 +69,7 @@ def usage_by_model(
 def usage_by_user(
     days: int = Query(default=30, ge=1, le=365),
     db: Session = Depends(get_session),
-    _: User = Depends(_require_admin),
+    _: User = Depends(require_permission("monitor:read")),
 ):
     """按 (user_id, provider_id, model_name) 分组，返回每个用户在每个模型上的消耗明细"""
     since = _since(days)
@@ -127,7 +120,7 @@ def usage_by_user(
 def usage_daily_trend(
     days: int = Query(default=30, ge=1, le=90),
     db: Session = Depends(get_session),
-    _: User = Depends(_require_admin),
+    _: User = Depends(require_permission("monitor:read")),
 ):
     """按天汇总 token 消耗（用于趋势折线图）"""
     since = _since(days)
@@ -162,7 +155,7 @@ def usage_daily_trend(
 def usage_summary(
     days: int = Query(default=30, ge=1, le=365),
     db: Session = Depends(get_session),
-    _: User = Depends(_require_admin),
+    _: User = Depends(require_permission("monitor:read")),
 ):
     """平台整体汇总：总调用、总 token、活跃用户数"""
     since = _since(days)

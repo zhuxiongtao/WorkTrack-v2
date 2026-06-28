@@ -19,7 +19,8 @@ class Project(SQLModel, table=True):
     termination_date: Optional[date] = None  # 终止时间
     product: Optional[str] = None  # 涉及产品（选项管理）
     project_scenario: Optional[str] = None  # 项目场景（选项管理）
-    sales_person: Optional[str] = None  # 销售（选项管理）
+    sales_person: Optional[str] = None  # 销售负责人（姓名冗余，保留兼容）
+    sales_person_user_id: Optional[int] = Field(default=None, foreign_key="user.id")  # 销售负责人用户 FK
     tech_support_person: Optional[str] = None  # 技术支持（姓名冗余，保留兼容）
     tech_support_user_id: Optional[int] = Field(default=None, foreign_key="user.id")  # 技术支持用户 FK
     status: str = ""  # 状态（选项管理）

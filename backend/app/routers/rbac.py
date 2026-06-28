@@ -155,6 +155,8 @@ def delete_role(role_id: int, db: Session = Depends(get_session),
     role = db.get(Role, role_id)
     if not role:
         raise HTTPException(status_code=404, detail="角色不存在")
+    if role.is_system:
+        raise HTTPException(status_code=400, detail="系统内置角色不可删除")
     from app.models.rbac import DepartmentRole
     from app.models.wiki import UserGroupMember
     # 清除所有关联

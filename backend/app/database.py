@@ -139,9 +139,8 @@ def get_session():
 
 
 DEFAULT_FIELD_OPTIONS = {
-    "industry": ["互联网", "金融", "教育", "医疗", "制造业", "零售", "房地产", "能源", "物流", "其他"],
-    "sales_person": ["张三", "李四", "王五"],
-    "project_status": ["进行中", "已完成", "暂停", "已取消", "待启动"],
+    "product": ["AI 对话平台", "RAG 知识库", "Agent 平台", "模型微调", "推理 API", "向量数据库", "数据标注", "其他"],
+    "project_status": ["进行中", "已完成", "暂停", "已取消", "待启动", "已签约", "已结束", "已流失"],
     "project_scenario": [
         "智能客服 / 客服机器人",
         "知识库问答（RAG）",
@@ -295,6 +294,12 @@ PERMISSION_DEFS = [
     ("purchase:manage", "管理采购执行", "purchase", "manage"),
     ("asset:read", "查看企业资产", "asset", "read"),
     ("asset:manage", "管理企业资产", "asset", "manage"),
+    # 员工入职申请（HR 专属发起，view_all 供审批人查看，manage 供 HR 执行入职建账号）
+    ("hire:read", "查看入职申请", "hire", "read"),
+    ("hire:view_all", "查看全部入职申请", "hire", "view_all"),
+    ("hire:manage", "发起入职申请并执行入职建账号", "hire", "manage"),
+    # 审批流配置（创建/修改/启停/删除审批流，仅管理员）
+    ("approval:manage", "管理审批流", "approval", "manage"),
 ]
 
 ROLE_DEFS = {
@@ -340,6 +345,10 @@ ROLE_DEFS = {
             "trip:view_all",
             "purchase:view_all", "purchase:manage",
             "asset:read", "asset:manage",
+            # 员工入职申请
+            "hire:read", "hire:view_all", "hire:manage",
+            # 审批流配置
+            "approval:manage",
         ],
     },
     "dept_leader": {
@@ -366,6 +375,8 @@ ROLE_DEFS = {
             # OA 办公：部门领导需查看下属请假/加班/报销/出差/采购申请
             "leave:view_all", "overtime:view_all",
             "expense:view_all", "trip:view_all", "purchase:view_all",
+            # 员工入职申请（审批本部门入职）
+            "hire:view_all",
             # 资产查看
             "asset:read",
         ],
@@ -502,6 +513,8 @@ ROLE_DEFS = {
             "expense:view_all", "trip:view_all", "purchase:view_all",
             "purchase_supplier:read",
             "asset:read", "asset:manage",
+            # 员工入职申请（总经理终审）
+            "hire:view_all",
         ],
     },
     "hr": {
@@ -516,6 +529,8 @@ ROLE_DEFS = {
             "expense:view_all", "trip:view_all",
             # 人事负责资产领用管理（办公设备分配）
             "asset:read", "asset:manage",
+            # 员工入职申请（HR 发起 + 复核 + 执行入职建账号）
+            "hire:read", "hire:view_all", "hire:manage",
             "report:read", "report:submit",
             "meeting:read",
             "wiki:read",
@@ -744,6 +759,20 @@ APPROVAL_FLOW_DEFS = [
             {"name": "部门负责人/分管领导", "approver_type": "dept_or_leader", "approver_value": "", "order": 1},
             {"name": "财务审核", "approver_type": "role", "approver_value": "finance", "order": 2},
             {"name": "老板批准", "approver_type": "role", "approver_value": "boss", "order": 3},
+        ],
+    },
+    {
+        "code": "hire_approval",
+        "name": "员工入职审批",
+        "business_type": "hire",
+        "is_system": True,
+        "trigger_condition": None,
+        "description": "员工入职申请依次经用人部门负责人、人事复核、总经理审批，最后由 HR 执行入职创建账号",
+        "nodes": [
+            {"name": "用人部门负责人", "approver_type": "target_dept_manager", "approver_value": "", "order": 1},
+            {"name": "人事复核", "approver_type": "role", "approver_value": "hr", "order": 2},
+            {"name": "总经理审批", "approver_type": "role", "approver_value": "boss", "order": 3},
+            {"name": "HR 执行入职", "approver_type": "role", "approver_value": "hr", "order": 4, "node_kind": "execution", "action_label": "确认入职"},
         ],
     },
 ]

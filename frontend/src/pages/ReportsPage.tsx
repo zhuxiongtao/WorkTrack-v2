@@ -582,10 +582,9 @@ export default function ReportsPage() {
                 </button>
                 {audioDevices.length > 1 && !recording && (
                   <SearchableSelect
-                    options={audioDevices.map((d) => ({ id: d.deviceId, label: d.label || `麦克风 ${d.deviceId.slice(0, 8)}` }))}
+                    options={audioDevices.map((d) => ({ value: d.deviceId, label: d.label || `麦克风 ${d.deviceId.slice(0, 8)}` }))}
                     value={selectedDeviceId}
-                    onChange={(v) => updateDevicePreference(v === 0 ? '' : String(v))}
-                    clearValue=""
+                    onChange={(v) => updateDevicePreference(v === null ? '' : String(v))}
                   />
                 )}
                 <button onClick={toggleRecording}

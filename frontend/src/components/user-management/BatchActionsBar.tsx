@@ -108,7 +108,7 @@ export function BatchActionsBar({ selectedCount, onClearSelection, onAction, loa
           </div>
         </div>
       )}
-      {showDeptPicker && depts.length === 0 && loadDepts()}
+      {showDeptPicker && depts.length === 0 && void loadDepts()}
     </div>
   )
 }

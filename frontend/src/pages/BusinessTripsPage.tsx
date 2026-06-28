@@ -34,11 +34,11 @@ const DEFAULT_TRANSPORT_TYPES = ['飞机', '高铁', '火车', '汽车', '其他
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
   草稿:   { label: '草稿',   cls: 'text-gray-400 bg-gray-500/10 border-gray-500/30' },
-  审批中: { label: '审批中', cls: 'text-amber-400 bg-amber-500/10 border-amber-500/30' },
+  审批中: { label: '审批中', cls: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20' },
   已批准: { label: '已批准', cls: 'text-green-400 bg-green-500/10 border-green-500/30' },
-  已驳回: { label: '已驳回', cls: 'text-red-400 bg-red-500/10 border-red-500/30' },
+  已驳回: { label: '已驳回', cls: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20' },
   已撤回: { label: '已撤回', cls: 'text-gray-400 bg-gray-500/10 border-gray-500/30' },
-  已完成: { label: '已完成', cls: 'text-blue-400 bg-blue-500/10 border-blue-500/30' },
+  已完成: { label: '已完成', cls: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20' },
 }
 
 function fmtAmount(n: number, c: string, unit = '元'): string {
@@ -281,7 +281,7 @@ export default function BusinessTripsPage() {
               key={t.key}
               onClick={() => setScope(t.key)}
               className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
-                scope === t.key ? 'bg-bg-card text-white shadow-sm' : 'text-gray-500 hover:text-gray-300'
+                scope === t.key ? 'bg-accent-blue/15 text-accent-blue' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
               }`}
             >
               {t.label}
@@ -378,7 +378,7 @@ export default function BusinessTripsPage() {
                   <button
                     onClick={() => submitApproval(detail)}
                     disabled={acting}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-500 text-white text-xs font-bold hover:bg-blue-600 disabled:opacity-50 transition-colors"
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-blue text-white text-xs font-bold hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 disabled:opacity-50 transition-colors"
                   >
                     {acting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} 提交审批
                   </button>
@@ -409,7 +409,7 @@ export default function BusinessTripsPage() {
                 <button
                   onClick={() => complete(detail)}
                   disabled={acting}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-500 text-white text-xs font-bold hover:bg-blue-600 disabled:opacity-50 transition-colors"
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-blue text-white text-xs font-bold hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 disabled:opacity-50 transition-colors"
                 >
                   {acting ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} 标记完成
                 </button>
@@ -538,10 +538,9 @@ export default function BusinessTripsPage() {
               </div>
               <Field label="币种">
                 <SearchableSelect
-                  options={['CNY', 'USD', 'HKD', 'EUR'].map(c => ({ id: c, label: c }))}
+                  options={['CNY', 'USD', 'HKD', 'EUR'].map(c => ({ value: c, label: c }))}
                   value={form.currency}
-                  onChange={(v) => setForm({ ...form, currency: v === 0 ? '' : String(v) })}
-                  clearValue=""
+                  onChange={(v) => setForm({ ...form, currency: v === null ? '' : String(v) })}
                 />
               </Field>
             </div>

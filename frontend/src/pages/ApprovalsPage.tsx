@@ -534,7 +534,7 @@ export default function ApprovalsPage() {
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
-              tab === t.key ? 'bg-bg-card text-white shadow-sm' : 'text-gray-500 hover:text-gray-300'
+              tab === t.key ? 'bg-accent-blue/15 text-accent-blue' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
             }`}
           >
             <t.icon size={12} />{t.label}

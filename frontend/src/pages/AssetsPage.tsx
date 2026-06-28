@@ -74,8 +74,8 @@ const DEFAULT_STATUSES = ['在用', '闲置', '维修中', '已报废']
 const STATUS_META: Record<string, { label: string; cls: string }> = {
   在用:   { label: '在用',   cls: 'text-green-400 bg-green-500/10 border-green-500/30' },
   闲置:   { label: '闲置',   cls: 'text-gray-400 bg-gray-500/10 border-gray-500/30' },
-  维修中: { label: '维修中', cls: 'text-orange-400 bg-orange-500/10 border-orange-500/30' },
-  已报废: { label: '已报废', cls: 'text-red-400 bg-red-500/10 border-red-500/30' },
+  维修中: { label: '维修中', cls: 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-500/10 dark:text-orange-400 dark:border-orange-500/20' },
+  已报废: { label: '已报废', cls: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20' },
 }
 
 function fmtAmount(n: number, unit: string): string {
@@ -315,9 +315,9 @@ export default function AssetsPage() {
   }
 
   // 下拉选项
-  const userOptions = users.map(u => ({ id: String(u.id), label: u.name || u.username }))
-  const supplierOptions = suppliers.map(s => ({ id: String(s.id), label: s.name, sub: s.short_name || undefined }))
-  const userFilterOptions = [{ id: '', label: '全部使用人' }, ...userOptions]
+  const userOptions = users.map(u => ({ value: String(u.id), label: u.name || u.username }))
+  const supplierOptions = suppliers.map(s => ({ value: String(s.id), label: s.name, hint: s.short_name || undefined }))
+  const userFilterOptions = [{ value: '', label: '全部使用人' }, ...userOptions]
 
   const stats = [
     { label: '总资产', value: list.length },
@@ -363,20 +363,18 @@ export default function AssetsPage() {
         <div className="w-40">
           <Field label="类别">
             <SearchableSelect
-              options={[{ id: '', label: '全部类别' }, ...categories.map(c => ({ id: c, label: c }))]}
+              options={[{ value: '', label: '全部类别' }, ...categories.map(c => ({ value: c, label: c }))]}
               value={filterCategory}
-              onChange={(v) => setFilterCategory(v === 0 ? '' : String(v))}
-              clearValue=""
+              onChange={(v) => setFilterCategory(v === null ? '' : String(v))}
             />
           </Field>
         </div>
         <div className="w-36">
           <Field label="状态">
             <SearchableSelect
-              options={[{ id: '', label: '全部状态' }, ...statuses.map(s => ({ id: s, label: s }))]}
+              options={[{ value: '', label: '全部状态' }, ...statuses.map(s => ({ value: s, label: s }))]}
               value={filterStatus}
-              onChange={(v) => setFilterStatus(v === 0 ? '' : String(v))}
-              clearValue=""
+              onChange={(v) => setFilterStatus(v === null ? '' : String(v))}
             />
           </Field>
         </div>
@@ -385,8 +383,7 @@ export default function AssetsPage() {
             <SearchableSelect
               options={userFilterOptions}
               value={filterUserId}
-              onChange={(v) => setFilterUserId(v === 0 ? '' : String(v))}
-              clearValue=""
+              onChange={(v) => setFilterUserId(v === null ? '' : String(v))}
             />
           </Field>
         </div>
@@ -519,11 +516,10 @@ export default function AssetsPage() {
                       <div>
                         <label className="block text-[11px] text-gray-600 dark:text-gray-400 mb-1.5">{action === '领用' ? '领用员工' : '调拨给'} <span className="text-red-500">*</span></label>
                         <SearchableSelect
-                          options={users.map(u => ({ id: String(u.id), label: u.name || u.username }))}
+                          options={users.map(u => ({ value: String(u.id), label: u.name || u.username }))}
                           value={actionUserId}
-                          onChange={(v) => setActionUserId(v === 0 ? '' : String(v))}
+                          onChange={(v) => setActionUserId(v === null ? '' : String(v))}
                           placeholder="选择员工"
-                          clearValue=""
                         />
                       </div>
                     )}
@@ -713,10 +709,9 @@ export default function AssetsPage() {
               </div>
               <Field label="币种">
                 <SearchableSelect
-                  options={['CNY', 'USD', 'HKD', 'EUR'].map(c => ({ id: c, label: c }))}
+                  options={['CNY', 'USD', 'HKD', 'EUR'].map(c => ({ value: c, label: c }))}
                   value={form.currency}
-                  onChange={(v) => setForm({ ...form, currency: v === 0 ? '' : String(v) })}
-                  clearValue=""
+                  onChange={(v) => setForm({ ...form, currency: v === null ? '' : String(v) })}
                 />
               </Field>
             </div>
@@ -745,18 +740,16 @@ export default function AssetsPage() {
                 <SearchableSelect
                   options={userOptions}
                   value={form.user_id}
-                  onChange={(v) => setForm({ ...form, user_id: v === 0 ? '' : String(v) })}
+                  onChange={(v) => setForm({ ...form, user_id: v === null ? '' : String(v) })}
                   placeholder="选择使用人"
-                  clearValue=""
                 />
               </Field>
               <Field label="采购供应商">
                 <SearchableSelect
                   options={supplierOptions}
                   value={form.supplier_id}
-                  onChange={(v) => setForm({ ...form, supplier_id: v === 0 ? '' : String(v) })}
+                  onChange={(v) => setForm({ ...form, supplier_id: v === null ? '' : String(v) })}
                   placeholder="选择供应商"
-                  clearValue=""
                 />
               </Field>
             </div>

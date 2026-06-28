@@ -93,18 +93,21 @@ def _write_log(
     db.commit()
 
 
+# 需要额度管控的假期类型（年假/调休按余额，法定假期按 HR 核准额度）
+BALANCE_CONTROLLED_TYPES = ("年假", "调休", "婚假", "产假", "陪产假", "丧假")
+
+
 def apply_leave(
     leave: LeaveRequest, db: Session, operator_id: Optional[int] = None,
 ) -> Optional[LeaveBalance]:
-    """请假审批通过后扣减额度。返回更新后的余额，额度不足返回 None。"""
+    """请假审批通过后扣减额度。返回更新后的余额，额度不足抛 ValueError。"""
     year = leave.start_at.year
     bal = get_or_create_balance(leave.user_id, leave.leave_type, year, db)
-    if bal.used_hours + leave.hours > bal.total_hours:
-        # 额度不足：允许透支（used 可超过 total），但记录警告
-        logger.warning(
-            "请假 #%s 额度透支：用户 %s %s 假期余额 %.2f，申请 %.2f",
-            leave.id, leave.user_id, leave.leave_type,
-            bal.total_hours - bal.used_hours, leave.hours,
+    remaining = bal.total_hours - bal.used_hours
+    if leave.leave_type in BALANCE_CONTROLLED_TYPES and leave.hours > remaining:
+        # 额度不足：拒绝扣减（理论上 submit_leave_approval 已拦截，此处为双保险）
+        raise ValueError(
+            f"{leave.leave_type}额度不足：剩余 {round(remaining, 1)} 小时，本次申请 {leave.hours} 小时"
         )
     bal.used_hours = round(bal.used_hours + leave.hours, 2)
     bal.updated_at = now()

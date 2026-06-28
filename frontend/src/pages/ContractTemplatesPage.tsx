@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  Plus, X, Loader2, FileText, Pencil, Trash2, ToggleLeft, ToggleRight,
+  Plus, X, Loader2, Pencil, Trash2, ToggleLeft, ToggleRight,
   LayoutTemplate, Tag, AlignLeft, CheckCircle2,
 } from 'lucide-react'
 import { useToast } from '../contexts/ToastContext'
@@ -76,7 +76,7 @@ export default function ContractTemplatesPage() {
         </div>
         <button
           onClick={() => { setEditingTpl(null); setShowEditor(true) }}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-500 transition-colors"
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-accent-blue text-white text-xs font-bold hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 transition-colors"
         >
           <Plus size={14} strokeWidth={2.5} />新建模板
         </button>
@@ -248,12 +248,11 @@ function TemplateEditorModal({ template, onClose, onSaved }: TemplateEditorModal
             <label className="block text-[11px] text-gray-500 uppercase tracking-wider mb-1">合同类型</label>
             <SearchableSelect
               options={[
-                { id: '', label: '选择类型' },
-                ...['服务合同', '采购合同', '销售合同', '保密协议', '合作协议', '劳动合同', '租赁合同', '其他'].map(c => ({ id: c, label: c })),
+                { value: '', label: '选择类型' },
+                ...['服务合同', '采购合同', '销售合同', '保密协议', '合作协议', '劳动合同', '租赁合同', '其他'].map(c => ({ value: c, label: c })),
               ]}
               value={category}
-              onChange={(v) => setCategory(v === 0 ? '' : String(v))}
-              clearValue=""
+              onChange={(v) => setCategory(v === null ? '' : String(v))}
             />
           </div>
           <div className="flex-1">
@@ -288,7 +287,7 @@ function TemplateEditorModal({ template, onClose, onSaved }: TemplateEditorModal
             取消
           </button>
           <button onClick={handleSave} disabled={saving || !name.trim()}
-            className="px-4 py-1.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 flex items-center gap-1.5 transition-colors">
+            className="px-4 py-1.5 rounded-lg text-xs font-bold text-white bg-accent-blue hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 disabled:opacity-40 flex items-center gap-1.5 transition-colors">
             {saving ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
             {saving ? '保存中…' : (template ? '更新模板' : '创建模板')}
           </button>

@@ -167,7 +167,7 @@ export default function SealsPage() {
         right={
           <button
             onClick={openCreate}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-red-500 to-orange-500 text-white text-sm font-medium hover:opacity-90 transition-opacity"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-blue text-white text-sm font-medium hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 transition-opacity"
           >
             <Plus size={16} /> 新建用印
           </button>
@@ -184,7 +184,7 @@ export default function SealsPage() {
               key={t.key}
               onClick={() => setScope(t.key)}
               className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
-                scope === t.key ? 'bg-bg-card text-white shadow-sm' : 'text-gray-500 hover:text-gray-300'
+                scope === t.key ? 'bg-accent-blue/15 text-accent-blue' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
               }`}
             >
               {t.label}
@@ -272,7 +272,7 @@ export default function SealsPage() {
                   <button
                     onClick={() => submitApproval(detail)}
                     disabled={acting}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-500 text-white text-xs font-bold hover:bg-red-600 disabled:opacity-50 transition-colors"
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-blue text-white text-xs font-bold hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 disabled:opacity-50 transition-colors"
                   >
                     {acting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} 提交审批
                   </button>
@@ -398,7 +398,7 @@ export default function SealsPage() {
               <button
                 onClick={save}
                 disabled={saving}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-red-500 to-orange-500 text-white text-xs font-bold hover:opacity-90 disabled:opacity-50 transition-opacity"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-blue text-white text-xs font-bold hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 disabled:opacity-50 transition-opacity"
               >
                 {saving ? <Loader2 size={14} className="animate-spin" /> : null}
                 {editingId ? '保存' : '创建草稿'}

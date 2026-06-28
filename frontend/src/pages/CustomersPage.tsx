@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Search as SearchIcon, Plus, X, Loader2, Trash2, Sparkles, Globe, Building2, Users, FileText, TrendingUp, Pencil, Image, RefreshCw, Filter, ChevronDown, Brain, CheckCircle2, Globe2, BookOpen, ExternalLink } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
+import { Search as SearchIcon, Plus, X, Loader2, Trash2, Sparkles, Globe, Building2, Users, FileText, TrendingUp, Pencil, Image, RefreshCw, Filter, Brain, CheckCircle2, Globe2, ExternalLink } from 'lucide-react'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
 import RichTextEditor from '../components/RichTextEditor'
@@ -668,12 +667,11 @@ export default function CustomersPage() {
             {memberList.length > 1 && (
               <SearchableSelect
                 options={[
-                  { id: '', label: '全部成员' },
-                  ...memberList.map(m => ({ id: String(m.id), label: m.name || m.username })),
+                  { value: '', label: '全部成员' },
+                  ...memberList.map(m => ({ value: String(m.id), label: m.name || m.username })),
                 ]}
                 value={selectedUserId}
-                onChange={(v) => setSelectedUserId(v === 0 ? '' : String(v))}
-                clearValue=""
+                onChange={(v) => setSelectedUserId(v === null ? '' : String(v))}
               />
             )}
             <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-bg-hover border border-border focus-within:border-[#3B82F6]/50 transition-colors">
@@ -968,7 +966,7 @@ export default function CustomersPage() {
                         </div>
                         <div className="flex items-center gap-2">
                           <button onClick={() => saveContact(c.id)}
-                            className="px-3 py-1 rounded bg-[#3B82F6] text-[#fff] text-[11px] hover:bg-blue-600">保存</button>
+                            className="px-3 py-1 rounded bg-accent-blue text-white text-[11px] hover:bg-blue-600">保存</button>
                           <button onClick={() => { setEditingContactId(null); setShowAddContact(false); setContactForm({ name: '', phone: '', email: '', position: '', is_primary: false }) }}
                             className="px-3 py-1 rounded bg-bg-hover text-gray-400 text-[11px] hover:text-white">取消</button>
                         </div>
@@ -1121,7 +1119,7 @@ export default function CustomersPage() {
                   {form.name.trim() && !fetchingCompanyInfo && (
                     <button
                       onClick={handleFetchCompanyInfo}
-                      className="flex items-center gap-1 px-3 py-2 rounded-lg bg-bg-hover border border-border text-xs text-[#8B5CF6] hover:text-white hover:bg-[#8B5CF6]/10 transition-colors whitespace-nowrap"
+                      className="flex items-center gap-1 px-3 py-2 rounded-lg bg-bg-hover border border-border text-xs text-accent-blue hover:text-white hover:bg-accent-blue/10 transition-colors whitespace-nowrap"
                       title="获取公司详情"
                     >
                       <Sparkles size={13} />获取详情
@@ -1235,10 +1233,9 @@ export default function CustomersPage() {
               <div className="pt-2 border-t border-border">
                 <label className="block text-xs text-gray-400 mb-1">状态</label>
                 <SearchableSelect
-                  options={statusOptions.map(s => ({ id: s, label: s }))}
+                  options={statusOptions.map(s => ({ value: s, label: s }))}
                   value={form.status}
-                  onChange={(v) => setForm({ ...form, status: v === 0 ? '' : String(v) })}
-                  clearValue=""
+                  onChange={(v) => setForm({ ...form, status: v === null ? '' : String(v) })}
                 />
               </div>
 

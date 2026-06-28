@@ -15,6 +15,7 @@ from app.models.user import User
 from app.auth import get_current_user, has_permission
 from app.services import leave_balance_service
 from app.routers.logs import write_log
+from app.utils.time import now
 
 logger = logging.getLogger("worktrack")
 
@@ -61,9 +62,39 @@ def get_my_balances(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session),
 ):
-    """查看当前用户自己的额度"""
-    from datetime import datetime
-    y = year or datetime.now().year
+    """查看当前用户自己的额度。
+
+    年假懒初始化：若用户已录入 first_work_date 但 HR 未发放本年度年假
+    （LeaveBalance 不存在），自动按法定工龄发放并写日志。
+    HR 后续仍可通过「批量发放」或「手动调整」覆盖。
+    """
+    y = year or now().year
+
+    # 年假懒初始化：仅当记录完全不存在时自动发放（不覆盖 HR 已存在的 total_hours=0 记录）
+    has_annual = db.exec(
+        select(LeaveBalance).where(
+            LeaveBalance.user_id == current_user.id,
+            LeaveBalance.leave_type == "年假",
+            LeaveBalance.year == y,
+        )
+    ).first()
+    if not has_annual and current_user.first_work_date:
+        statutory_days = leave_balance_service.statutory_annual_leave_days(
+            current_user.first_work_date, y,
+        )
+        if statutory_days > 0:
+            leave_balance_service.set_balance_total(
+                current_user.id, "年假", y,
+                statutory_days * leave_balance_service.HOURS_PER_DAY,
+                f"{y} 年度按法定工龄自动发放年假 {statutory_days} 天",
+                operator_id=current_user.id, db=db,
+            )
+            logger.info(
+                "用户 %s (%s) 自动发放 %s 年度年假 %s 天（first_work_date=%s）",
+                current_user.id, current_user.username, y, statutory_days,
+                current_user.first_work_date,
+            )
+
     rows = db.exec(
         select(LeaveBalance).where(
             LeaveBalance.user_id == current_user.id,

@@ -29,6 +29,7 @@ export interface SimpleUser {
   username: string
   name: string
   department_id: number | null
+  is_active?: boolean
 }
 
 export interface UserCreatePayload {
@@ -188,6 +189,8 @@ export const MODULE_LABELS: Record<string, string> = {
   purchase: '采购管理',
   asset: '资产管理',
   purchase_supplier: '采购供应商',
+  hire: '员工入职',
+  approval: '审批流配置',
 }
 
 export const PERM_GROUPS = [
@@ -197,4 +200,5 @@ export const PERM_GROUPS = [
   'management', 'share', 'feedback', 'payment', 'seal',
   // OA 办公模块
   'leave', 'overtime', 'expense', 'trip', 'purchase', 'asset', 'purchase_supplier',
+  'hire', 'approval',
 ] as const

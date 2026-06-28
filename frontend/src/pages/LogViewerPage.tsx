@@ -108,23 +108,21 @@ export default function LogViewerPage() {
         <Filter size={13} className="text-gray-500" />
         <SearchableSelect
           options={[
-            { id: '', label: '全部级别' },
-            { id: 'error', label: '🔴 错误' },
-            { id: 'warning', label: '🟡 警告' },
-            { id: 'info', label: '🔵 信息' },
+            { value: '', label: '全部级别' },
+            { value: 'error', label: '🔴 错误' },
+            { value: 'warning', label: '🟡 警告' },
+            { value: 'info', label: '🔵 信息' },
           ]}
           value={filterLevel}
-          onChange={(v) => setFilterLevel(v === 0 ? '' : String(v))}
-          clearValue=""
+          onChange={(v) => setFilterLevel(v === null ? '' : String(v))}
         />
         <SearchableSelect
           options={[
-            { id: '', label: '全部分类' },
-            ...Object.entries(CATEGORY_LABELS).map(([k, v]) => ({ id: k, label: v })),
+            { value: '', label: '全部分类' },
+            ...Object.entries(CATEGORY_LABELS).map(([k, v]) => ({ value: k, label: v })),
           ]}
           value={filterCategory}
-          onChange={(v) => setFilterCategory(v === 0 ? '' : String(v))}
-          clearValue=""
+          onChange={(v) => setFilterCategory(v === null ? '' : String(v))}
         />
       </div>
 

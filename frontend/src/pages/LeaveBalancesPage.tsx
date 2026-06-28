@@ -58,8 +58,8 @@ const DEFAULT_LEAVE_TYPES = ['年假', '事假', '病假', '调休', '婚假', '
 const CHANGE_TYPE_META: Record<string, { label: string; cls: string }> = {
   adjust:          { label: '管理员调整', cls: 'text-gray-400 bg-gray-500/10 border-gray-500/30' },
   grant:           { label: '授予',       cls: 'text-green-400 bg-green-500/10 border-green-500/30' },
-  leave_used:      { label: '扣减',       cls: 'text-orange-400 bg-orange-500/10 border-orange-500/30' },
-  leave_cancelled: { label: '返还',       cls: 'text-blue-400 bg-blue-500/10 border-blue-500/30' },
+  leave_used:      { label: '扣减',       cls: 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-500/10 dark:text-orange-400 dark:border-orange-500/20' },
+  leave_cancelled: { label: '返还',       cls: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20' },
 }
 
 const CURRENT_YEAR = new Date().getFullYear()
@@ -274,11 +274,11 @@ export default function LeaveBalancesPage() {
 
   // 下拉选项
   const userFilterOptions = [
-    { id: '', label: '全部用户' },
-    ...users.map(u => ({ id: String(u.id), label: u.name || u.username, sub: u.department })),
+    { value: '', label: '全部用户' },
+    ...users.map(u => ({ value: String(u.id), label: u.name || u.username, hint: u.department })),
   ]
-  const userSelectOptions = users.map(u => ({ id: String(u.id), label: u.name || u.username, sub: u.department }))
-  const leaveTypeFilterOptions = [{ id: '', label: '全部类型' }, ...leaveTypes.map(t => ({ id: t, label: t }))]
+  const userSelectOptions = users.map(u => ({ value: String(u.id), label: u.name || u.username, hint: u.department }))
+  const leaveTypeFilterOptions = [{ value: '', label: '全部类型' }, ...leaveTypes.map(t => ({ value: t, label: t }))]
 
   // 无权限
   if (!canManage) {
@@ -341,7 +341,7 @@ export default function LeaveBalancesPage() {
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
-              tab === t.key ? 'bg-bg-card text-white shadow-sm' : 'text-gray-500 hover:text-gray-300'
+              tab === t.key ? 'bg-accent-blue/15 text-accent-blue' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
             }`}
           >
             <t.icon size={13} /> {t.label}
@@ -369,8 +369,7 @@ export default function LeaveBalancesPage() {
                 <SearchableSelect
                   options={leaveTypeFilterOptions}
                   value={filterLeaveType}
-                  onChange={(v) => setFilterLeaveType(v === 0 ? '' : String(v))}
-                  clearValue=""
+                  onChange={(v) => setFilterLeaveType(v === null ? '' : String(v))}
                 />
               </Field>
             </div>
@@ -379,8 +378,7 @@ export default function LeaveBalancesPage() {
                 <SearchableSelect
                   options={userFilterOptions}
                   value={filterUserId}
-                  onChange={(v) => setFilterUserId(v === 0 ? '' : String(v))}
-                  clearValue=""
+                  onChange={(v) => setFilterUserId(v === null ? '' : String(v))}
                 />
               </Field>
             </div>
@@ -444,8 +442,7 @@ export default function LeaveBalancesPage() {
                 <SearchableSelect
                   options={userFilterOptions}
                   value={logFilterUserId}
-                  onChange={(v) => setLogFilterUserId(v === 0 ? '' : String(v))}
-                  clearValue=""
+                  onChange={(v) => setLogFilterUserId(v === null ? '' : String(v))}
                 />
               </Field>
             </div>
@@ -454,8 +451,7 @@ export default function LeaveBalancesPage() {
                 <SearchableSelect
                   options={leaveTypeFilterOptions}
                   value={logFilterLeaveType}
-                  onChange={(v) => setLogFilterLeaveType(v === 0 ? '' : String(v))}
-                  clearValue=""
+                  onChange={(v) => setLogFilterLeaveType(v === null ? '' : String(v))}
                 />
               </Field>
             </div>
@@ -517,9 +513,8 @@ export default function LeaveBalancesPage() {
               <SearchableSelect
                 options={userSelectOptions}
                 value={adjustForm.user_id}
-                onChange={(v) => setAdjustForm({ ...adjustForm, user_id: v === 0 ? '' : String(v) })}
+                onChange={(v) => setAdjustForm({ ...adjustForm, user_id: v === null ? '' : String(v) })}
                 placeholder="选择员工"
-                clearValue=""
               />
             </Field>
 

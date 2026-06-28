@@ -44,7 +44,7 @@ class Settings(BaseSettings):
 
     # 安全配置
     allow_registration: bool = False
-    cors_origins: str = "http://localhost:5173"
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://10.10.10.12:5173"
     login_max_attempts: int = 5
     login_lockout_minutes: int = 30
     password_min_length: int = 8

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
-  Building2, Plus, X, Edit3, Trash2, Loader2, Search,
+  Building2, Plus, Edit3, Trash2, Loader2, Search,
   DollarSign, Briefcase, Globe, Phone, Mail,
   ChevronRight, BarChart3, Key, Cpu, FileText, AlertTriangle,
   ExternalLink, Network, GitBranch,
@@ -11,6 +11,7 @@ import { ApprovalTimeline } from '../components/approval/ApprovalTimeline'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
+import type { Channel } from './ChannelsPage'
 
 /* ──── 类型 ──── */
 interface Supplier {
@@ -108,7 +109,7 @@ function fmtAmt(v: number | null | undefined, currency?: string) {
 }
 
 /** 合同到期状态 */
-function getContractStatus(start: string | null, end: string | null): {
+function getContractStatus(_start: string | null, end: string | null): {
   state: 'normal' | 'expiring' | 'expired' | 'none'
   daysLeft: number | null
   label: string
@@ -412,7 +413,7 @@ export default function SuppliersPage() {
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
-              tab === t.key ? 'bg-bg-card text-white shadow-sm' : 'text-gray-500 hover:text-gray-300'
+              tab === t.key ? 'bg-accent-blue/15 text-accent-blue' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
             }`}
           >
             <t.icon size={12} />{t.label}
@@ -443,16 +444,14 @@ export default function SuppliersPage() {
                   />
                 </div>
                 <SearchableSelect
-                  options={[{ id: '', label: '全部状态' }, ...STATUSES.map(s => ({ id: s, label: s }))]}
+                  options={[{ value: '', label: '全部状态' }, ...STATUSES.map(s => ({ value: s, label: s }))]}
                   value={filterStatus}
-                  onChange={(v) => setFilterStatus(v === 0 ? '' : String(v))}
-                  clearValue=""
+                  onChange={(v) => setFilterStatus(v === null ? '' : String(v))}
                 />
                 <SearchableSelect
-                  options={[{ id: '', label: '全部类型' }, ...CATEGORIES.map(c => ({ id: c, label: c }))]}
+                  options={[{ value: '', label: '全部类型' }, ...CATEGORIES.map(c => ({ value: c, label: c }))]}
                   value={filterCategory}
-                  onChange={(v) => setFilterCategory(v === 0 ? '' : String(v))}
-                  clearValue=""
+                  onChange={(v) => setFilterCategory(v === null ? '' : String(v))}
                 />
               </div>
             </div>
@@ -610,7 +609,7 @@ export default function SuppliersPage() {
                         <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 font-bold">{t.count}</span>
                       )}
                       {detailTab === t.key && (
-                        <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-t" />
+                        <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent-blue rounded-t" />
                       )}
                     </button>
                   ))}
@@ -993,10 +992,10 @@ export default function SuppliersPage() {
                   <input type="text" value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value }))} placeholder="如 openai" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" />
                 </Field>
                 <Field label="类型">
-                  <SearchableSelect options={CATEGORIES.map(c => ({ id: c, label: c }))} value={form.category} onChange={(v) => setForm(f => ({ ...f, category: v === 0 ? '' : String(v) }))} clearValue="" />
+                  <SearchableSelect options={CATEGORIES.map(c => ({ value: c, label: c }))} value={form.category} onChange={(v) => setForm(f => ({ ...f, category: v === null ? '' : String(v) }))} />
                 </Field>
                 <Field label="状态">
-                  <SearchableSelect options={STATUSES.map(s => ({ id: s, label: s }))} value={form.status} onChange={(v) => setForm(f => ({ ...f, status: v === 0 ? '' : String(v) }))} clearValue="" />
+                  <SearchableSelect options={STATUSES.map(s => ({ value: s, label: s }))} value={form.status} onChange={(v) => setForm(f => ({ ...f, status: v === null ? '' : String(v) }))} />
                 </Field>
               </div>
             </div>
@@ -1022,7 +1021,7 @@ export default function SuppliersPage() {
               <SectionLabel>商务信息</SectionLabel>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="结算币种">
-                  <SearchableSelect options={CURRENCIES.map(c => ({ id: c, label: `${c} - ${CURRENCY_META[c]?.name || c}` }))} value={form.settlement_currency} onChange={(v) => setForm(f => ({ ...f, settlement_currency: v === 0 ? '' : String(v) }))} clearValue="" />
+                  <SearchableSelect options={CURRENCIES.map(c => ({ value: c, label: `${c} - ${CURRENCY_META[c]?.name || c}` }))} value={form.settlement_currency} onChange={(v) => setForm(f => ({ ...f, settlement_currency: v === null ? '' : String(v) }))} />
                 </Field>
                 <Field label="付款条件">
                   <input type="text" value={form.payment_terms} onChange={e => setForm(f => ({ ...f, payment_terms: e.target.value }))} placeholder="如 月结30天" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" />
@@ -1048,7 +1047,7 @@ export default function SuppliersPage() {
                     <input type="text" value={form.models_provided} onChange={e => setForm(f => ({ ...f, models_provided: e.target.value }))} placeholder="GPT-4o,Claude-3.5" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" />
                   </Field>
                   <Field label="认证方式">
-                    <SearchableSelect options={[{ id: '', label: '请选择' }, ...AUTH_TYPES.map(a => ({ id: a, label: a }))]} value={form.auth_type} onChange={(v) => setForm(f => ({ ...f, auth_type: v === 0 ? '' : String(v) }))} clearValue="" />
+                    <SearchableSelect options={[{ value: '', label: '请选择' }, ...AUTH_TYPES.map(a => ({ value: a, label: a }))]} value={form.auth_type} onChange={(v) => setForm(f => ({ ...f, auth_type: v === null ? '' : String(v) }))} />
                   </Field>
                 </div>
               </div>

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import {
   Database, Download, Upload, FileJson, FileSpreadsheet, CheckCircle, AlertCircle,
-  Loader2, HardDrive, FileText, Clock, Trash2, Eye, History,
+  Loader2, HardDrive, FileText, Clock, Eye, History,
 } from 'lucide-react'
 
 type TabKey = 'excel' | 'backup' | 'restore'
@@ -20,11 +20,13 @@ interface BackupRecord {
   id: number
   backup_type: string
   filename: string
-  size: number
+  file_path: string
+  size_bytes: number
   size_label: string
   model_count: number
   record_count: number
   modules: string | null
+  operator_id: number
   operator_name: string
   note: string | null
   file_exists: boolean
@@ -368,7 +370,7 @@ function BackupTab({ fetchWithAuth, canExport, onError, onSuccess }: any) {
       const res = await fetchWithAuth('/api/v1/data/backup/history')
       if (!res.ok) throw new Error('获取备份历史失败')
       const data = await res.json()
-      setHistory(data.records || [])
+      setHistory(Array.isArray(data) ? data : [])
     } catch (e: any) {
       onError(e.message)
     } finally {

@@ -75,7 +75,6 @@ interface ContractTemplate {
 }
 
 interface PaymentNode { phase?: string; percent?: number; condition?: string }
-interface ExtractionMeta { confidence?: number; source_text?: string }
 
 interface CustomerSimple { id: number; name: string }
 interface ProjectSimple { id: number; name: string; customer_id: number | null }
@@ -163,13 +162,6 @@ const CONTRACT_TYPE_OPTIONS = [
   '委托协议', '补充协议', '战略合作协议', '股权/投资协议', '其他',
 ]
 
-function confidenceColor(c?: number): string {
-  if (c == null) return 'text-gray-600'
-  if (c >= 0.85) return 'text-green-600 dark:text-green-400'
-  if (c >= 0.6) return 'text-yellow-700 dark:text-yellow-400'
-  return 'text-red-600 dark:text-red-400'
-}
-
 function safeJsonParse<T = any>(s: string | null | undefined, fallback: T): T {
   if (!s) return fallback
   try { return JSON.parse(s) as T } catch { return fallback }
@@ -205,13 +197,12 @@ export default function ContractsPage() {
   const [showForm, setShowForm] = useState(false)
   const [editingContract, setEditingContract] = useState<ContractRecord | null>(null)
   const [expandedId, setExpandedId] = useState<number | null>(null)
-  const [parsingId, setParsingId] = useState<number | null>(null)
   const [previewId, setPreviewId] = useState<number | null>(null)
   const [previewUrl, setPreviewUrl] = useState('')
   const [previewText, setPreviewText] = useState('')
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewName, setPreviewName] = useState('')
-  const [previewType, setPreviewType] = useState('')
+  const [, setPreviewType] = useState('')
   const [submitPreview, setSubmitPreview] = useState<{
     contractId: number
     nodes: { name: string; approver_type: string; approver_names: string[]; node_kind?: string }[]
@@ -500,7 +491,6 @@ export default function ContractsPage() {
           {contracts.map(c => {
             const ps = c.parse_status || 'pending'
             const isParsing = ps === 'parsing'
-            const meta = safeJsonParse<Record<string, ExtractionMeta>>(c.extraction_meta, {})
             const isSelfMade = c.source === 'self_made'
             const hasSignedCopy = !!c.signed_file_path
             const canPrintOrSign = c.status === '生效中'
@@ -525,7 +515,7 @@ export default function ContractsPage() {
                       )}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                      <span className="text-[11px] text-gray-500">{getCustomerName(c.customer_id)}</span>
+                      <span className="text-[11px] text-gray-500">{getCustomerName(c.customer_id ?? 0)}</span>
                       {c.contract_amount && <span className="text-[11px] text-gray-500">{formatAmount(c.contract_amount, c.currency, c.amount_unit)}</span>}
                       {c.sign_date && <span className="text-[11px] text-gray-500">{c.sign_date}</span>}
                     </div>
@@ -1071,10 +1061,9 @@ function ArchiveFormModal({ customers, onClose, onSaved }: ArchiveFormModalProps
           <div>
             <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1.5">合同类型</label>
             <SearchableSelect
-              options={[{ id: '', label: '不指定类型' }, ...CONTRACT_TYPE_OPTIONS.map(t => ({ id: t, label: t }))]}
+              options={[{ value: '', label: '不指定类型' }, ...CONTRACT_TYPE_OPTIONS.map(t => ({ value: t, label: t }))]}
               value={form.contract_type}
-              onChange={v => setForm(p => ({ ...p, contract_type: v === 0 ? '' : String(v) }))}
-              clearValue=""
+              onChange={v => setForm(p => ({ ...p, contract_type: v === null ? '' : String(v) }))}
               placeholder="请选择类型"
             />
           </div>
@@ -1097,7 +1086,7 @@ function ArchiveFormModal({ customers, onClose, onSaved }: ArchiveFormModalProps
               <div>
                 <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1.5">关联客户</label>
                 <SearchableSelect
-                  options={[{ id: 0, label: '不关联客户' }, ...customers.map(c => ({ id: c.id, label: c.name }))]}
+                  options={[{ value: 0, label: '不关联客户' }, ...customers.map(c => ({ value: c.id, label: c.name }))]}
                   value={form.customer_id}
                   onChange={v => setForm(p => ({ ...p, customer_id: (v as number) || 0 }))}
                   placeholder="选择客户（选填）"
@@ -1158,15 +1147,14 @@ function ArchiveFormModal({ customers, onClose, onSaved }: ArchiveFormModalProps
                 <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1.5">货币</label>
                 <SearchableSelect
                   options={[
-                    { id: 'CNY', label: '人民币 CNY' },
-                    { id: 'USD', label: '美元 USD' },
-                    { id: 'EUR', label: '欧元 EUR' },
-                    { id: 'JPY', label: '日元 JPY' },
-                    { id: 'HKD', label: '港币 HKD' },
+                    { value: 'CNY', label: '人民币 CNY' },
+                    { value: 'USD', label: '美元 USD' },
+                    { value: 'EUR', label: '欧元 EUR' },
+                    { value: 'JPY', label: '日元 JPY' },
+                    { value: 'HKD', label: '港币 HKD' },
                   ]}
                   value={form.currency}
-                  onChange={v => setForm(p => ({ ...p, currency: v === 0 ? 'CNY' : String(v) }))}
-                  clearValue="CNY"
+                  onChange={v => setForm(p => ({ ...p, currency: v === null ? 'CNY' : String(v) }))}
                 />
               </div>
             </div>
@@ -1335,7 +1323,7 @@ function ContractFormModal({ editing, customers, projects, templates, onClose, o
         {/* 头部 */}
         <div className="px-6 pt-4 pb-3 border-b border-border/15 shrink-0 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-[#3B82F6] flex items-center justify-center text-white shadow-sm shrink-0">
+            <div className="w-9 h-9 rounded-xl bg-accent-blue flex items-center justify-center text-white shadow-sm shrink-0">
               <FileSignature size={17} />
             </div>
             <div className="min-w-0">
@@ -1499,7 +1487,7 @@ function ContractFormModal({ editing, customers, projects, templates, onClose, o
                           {typeConfig.showCustomer && (
                             <FormField label="关联客户" icon={Building2} optional>
                               <SearchableSelect
-                                options={[{ id: 0, label: '不关联客户' }, ...customers.map(c => ({ id: c.id, label: c.name }))]}
+                                options={[{ value: 0, label: '不关联客户' }, ...customers.map(c => ({ value: c.id, label: c.name }))]}
                                 value={form.customer_id || 0}
                                 onChange={(v) => setForm({ ...form, customer_id: (v as number) || 0, project_id: 0 })}
                                 placeholder="选择关联客户" searchPlaceholder="搜索客户..." emptyText="没有匹配客户"
@@ -1635,7 +1623,7 @@ function ContractFormModal({ editing, customers, projects, templates, onClose, o
                     {typeConfig.showCustomer && (
                       <FormField label="关联客户" icon={Building2} optional>
                         <SearchableSelect
-                          options={[{ id: 0, label: '不关联客户' }, ...customers.map(c => ({ id: c.id, label: c.name }))]}
+                          options={[{ value: 0, label: '不关联客户' }, ...customers.map(c => ({ value: c.id, label: c.name }))]}
                           value={form.customer_id || 0}
                           onChange={(v) => setForm({ ...form, customer_id: (v as number) || 0, project_id: 0 })}
                           placeholder="选择关联客户" searchPlaceholder="按客户名称搜索..." emptyText="没有匹配客户"
@@ -1645,7 +1633,7 @@ function ContractFormModal({ editing, customers, projects, templates, onClose, o
                     {typeConfig.showProject && customersProjects.length > 0 && (
                       <FormField label="关联项目" icon={Briefcase} optional>
                         <SearchableSelect
-                          options={[{ id: 0, label: '不关联项目' }, ...customersProjects.map(p => ({ id: p.id, label: p.name }))]}
+                          options={[{ value: 0, label: '不关联项目' }, ...customersProjects.map(p => ({ value: p.id, label: p.name }))]}
                           value={form.project_id || 0}
                           onChange={(v) => setForm({ ...form, project_id: (v as number) || 0 })}
                           placeholder="选择关联项目" searchPlaceholder="按项目名称搜索..." emptyText="该客户下暂无项目"
@@ -1686,10 +1674,10 @@ function ContractFormModal({ editing, customers, projects, templates, onClose, o
                     )}
                     <FormField label="币种" icon={Coins}>
                       <SearchableSelect
-                        options={[{ id: 'CNY', label: 'CNY 人民币' }, { id: 'USD', label: 'USD 美元' }, { id: 'EUR', label: 'EUR 欧元' }, { id: 'JPY', label: 'JPY 日元' }, { id: 'HKD', label: 'HKD 港币' }]}
+                        options={[{ value: 'CNY', label: 'CNY 人民币' }, { value: 'USD', label: 'USD 美元' }, { value: 'EUR', label: 'EUR 欧元' }, { value: 'JPY', label: 'JPY 日元' }, { value: 'HKD', label: 'HKD 港币' }]}
                         value={form.currency}
                         onChange={(v) => setForm({ ...form, currency: v as string })}
-                        placeholder="选择币种" searchable={false}
+                        placeholder="选择币种"
                       />
                     </FormField>
                     <FormField label="付款方式" icon={Banknote} optional>
@@ -1739,7 +1727,7 @@ function ContractFormModal({ editing, customers, projects, templates, onClose, o
           <div className="px-6 py-3.5 border-t border-border/15 shrink-0 bg-bg-hover/10 flex items-center justify-end gap-2">
             <button onClick={onClose} className="px-4 py-2 rounded-lg bg-bg-card hover:bg-bg-hover text-xs text-gray-400 border border-border/30 transition-colors cursor-pointer font-semibold">取消</button>
             <button onClick={handleSave} disabled={saving || !basicsValid}
-              className="px-4 py-2 rounded-lg bg-[#3B82F6] text-white text-xs font-bold hover:bg-blue-600 hover:shadow-md hover:shadow-blue-500/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 transition-all cursor-pointer">
+              className="px-4 py-2 rounded-lg bg-accent-blue text-white text-xs font-bold hover:bg-blue-600 hover:shadow-md hover:shadow-blue-500/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 transition-all cursor-pointer">
               {saving ? <Loader2 size={13} className="animate-spin" /> : <FileSignature size={13} />}
               {saving ? '保存中...' : (editing ? '更新合同' : source === 'self_made' ? '保存合同' : '保存并 AI 解析')}
             </button>

@@ -86,6 +86,8 @@ export function UserFormModal({ isOpen, editingUser, onClose }: UserFormModalPro
         leader_id: editingUser?.leader_id ?? null as number | null,
         department_id: editingUser?.department_id ?? null as number | null,
         job_title: editingUser?.job_title ?? null as string | null,
+        first_work_date: editingUser?.first_work_date ?? null as string | null,
+        hire_date: editingUser?.hire_date ?? null as string | null,
       })
       setShowPassword(false)
       setStep('basics')
@@ -370,13 +372,13 @@ export function UserFormModal({ isOpen, editingUser, onClose }: UserFormModalPro
                 <FormField label="所属组织部门" icon={Building2} hint="选择后将自动推荐部门负责人为汇报上级">
                   <SearchableSelect
                     options={[
-                      { id: 0, label: '暂不分配部门' },
+                      { value: 0, label: '暂不分配部门' },
                       ...departments.map(d => {
                         const mgrName = d.manager_id ? allUsers.find(u => u.id === d.manager_id)?.name || '未知' : null
                         return {
-                          id: d.id,
+                          value: d.id,
                           label: d.name,
-                          sub: mgrName ? `负责人: ${mgrName}` : '暂未指定负责人',
+                          hint: mgrName ? `负责人: ${mgrName}` : '暂未指定负责人',
                         }
                       }),
                     ]}
@@ -391,13 +393,13 @@ export function UserFormModal({ isOpen, editingUser, onClose }: UserFormModalPro
                 <FormField label="汇报上级领导" icon={UserCheck} hint={form.leader_id ? '由部门自动推断，可手动调整' : '选择部门后将自动推荐'}>
                   <SearchableSelect
                     options={[
-                      { id: 0, label: '暂不指定' },
+                      { value: 0, label: '暂不指定' },
                       ...allUsers
                         .filter(u => u.id !== editingUser?.id && u.is_active)
                         .map(u => ({
-                          id: u.id,
+                          value: u.id,
                           label: u.name || u.username,
-                          sub: `@${u.username}`,
+                          hint: `@${u.username}`,
                         })),
                     ]}
                     value={form.leader_id || 0}

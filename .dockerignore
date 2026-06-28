@@ -1,33 +1,34 @@
-# Node.js
-frontend/node_modules/
-frontend/dist/
+# 临时脚本与验证文件
+backend/_*.py
+backend/verify_*.py
+backend/debug_*.py
+backend/tmp_*.py
 
-# Python
-backend/venv/
-backend/.venv/
-backend/__pycache__/
-backend/app/__pycache__/
-backend/app/**/__pycache__/
-backend/**/__pycache__/
-backend/data/
-backend/uploads/
-backend/.env
+# Python 缓存
+**/__pycache__/
 **/*.pyc
+**/*.pyo
 
 # Git
 .git/
 .gitignore
 
-# IDE & OS
-.qoder/
+# 文档
+*.md
+!CLAUDE.md
+
+# IDE
 .vscode/
 .idea/
-.DS_Store
-*.md
-*.pdf
-*.docx
 
-# Docker
-docker-compose*.yml
-Dockerfile
-.dockerignore
+# 前端构建产物（镜像内重新构建）
+frontend/dist/
+frontend/node_modules/
+
+# 后端虚拟环境
+backend/.venv/
+backend/venv/
+
+# 测试
+**/.pytest_cache/
+**/test_*.py

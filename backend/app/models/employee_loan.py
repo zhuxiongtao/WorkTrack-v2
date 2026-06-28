@@ -7,6 +7,8 @@ from datetime import datetime, date
 from typing import Optional
 from sqlmodel import SQLModel, Field
 
+from app.utils.time import now
+
 
 class EmployeeLoan(SQLModel, table=True):
     __tablename__ = "employee_loan"
@@ -20,5 +22,5 @@ class EmployeeLoan(SQLModel, table=True):
     loan_date: date = Field(description="借款日期")
     reason: str = Field(default="", max_length=500, description="借款事由")
     status: str = Field(default="借款中", max_length=20, index=True)  # 借款中/部分抵消/已结清/已作废
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: now())
+    updated_at: datetime = Field(default_factory=lambda: now())

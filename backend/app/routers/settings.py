@@ -1771,6 +1771,181 @@ BRAND_DIR = app_settings.effective_brand_dir
 os.makedirs(BRAND_DIR, exist_ok=True)
 ALLOWED_IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico'}
 
+# apple-touch-icon 正方形版本文件名（与 logo 同目录）
+_TOUCH_ICON_NAME = "apple-touch-icon-192.png"
+
+
+def _svg_to_png(source_filepath: str, out_path: str) -> bool:
+    """将 SVG 渲染为 PNG（按其内在尺寸）。
+
+    依次尝试：
+    1. resvg（py-binding 自带原生库，跨平台可用）
+    2. cairosvg（需要原生 cairo 库，Windows 通常不可用）
+    3. svglib + reportlab（纯 Python，复杂 SVG 兼容性差）
+
+    成功返回 True，失败返回 False。
+    """
+    import logging
+    _logger = logging.getLogger("worktrack")
+    try:
+        with open(source_filepath, "rb") as f:
+            svg_bytes = f.read()
+        svg_text = svg_bytes.decode("utf-8", errors="replace")
+    except Exception:
+        _logger.warning("SVG 文件读取失败: %s", source_filepath, exc_info=True)
+        return False
+
+    # 1) resvg：自带原生库，无需系统依赖
+    try:
+        from resvg import render, usvg
+        opts = usvg.Options.default()
+        # 加载系统字体（SVG 中可能引用字体）
+        try:
+            opts.load_system_fonts()
+        except Exception:
+            pass
+        tree = usvg.Tree.from_str(svg_text, opts)
+        # transform 不影响输出位图尺寸，输出按 SVG 内在尺寸渲染
+        png_bytes = render(tree, (1, 0, 0, 1, 0, 0))
+        if png_bytes:
+            with open(out_path, "wb") as f:
+                f.write(png_bytes)
+            # 验证输出非空（resvg 有时会输出全透明 PNG）
+            from PIL import Image as _VImg
+            vimg = _VImg.open(out_path)
+            if vimg.mode == "RGBA":
+                _, _, _, alpha = vimg.split()
+                if min(alpha.getdata()) == 0 and max(alpha.getdata()) == 0:
+                    _logger.warning("resvg 输出全透明 PNG，视为转换失败")
+                    try:
+                        os.remove(out_path)
+                    except OSError:
+                        pass
+                    return False
+            _logger.info("SVG→PNG via resvg: %s", out_path)
+            return True
+    except Exception:
+        _logger.warning("resvg SVG 转换失败，尝试 cairosvg", exc_info=True)
+
+    # 2) cairosvg
+    try:
+        import cairosvg
+        cairosvg.svg2png(url=source_filepath, write_to=out_path)
+        _logger.info("SVG→PNG via cairosvg: %s", out_path)
+        return True
+    except (ImportError, OSError, Exception):
+        pass
+
+    # 3) svglib + reportlab
+    try:
+        from svglib.svglib import svg2rlg
+        from reportlab.graphics import renderPM
+        drawing = svg2rlg(source_filepath)
+        if drawing:
+            renderPM.drawToFile(drawing, out_path, fmt="PNG")
+            _logger.info("SVG→PNG via svglib: %s", out_path)
+            return True
+    except Exception:
+        _logger.warning("svglib SVG 转换失败", exc_info=True)
+
+    return False
+
+
+def _generate_square_touch_icon(source_filepath: str, site_title: str = "WorkTrack") -> None:
+    """将源 logo 处理为正方形 192x192 PNG，作为 iOS apple-touch-icon。
+
+    处理逻辑：
+    - 位图（PNG/JPEG/WebP/GIF）：Pillow 居中裁剪为正方形后缩放到 192x192
+    - SVG：先转 PNG（resvg / cairosvg / svglib），失败则用首字母占位图兜底
+    - 背景：使用主题深色 #101720 填充，避免透明区域在 iOS 主屏幕显示异常
+    - 输出 RGB 模式（iOS 不支持透明 PNG 做主屏图标）
+    """
+    import logging
+    _logger = logging.getLogger("worktrack")
+    ext = os.path.splitext(source_filepath)[1].lower()
+    out_path = os.path.join(BRAND_DIR, _TOUCH_ICON_NAME)
+    bg_color = (16, 23, 32)  # #101720 主题深色背景
+
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+
+        # SVG 需要先将矢量转为位图
+        if ext == ".svg":
+            tmp_png = os.path.join(BRAND_DIR, "_tmp_svg_render.png")
+            if not _svg_to_png(source_filepath, tmp_png):
+                _logger.warning("SVG 转 PNG 失败，生成首字母占位图作为 apple-touch-icon")
+                _generate_placeholder_icon(out_path, site_title, bg_color)
+                return
+            source_filepath = tmp_png
+
+        img = Image.open(source_filepath)
+        # 转为 RGBA 统一处理
+        if img.mode not in ("RGBA", "RGB"):
+            img = img.convert("RGBA")
+
+        # 居中裁剪为正方形
+        w, h = img.size
+        if w != h:
+            side = min(w, h)
+            left = (w - side) // 2
+            top = (h - side) // 2
+            img = img.crop((left, top, left + side, top + side))
+
+        # 缩放到 192x192
+        img = img.resize((192, 192), Image.LANCZOS)
+
+        # 创建带背景的画布，将 logo 居中合成（处理透明区域）
+        canvas = Image.new("RGBA", (192, 192), bg_color + (255,))
+        canvas.paste(img, (0, 0), img if img.mode == "RGBA" else None)
+        canvas = canvas.convert("RGB")
+
+        canvas.save(out_path, "PNG")
+        _logger.info("apple-touch-icon 已生成: %s", out_path)
+
+        # 清理 SVG 临时文件
+        if ext == ".svg":
+            try:
+                tmp_png = os.path.join(BRAND_DIR, "_tmp_svg_render.png")
+                if os.path.isfile(tmp_png):
+                    os.remove(tmp_png)
+            except OSError:
+                pass
+    except Exception:
+        _logger.warning("apple-touch-icon 生成失败: %s，使用占位图兜底", source_filepath, exc_info=True)
+        try:
+            _generate_placeholder_icon(out_path, site_title, bg_color)
+        except Exception:
+            pass
+
+
+def _generate_placeholder_icon(out_path: str, site_title: str, bg_color: tuple) -> None:
+    """生成带站点首字母的占位图标（SVG 转换失败时的兜底方案）"""
+    from PIL import Image, ImageDraw, ImageFont
+    canvas = Image.new("RGB", (192, 192), bg_color)
+    draw = ImageDraw.Draw(canvas)
+    # 取站点标题首字符
+    letter = (site_title or "W").strip()[0].upper()
+    # 尝试加载字体，失败用默认
+    font = None
+    for font_name in ["arial.ttf", "segoeui.ttf", "DejaVuSans.ttf"]:
+        try:
+            font = ImageFont.truetype(font_name, 110)
+            break
+        except Exception:
+            continue
+    if font is None:
+        font = ImageFont.load_default()
+    # 居中绘制文字
+    try:
+        bbox = draw.textbbox((0, 0), letter, font=font)
+        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        x = (192 - tw) // 2 - bbox[0]
+        y = (192 - th) // 2 - bbox[1]
+    except Exception:
+        x, y = 44, 35
+    draw.text((x, y), letter, fill=(255, 255, 255), font=font)
+    canvas.save(out_path, "PNG")
+
 
 class BrandConfigUpdate(BaseModel):
     site_title: str = ""
@@ -1852,6 +2027,16 @@ async def upload_brand_logo(file: UploadFile = File(...),
     with open(filepath, "wb") as f:
         f.write(content)
     logo_url = f"/api/v1/settings/branding/logo-file/{filename}"
+    # 同步生成正方形 192x192 apple-touch-icon（避免 iOS 添加到主屏幕时变形）
+    # 读取当前站点标题（SVG 转换失败时用首字母占位图兜底）
+    title_pref = db.exec(
+        select(SystemPreference).where(
+            SystemPreference.key == "brand_site_title",
+            SystemPreference.user_id == None,
+        )
+    ).first()
+    site_title = title_pref.value if title_pref else "WorkTrack"
+    _generate_square_touch_icon(filepath, site_title)
     # 写入系统偏好
     pref = db.exec(
         select(SystemPreference).where(
@@ -1878,8 +2063,22 @@ def serve_brand_logo(filename: str):
 
 @router.get("/branding/apple-touch-icon")
 def serve_apple_touch_icon(db: Session = Depends(get_session)):
-    """iOS Safari 添加到主屏幕图标（始终返回当前品牌 Logo）"""
-    # 1) 尝试读取自定义品牌 Logo
+    """iOS Safari 添加到主屏幕图标（始终返回当前品牌 Logo 的正方形版本）"""
+    # 1) 优先返回上传时预生成的正方形 apple-touch-icon-192.png
+    touch_icon_path = os.path.join(BRAND_DIR, _TOUCH_ICON_NAME)
+    if os.path.isfile(touch_icon_path):
+        return FileResponse(touch_icon_path, media_type="image/png")
+
+    # 读取站点标题（SVG 转换失败时用首字母占位图兜底）
+    title_pref = db.exec(
+        select(SystemPreference).where(
+            SystemPreference.key == "brand_site_title",
+            SystemPreference.user_id == None,
+        )
+    ).first()
+    site_title = title_pref.value if title_pref else "WorkTrack"
+
+    # 2) 有自定义 Logo 但未生成正方形版本：动态生成（兜底）
     logo_pref = db.exec(
         select(SystemPreference).where(
             SystemPreference.key == "brand_logo_url",
@@ -1888,27 +2087,30 @@ def serve_apple_touch_icon(db: Session = Depends(get_session)):
     ).first()
     if logo_pref and logo_pref.value and logo_pref.value.strip():
         url_path = logo_pref.value.strip()
-        # 尝试从 url 中提取文件名，在 BRAND_DIR 中查找
         potential_name = url_path.rsplit("/", 1)[-1]
         filepath = os.path.join(BRAND_DIR, potential_name)
         if os.path.isfile(filepath):
+            _generate_square_touch_icon(filepath, site_title)
+            if os.path.isfile(touch_icon_path):
+                return FileResponse(touch_icon_path, media_type="image/png")
+            # 生成失败（理论上不会走到，占位图会兜底），返回原图
             ext = os.path.splitext(potential_name)[1].lower()
             media = "image/png" if ext in (".png",) else "image/jpeg" if ext in (".jpg", ".jpeg") else "image/webp" if ext == ".webp" else "image/svg+xml" if ext == ".svg" else "image/png"
             return FileResponse(filepath, media_type=media)
-        # 如果文件名不匹配，尝试查找 BRAND_DIR 中所有 logo_ 文件
+        # 文件名不匹配，尝试查找 BRAND_DIR 中所有 logo_ 文件
         for fname in sorted(os.listdir(BRAND_DIR), reverse=True):
             if fname.startswith("logo_"):
+                _generate_square_touch_icon(os.path.join(BRAND_DIR, fname), site_title)
+                if os.path.isfile(touch_icon_path):
+                    return FileResponse(touch_icon_path, media_type="image/png")
                 return FileResponse(os.path.join(BRAND_DIR, fname))
-    # 2) 回退：尝试 pwa-192x192.png
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-    for candidate in [
-        os.path.join(base_dir, "data", "pwa-192x192.png"),
-        os.path.join(base_dir, "frontend", "public", "pwa-192x192.png"),
-        os.path.join(base_dir, "frontend", "public", "favicon.svg"),
-    ]:
-        if os.path.isfile(candidate):
-            return FileResponse(candidate, media_type="image/png" if candidate.endswith('.png') else "image/svg+xml")
-    # 3) 最终回退：返回 1x1 透明 PNG 避免 iOS 生成字母图标
+
+    # 3) 无自定义 Logo：生成首字母占位图（避免 iOS 用默认字母图标）
+    _generate_placeholder_icon(touch_icon_path, site_title, (16, 23, 32))
+    if os.path.isfile(touch_icon_path):
+        return FileResponse(touch_icon_path, media_type="image/png")
+
+    # 4) 最终回退：返回 1x1 透明 PNG（理论上不会走到）
     import base64
     blank_png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
     return Response(content=blank_png, media_type="image/png")
@@ -1930,9 +2132,9 @@ def serve_manifest(db: Session = Depends(get_session)):
         )
     ).first()
     site_title = title_pref.value if title_pref else "WorkTrack"
-    # 强制使用静态图标，确保PWA兼容性
-    icon_192 = "/pwa-192x192.png"
-    icon_512 = "/pwa-512x512.png"
+    # 有自定义 Logo 时用动态 apple-touch-icon 端点（正方形 PNG），否则回退静态图标
+    has_logo = bool(logo_pref and logo_pref.value and logo_pref.value.strip())
+    icon_url = "/api/v1/settings/branding/apple-touch-icon" if has_logo else "/pwa-192x192.png"
     return {
         "name": site_title,
         "short_name": site_title,
@@ -1943,11 +2145,11 @@ def serve_manifest(db: Session = Depends(get_session)):
         "background_color": "#101720",
         "theme_color": "#101720",
         "icons": [
-            {"src": icon_192, "sizes": "64x64", "type": "image/png", "purpose": "any maskable"},
-            {"src": icon_192, "sizes": "128x128", "type": "image/png", "purpose": "any maskable"},
-            {"src": icon_192, "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
-            {"src": icon_192, "sizes": "256x256", "type": "image/png", "purpose": "any maskable"},
-            {"src": icon_512, "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+            {"src": icon_url, "sizes": "64x64", "type": "image/png", "purpose": "any maskable"},
+            {"src": icon_url, "sizes": "128x128", "type": "image/png", "purpose": "any maskable"},
+            {"src": icon_url, "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": icon_url, "sizes": "256x256", "type": "image/png", "purpose": "any maskable"},
+            {"src": icon_url, "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
         ],
     }
 

@@ -8,6 +8,8 @@ from datetime import datetime
 from typing import Optional, List
 from sqlmodel import SQLModel, Field
 
+from app.utils.time import now
+
 
 class LegalEntity(SQLModel, table=True):
     __tablename__ = "legal_entity"
@@ -20,5 +22,5 @@ class LegalEntity(SQLModel, table=True):
     is_default: bool = Field(default=False, description="是否默认主体")
     is_active: bool = Field(default=True, index=True)
     sort_order: int = Field(default=0)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: now())
+    updated_at: datetime = Field(default_factory=lambda: now())

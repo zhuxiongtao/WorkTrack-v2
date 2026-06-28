@@ -1,4 +1,4 @@
-import { CheckCircle2, AlertTriangle, XCircle, Info, Circle } from 'lucide-react'
+import { CheckCircle2, AlertTriangle, Info, Circle } from 'lucide-react'
 import { TONES, STATUS_TONE, type StatusVariant } from '../../theme/tokens'
 
 /**

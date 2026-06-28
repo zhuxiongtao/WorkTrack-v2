@@ -106,7 +106,7 @@ function fmtUSD(v: number | null | undefined) {
   if (v == null) return '—'
   return `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`
 }
-function getContractStatus(start: string | null, end: string | null) {
+function getContractStatus(_start: string | null, end: string | null) {
   if (!end) return { state: 'none' as const, label: '—', color: { bg: '#6B728015', text: '#6B7280' } }
   const days = Math.ceil((new Date(end + '-01').getTime() - Date.now()) / 86400000)
   if (days < 0) return { state: 'expired' as const, label: `已过期 ${Math.abs(days)} 天`, color: { bg: '#EF444415', text: '#F87171' } }
@@ -462,7 +462,7 @@ export default function UpstreamPage() {
           { key: 'stats' as const, label: '统计分析', icon: BarChart3 },
         ]).map(t => (
           <button key={t.key} onClick={() => setMainTab(t.key)}
-            className={`relative px-4 py-2.5 text-xs font-semibold flex items-center gap-1.5 transition-colors ${mainTab === t.key ? 'text-blue-400' : 'text-gray-500 hover:text-gray-300'}`}>
+            className={`relative px-4 py-2.5 text-xs font-semibold flex items-center gap-1.5 transition-colors ${mainTab === t.key ? 'text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white'}`}>
             <t.icon size={13} />{t.label}
             {mainTab === t.key && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-t" />}
           </button>
@@ -483,22 +483,20 @@ export default function UpstreamPage() {
               <div className="relative">
                 <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-600" />
                 <input type="text" placeholder="搜索名称/简码/模型..." value={supplierSearch} onChange={e => setSupplierSearch(e.target.value)}
-                  className="w-full pl-7 pr-3 py-1.5 rounded-lg bg-bg-input border border-border text-xs text-gray-300 outline-none focus:border-[#3B82F6] transition-colors placeholder-gray-600" />
+                  className="w-full pl-7 pr-3 py-1.5 rounded-lg bg-bg-input border border-border text-xs text-gray-700 dark:text-gray-200 outline-none focus:border-[#3B82F6] transition-colors placeholder-gray-600" />
               </div>
               <div className="flex gap-2">
                 <SearchableSelect
                   className="flex-1"
-                  options={[{ id: '', label: '全部状态' }, ...SUPPLIER_STATUSES.map(s => ({ id: s, label: s }))]}
+                  options={[{ value: '', label: '全部状态' }, ...SUPPLIER_STATUSES.map(s => ({ value: s, label: s }))]}
                   value={supplierFilterStatus}
-                  onChange={(v) => setSupplierFilterStatus(v === 0 ? '' : String(v))}
-                  clearValue=""
+                  onChange={(v) => setSupplierFilterStatus(v === null ? '' : String(v))}
                 />
                 <SearchableSelect
                   className="flex-1"
-                  options={[{ id: '', label: '全部类型' }, ...CATEGORIES.map(c => ({ id: c, label: c }))]}
+                  options={[{ value: '', label: '全部类型' }, ...CATEGORIES.map(c => ({ value: c, label: c }))]}
                   value={supplierFilterCategory}
-                  onChange={(v) => setSupplierFilterCategory(v === 0 ? '' : String(v))}
-                  clearValue=""
+                  onChange={(v) => setSupplierFilterCategory(v === null ? '' : String(v))}
                 />
               </div>
             </div>
@@ -515,7 +513,7 @@ export default function UpstreamPage() {
                     <div className="flex items-center justify-between">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-medium text-white truncate">{s.name}</span>
+                          <span className="text-sm font-medium text-gray-900 dark:text-white truncate">{s.name}</span>
                           <span className="px-1.5 py-0.5 rounded text-[11px] font-medium shrink-0" style={{ background: `${catColor}15`, color: catColor }}>{s.category}</span>
                           <span className="px-1.5 py-0.5 rounded text-[11px] font-medium shrink-0" style={{ background: stColor.bg, color: stColor.text }}>{s.status}</span>
                         </div>
@@ -552,7 +550,7 @@ export default function UpstreamPage() {
                     </div>
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-base font-bold text-white">{selectedSupplierDetail.name}</h3>
+                        <h3 className="text-base font-bold text-gray-900 dark:text-white">{selectedSupplierDetail.name}</h3>
                         <span className="px-1.5 py-0.5 rounded text-[11px] font-medium"
                           style={{ background: `${CATEGORY_COLORS[selectedSupplierDetail.category] || '#6B7280'}15`, color: CATEGORY_COLORS[selectedSupplierDetail.category] || '#6B7280' }}>
                           {selectedSupplierDetail.category}
@@ -621,12 +619,12 @@ export default function UpstreamPage() {
                     { key: 'projects' as const, label: '关联项目', icon: Briefcase, count: supplierProjects?.projects.length || 0 },
                   ]).map(t => (
                     <button key={t.key} onClick={() => setSupplierDetailTab(t.key)}
-                      className={`relative px-3 py-2 text-xs font-semibold flex items-center gap-1.5 transition-colors ${supplierDetailTab === t.key ? 'text-blue-400' : 'text-gray-500 hover:text-gray-300'}`}>
+                      className={`relative px-3 py-2 text-xs font-semibold flex items-center gap-1.5 transition-colors ${supplierDetailTab === t.key ? 'text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white'}`}>
                       <t.icon size={13} />{t.label}
                       {'count' in t && (t as { count?: number }).count! > 0 && (
                         <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 font-bold">{(t as { count?: number }).count}</span>
                       )}
-                      {supplierDetailTab === t.key && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-t" />}
+                      {supplierDetailTab === t.key && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent-blue rounded-t" />}
                     </button>
                   ))}
                 </div>
@@ -648,7 +646,7 @@ export default function UpstreamPage() {
                                 <IconBox icon={Cpu} size="sm" tone="cyan" variant="soft" />
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="text-xs font-semibold text-white">{c.name}</span>
+                                    <span className="text-xs font-semibold text-gray-900 dark:text-white">{c.name}</span>
                                     {c.code && <span className="text-[11px] text-gray-500 font-mono">#{c.code}</span>}
                                     <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: kindC.bg, color: kindC.text }}>{c.kind}</span>
                                     <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: statusC.bg, color: statusC.text }}>{c.status}</span>
@@ -685,17 +683,17 @@ export default function UpstreamPage() {
                       <div className="rounded-xl bg-bg-input/50 border border-border/40 p-4">
                         <div className="flex items-center gap-2 mb-3"><IconBox icon={Phone} size="sm" tone="green" variant="soft" /><span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">联系信息</span></div>
                         <div className="space-y-2 text-xs">
-                          {selectedSupplierDetail.contact_person && <div className="flex items-center gap-2 text-gray-300"><span className="text-gray-500 w-12 shrink-0">对接人</span><span>{selectedSupplierDetail.contact_person}</span></div>}
-                          {selectedSupplierDetail.contact_email && <div className="flex items-center gap-2 text-gray-300 min-w-0"><Mail size={11} className="text-gray-500 shrink-0" /><a href={`mailto:${selectedSupplierDetail.contact_email}`} className="hover:text-blue-400 truncate">{selectedSupplierDetail.contact_email}</a></div>}
-                          {selectedSupplierDetail.contact_phone && <div className="flex items-center gap-2 text-gray-300"><Phone size={11} className="text-gray-500 shrink-0" /><span>{selectedSupplierDetail.contact_phone}</span></div>}
+                          {selectedSupplierDetail.contact_person && <div className="flex items-center gap-2 text-gray-700 dark:text-gray-200"><span className="text-gray-500 w-12 shrink-0">对接人</span><span>{selectedSupplierDetail.contact_person}</span></div>}
+                          {selectedSupplierDetail.contact_email && <div className="flex items-center gap-2 text-gray-700 dark:text-gray-200 min-w-0"><Mail size={11} className="text-gray-500 shrink-0" /><a href={`mailto:${selectedSupplierDetail.contact_email}`} className="hover:text-blue-400 truncate">{selectedSupplierDetail.contact_email}</a></div>}
+                          {selectedSupplierDetail.contact_phone && <div className="flex items-center gap-2 text-gray-700 dark:text-gray-200"><Phone size={11} className="text-gray-500 shrink-0" /><span>{selectedSupplierDetail.contact_phone}</span></div>}
                           {!selectedSupplierDetail.contact_person && !selectedSupplierDetail.contact_email && !selectedSupplierDetail.contact_phone && <span className="text-gray-600">暂无联系信息</span>}
                         </div>
                       </div>
                       <div className="rounded-xl bg-bg-input/50 border border-border/40 p-4">
                         <div className="flex items-center gap-2 mb-3"><IconBox icon={Cpu} size="sm" tone="blue" variant="soft" /><span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">技术信息</span></div>
                         <div className="space-y-2 text-xs">
-                          {selectedSupplierDetail.api_endpoint && <div className="flex items-center gap-2 text-gray-300 min-w-0"><Globe size={11} className="text-gray-500 shrink-0" /><a href={selectedSupplierDetail.api_endpoint} target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 truncate">{selectedSupplierDetail.api_endpoint}</a></div>}
-                          {selectedSupplierDetail.auth_type && <div className="flex items-center gap-2 text-gray-300"><Key size={11} className="text-gray-500 shrink-0" /><span>认证: {selectedSupplierDetail.auth_type}</span></div>}
+                          {selectedSupplierDetail.api_endpoint && <div className="flex items-center gap-2 text-gray-700 dark:text-gray-200 min-w-0"><Globe size={11} className="text-gray-500 shrink-0" /><a href={selectedSupplierDetail.api_endpoint} target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 truncate">{selectedSupplierDetail.api_endpoint}</a></div>}
+                          {selectedSupplierDetail.auth_type && <div className="flex items-center gap-2 text-gray-700 dark:text-gray-200"><Key size={11} className="text-gray-500 shrink-0" /><span>认证: {selectedSupplierDetail.auth_type}</span></div>}
                           {selectedSupplierDetail.models_provided && (
                             <div className="mt-2"><span className="text-gray-500 text-[11px]">提供模型</span>
                               <div className="flex flex-wrap gap-1 mt-1">{selectedSupplierDetail.models_provided.split(',').filter(Boolean).map(m => <span key={m} className="px-1.5 py-0.5 rounded text-[11px] bg-blue-500/10 text-blue-400 font-medium">{m.trim()}</span>)}</div>
@@ -733,7 +731,7 @@ export default function UpstreamPage() {
                               <div className="flex items-center gap-2 min-w-0 flex-1">
                                 <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-orange-500 to-amber-400 flex items-center justify-center text-[11px] font-bold text-white shrink-0">{p.project_name.slice(0, 1)}</div>
                                 <div className="min-w-0">
-                                  <div className="text-xs font-medium text-white truncate">{p.project_name}</div>
+                                  <div className="text-xs font-medium text-gray-900 dark:text-white truncate">{p.project_name}</div>
                                   <div className="text-[11px] text-gray-500 truncate">{p.customer_name} · {p.currency}{p.sales_person && ` · ${p.sales_person}`}</div>
                                 </div>
                               </div>
@@ -762,35 +760,31 @@ export default function UpstreamPage() {
       {/* ── 通道总表 ── */}
       {mainTab === 'channels' && (
         <div>
-          <div className="flex flex-wrap items-center gap-2 p-3 rounded-xl bg-white/[0.02] border border-white/5 mb-4">
+          <div className="flex flex-wrap items-center gap-2 p-3 rounded-xl bg-bg-hover/30 border border-border mb-4">
             <div className="relative flex-1 min-w-[160px]">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
               <input value={channelSearch} onChange={e => setChannelSearch(e.target.value)} placeholder="搜索通道名 / 编码 / 模型 / 供应商"
-                className="w-full pl-8 pr-3 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500/50" />
+                className="w-full pl-8 pr-3 py-1.5 text-xs bg-bg-hover/30 border border-border rounded-lg text-gray-700 dark:text-gray-200 placeholder-gray-600 focus:outline-none focus:border-cyan-500/50" />
             </div>
             <SearchableSelect
-              options={[{ id: '', label: '全部供应商' }, ...suppliers.map(s => ({ id: String(s.id), label: s.name }))]}
+              options={[{ value: '', label: '全部供应商' }, ...suppliers.map(s => ({ value: String(s.id), label: s.name }))]}
               value={channelFilterSupplier}
-              onChange={(v) => setChannelFilterSupplier(v === 0 ? '' : String(v))}
-              clearValue=""
+              onChange={(v) => setChannelFilterSupplier(v === null ? '' : String(v))}
             />
             <SearchableSelect
-              options={[{ id: '', label: '全部类型' }, ...KINDS.map(k => ({ id: k, label: k }))]}
+              options={[{ value: '', label: '全部类型' }, ...KINDS.map(k => ({ value: k, label: k }))]}
               value={channelFilterKind}
-              onChange={(v) => setChannelFilterKind(v === 0 ? '' : String(v))}
-              clearValue=""
+              onChange={(v) => setChannelFilterKind(v === null ? '' : String(v))}
             />
             <SearchableSelect
-              options={[{ id: '', label: '全部模型' }, ...modelTypes.map(m => ({ id: m, label: m }))]}
+              options={[{ value: '', label: '全部模型' }, ...modelTypes.map(m => ({ value: m, label: m }))]}
               value={channelFilterModel}
-              onChange={(v) => setChannelFilterModel(v === 0 ? '' : String(v))}
-              clearValue=""
+              onChange={(v) => setChannelFilterModel(v === null ? '' : String(v))}
             />
             <SearchableSelect
-              options={[{ id: '', label: '全部状态' }, ...CHANNEL_STATUSES.map(s => ({ id: s, label: s }))]}
+              options={[{ value: '', label: '全部状态' }, ...CHANNEL_STATUSES.map(s => ({ value: s, label: s }))]}
               value={channelFilterStatus}
-              onChange={(v) => setChannelFilterStatus(v === 0 ? '' : String(v))}
-              clearValue=""
+              onChange={(v) => setChannelFilterStatus(v === null ? '' : String(v))}
             />
             {hasPermission('upstream:edit') && (
               <button onClick={() => openCreateChannel()}
@@ -811,12 +805,12 @@ export default function UpstreamPage() {
                 const active = selectedChannelId === c.id
                 return (
                   <button key={c.id} onClick={() => setSelectedChannelId(active ? null : c.id)}
-                    className={`w-full text-left p-3 rounded-xl border transition-all ${active ? 'bg-cyan-500/10 border-cyan-500/40 shadow-lg shadow-cyan-500/5' : 'bg-white/[0.02] border-white/5 hover:bg-white/[0.04] hover:border-white/10'}`}>
+                    className={`w-full text-left p-3 rounded-xl border transition-all ${active ? 'bg-cyan-500/10 border-cyan-500/40 shadow-lg shadow-cyan-500/5' : 'bg-bg-hover/30 border-border hover:bg-bg-hover/50 hover:border-border'}`}>
                     <div className="flex items-start gap-3">
                       <IconBox icon={Cpu} size="md" tone="cyan" variant="soft" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-semibold text-white">{c.name}</span>
+                          <span className="text-sm font-semibold text-gray-900 dark:text-white">{c.name}</span>
                           {c.code && <span className="text-[11px] text-gray-500 font-mono">#{c.code}</span>}
                           <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: kindC.bg, color: kindC.text }}>{c.kind}</span>
                           <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: statusC.bg, color: statusC.text }}>{c.status}</span>
@@ -878,8 +872,8 @@ export default function UpstreamPage() {
               <div className="grid grid-cols-2 gap-3">
                 <Field label="名称" required><input value={supplierForm.name} onChange={e => setSupplierForm(f => ({ ...f, name: e.target.value }))} placeholder="如 OpenAI" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" /></Field>
                 <Field label="简码" hint="英文字母+数字"><input value={supplierForm.code} onChange={e => setSupplierForm(f => ({ ...f, code: e.target.value }))} placeholder="如 openai" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" /></Field>
-                <Field label="类型"><SearchableSelect options={CATEGORIES.map(c => ({ id: c, label: c }))} value={supplierForm.category} onChange={(v) => setSupplierForm(f => ({ ...f, category: v === 0 ? '' : String(v) }))} clearValue="" /></Field>
-                <Field label="状态"><SearchableSelect options={SUPPLIER_STATUSES.map(s => ({ id: s, label: s }))} value={supplierForm.status} onChange={(v) => setSupplierForm(f => ({ ...f, status: v === 0 ? '' : String(v) }))} clearValue="" /></Field>
+                <Field label="类型"><SearchableSelect options={CATEGORIES.map(c => ({ value: c, label: c }))} value={supplierForm.category} onChange={(v) => setSupplierForm(f => ({ ...f, category: v === null ? '' : String(v) }))} /></Field>
+                <Field label="状态"><SearchableSelect options={SUPPLIER_STATUSES.map(s => ({ value: s, label: s }))} value={supplierForm.status} onChange={(v) => setSupplierForm(f => ({ ...f, status: v === null ? '' : String(v) }))} /></Field>
               </div>
             </div>
             <div>
@@ -893,7 +887,7 @@ export default function UpstreamPage() {
             <div>
               <SectionLabel>商务信息</SectionLabel>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="结算币种"><SearchableSelect options={CURRENCIES.map(c => ({ id: c, label: `${c} - ${CURRENCY_META[c]?.name || c}` }))} value={supplierForm.settlement_currency} onChange={(v) => setSupplierForm(f => ({ ...f, settlement_currency: v === 0 ? '' : String(v) }))} clearValue="" /></Field>
+                <Field label="结算币种"><SearchableSelect options={CURRENCIES.map(c => ({ value: c, label: `${c} - ${CURRENCY_META[c]?.name || c}` }))} value={supplierForm.settlement_currency} onChange={(v) => setSupplierForm(f => ({ ...f, settlement_currency: v === null ? '' : String(v) }))} /></Field>
                 <Field label="付款条件"><input value={supplierForm.payment_terms} onChange={e => setSupplierForm(f => ({ ...f, payment_terms: e.target.value }))} placeholder="如 月结30天" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" /></Field>
                 <Field label="合同起始"><input type="month" value={supplierForm.contract_start} onChange={e => setSupplierForm(f => ({ ...f, contract_start: e.target.value }))} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" /></Field>
                 <Field label="合同终止"><input type="month" value={supplierForm.contract_end} onChange={e => setSupplierForm(f => ({ ...f, contract_end: e.target.value }))} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" /></Field>
@@ -905,7 +899,7 @@ export default function UpstreamPage() {
                 <Field label="API 入口" full hint="完整 URL，含 https://"><input value={supplierForm.api_endpoint} onChange={e => setSupplierForm(f => ({ ...f, api_endpoint: e.target.value }))} placeholder="https://api.openai.com" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" /></Field>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="提供模型" hint="逗号分隔"><input value={supplierForm.models_provided} onChange={e => setSupplierForm(f => ({ ...f, models_provided: e.target.value }))} placeholder="GPT-4o,Claude-3.5" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" /></Field>
-                  <Field label="认证方式"><SearchableSelect options={[{ id: '', label: '请选择' }, ...AUTH_TYPES.map(a => ({ id: a, label: a }))]} value={supplierForm.auth_type} onChange={(v) => setSupplierForm(f => ({ ...f, auth_type: v === 0 ? '' : String(v) }))} clearValue="" /></Field>
+                  <Field label="认证方式"><SearchableSelect options={[{ value: '', label: '请选择' }, ...AUTH_TYPES.map(a => ({ value: a, label: a }))]} value={supplierForm.auth_type} onChange={(v) => setSupplierForm(f => ({ ...f, auth_type: v === null ? '' : String(v) }))} /></Field>
                 </div>
               </div>
             </div>
@@ -940,7 +934,7 @@ function ChannelDetailPanel({ channel, supplier, prices, onEdit, onDelete, delet
     <div className="rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-cyan-500/[0.04] to-blue-500/[0.04] p-4 sticky top-4">
       <div className="flex items-start justify-between mb-3">
         <SectionHeader icon={Cpu} title={channel.name} description={`${supplier?.name || '—'} · ${channel.kind}`} tone="cyan" />
-        <button onClick={onClose} className="text-gray-500 hover:text-white"><X size={16} /></button>
+        <button onClick={onClose} className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"><X size={16} /></button>
       </div>
       <div className="grid grid-cols-2 gap-2 mb-4">
         <StatBox label="折扣率" value={`${(channel.discount_rate * 100).toFixed(0)}%`} sub="相较官网定价" tone="blue" />
@@ -950,19 +944,19 @@ function ChannelDetailPanel({ channel, supplier, prices, onEdit, onDelete, delet
         <StatBox label="当月成本" value={`$${channel.monthly_cost.toLocaleString('zh-CN', { maximumFractionDigits: 2 })}`} tone="red" />
       </div>
       <div className="space-y-2 text-xs">
-        {channel.model_type && <div className="flex items-center gap-2"><Hash size={12} className="text-gray-500" /><span className="text-gray-500">模型族</span><span className="text-white font-medium">{channel.model_type}</span></div>}
-        {channel.code && <div className="flex items-center gap-2"><Key size={12} className="text-gray-500" /><span className="text-gray-500">通道编码</span><span className="text-white font-medium">{channel.code}</span></div>}
-        {channel.contract_start && <div className="flex items-center gap-2"><Calendar size={12} className="text-gray-500" /><span className="text-gray-500">合同期</span><span className="text-white font-medium">{channel.contract_start} ~ {channel.contract_end || '至今'}</span></div>}
+        {channel.model_type && <div className="flex items-center gap-2"><Hash size={12} className="text-gray-500" /><span className="text-gray-500">模型族</span><span className="text-gray-900 dark:text-white font-medium">{channel.model_type}</span></div>}
+        {channel.code && <div className="flex items-center gap-2"><Key size={12} className="text-gray-500" /><span className="text-gray-500">通道编码</span><span className="text-gray-900 dark:text-white font-medium">{channel.code}</span></div>}
+        {channel.contract_start && <div className="flex items-center gap-2"><Calendar size={12} className="text-gray-500" /><span className="text-gray-500">合同期</span><span className="text-gray-900 dark:text-white font-medium">{channel.contract_start} ~ {channel.contract_end || '至今'}</span></div>}
       </div>
       {familyPrices.length > 0 && (
-        <div className="mt-4 pt-3 border-t border-white/5">
+        <div className="mt-4 pt-3 border-t border-border">
           <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
             <BookOpen size={12} />官方价格 × {(channel.discount_rate * 100).toFixed(0)}% 参考成本
           </div>
           <div className="space-y-1.5">
             {familyPrices.map(p => (
-              <div key={p.id} className="flex items-center justify-between text-[11px] py-1 px-2 rounded-lg bg-black/20">
-                <span className="text-gray-300 font-medium truncate max-w-[110px]">{p.name}</span>
+              <div key={p.id} className="flex items-center justify-between text-[11px] py-1 px-2 rounded-lg bg-bg-hover/50">
+                <span className="text-gray-700 dark:text-gray-200 font-medium truncate max-w-[110px]">{p.name}</span>
                 <div className="flex gap-3 text-[11px] tabular-nums shrink-0">
                   {p.input_price != null && <span className="text-emerald-400">输入 {fmtUSD(p.input_price * channel.discount_rate)}/1M</span>}
                   {p.output_price != null && <span className="text-orange-400">输出 {fmtUSD(p.output_price * channel.discount_rate)}/1M</span>}
@@ -974,7 +968,7 @@ function ChannelDetailPanel({ channel, supplier, prices, onEdit, onDelete, delet
         </div>
       )}
       {(sla.cache_hit_rate != null || sla.tpm != null || sla.rpm != null || sla.avg_latency_ms != null) && (
-        <div className="mt-4 pt-3 border-t border-white/5">
+        <div className="mt-4 pt-3 border-t border-border">
           <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1"><Activity size={12} />SLA & 技术指标</div>
           <div className="grid grid-cols-2 gap-2">
             {sla.cache_hit_rate != null && <SlaBox label="缓存命中率" value={`${(sla.cache_hit_rate * 100).toFixed(1)}%`} tone="green" />}
@@ -985,7 +979,7 @@ function ChannelDetailPanel({ channel, supplier, prices, onEdit, onDelete, delet
         </div>
       )}
       {channel.remarks && (
-        <div className="mt-4 pt-3 border-t border-white/5">
+        <div className="mt-4 pt-3 border-t border-border">
           <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 flex items-center gap-1"><FileText size={12} />备注</div>
           <p className="text-xs text-gray-400 leading-relaxed whitespace-pre-wrap">{channel.remarks}</p>
         </div>
@@ -993,7 +987,7 @@ function ChannelDetailPanel({ channel, supplier, prices, onEdit, onDelete, delet
       {channel.status === '待确认' && (
         <div className="mt-3"><ApprovalTimeline targetType="channel" targetId={channel.id} onChanged={onApprovalChanged} /></div>
       )}
-      <div className="mt-4 pt-3 border-t border-white/5 flex gap-2 flex-wrap">
+      <div className="mt-4 pt-3 border-t border-border flex gap-2 flex-wrap">
         {channel.status === '合作中' && (
           <button onClick={onSubmitApproval} disabled={submittingApproval}
             className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-purple-300 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 rounded-lg disabled:opacity-50">
@@ -1012,7 +1006,7 @@ function ChannelDetailPanel({ channel, supplier, prices, onEdit, onDelete, delet
 }
 
 /* ──── 统计视图 ──── */
-function StatsView({ suppliers, supplierSummaries, channels, channelSummaries, channelStats, costByCurrency, prices }: {
+function StatsView({ suppliers, channels, channelStats, costByCurrency, prices }: {
   suppliers: Supplier[]; supplierSummaries: SupplierSummary[]; channels: Channel[]; channelSummaries: ChannelSummary[]
   channelStats: { byKind: Record<string, number>; byStatus: Record<string, number>; totalActive: number; totalMonthly: number }
   costByCurrency: Record<string, { cost: number; count: number; projects: number }>; prices: ModelCatalogItem[]
@@ -1054,7 +1048,7 @@ function StatsView({ suppliers, supplierSummaries, channels, channelSummaries, c
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-400 flex items-center justify-center text-xs font-bold text-white">{meta.symbol}</div>
-                      <div><div className="text-sm font-bold text-white">{cur}</div><div className="text-[11px] text-gray-500">{meta.name}</div></div>
+                      <div><div className="text-sm font-bold text-gray-900 dark:text-white">{cur}</div><div className="text-[11px] text-gray-500">{meta.name}</div></div>
                     </div>
                     <div className="text-right">
                       <div className="text-sm font-bold text-amber-400 tabular-nums">{fmtAmt(data.cost, cur)}</div>
@@ -1076,7 +1070,7 @@ function StatsView({ suppliers, supplierSummaries, channels, channelSummaries, c
           <div className="space-y-2">
             {Object.entries(channelStats.byKind).map(([k, n]) => {
               const c = KIND_COLORS[k] || KIND_COLORS['其他']; const pct = channels.length > 0 ? n / channels.length * 100 : 0
-              return (<div key={k}><div className="flex items-center justify-between text-xs mb-1"><span style={{ color: c.text }} className="font-semibold">{k}</span><span className="text-gray-500 tabular-nums">{n} ({pct.toFixed(0)}%)</span></div><div className="h-1.5 bg-white/5 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${pct}%`, background: c.text }} /></div></div>)
+              return (<div key={k}><div className="flex items-center justify-between text-xs mb-1"><span style={{ color: c.text }} className="font-semibold">{k}</span><span className="text-gray-500 tabular-nums">{n} ({pct.toFixed(0)}%)</span></div><div className="h-1.5 bg-bg-hover rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${pct}%`, background: c.text }} /></div></div>)
             })}
           </div>
         </div>
@@ -1085,7 +1079,7 @@ function StatsView({ suppliers, supplierSummaries, channels, channelSummaries, c
           <div className="space-y-2">
             {Object.entries(channelStats.byStatus).map(([s, n]) => {
               const c = CHANNEL_STATUS_COLORS[s] || CHANNEL_STATUS_COLORS['合作中']; const pct = channels.length > 0 ? n / channels.length * 100 : 0
-              return (<div key={s}><div className="flex items-center justify-between text-xs mb-1"><span style={{ color: c.text }} className="font-semibold">{s}</span><span className="text-gray-500 tabular-nums">{n} ({pct.toFixed(0)}%)</span></div><div className="h-1.5 bg-white/5 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${pct}%`, background: c.text }} /></div></div>)
+              return (<div key={s}><div className="flex items-center justify-between text-xs mb-1"><span style={{ color: c.text }} className="font-semibold">{s}</span><span className="text-gray-500 tabular-nums">{n} ({pct.toFixed(0)}%)</span></div><div className="h-1.5 bg-bg-hover rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${pct}%`, background: c.text }} /></div></div>)
             })}
           </div>
         </div>
@@ -1097,8 +1091,8 @@ function StatsView({ suppliers, supplierSummaries, channels, channelSummaries, c
           <div className="flex items-center justify-between flex-wrap gap-3 mb-4 p-3 rounded-xl bg-blue-500/5 border border-blue-500/20">
             <div className="text-[11px] text-blue-300/80"><span className="font-bold text-blue-300">价格来源：</span>官网公开定价（USD/1M tokens），在「管理后台 → 模型管理」中维护。</div>
             <div className="flex items-center gap-2 flex-wrap shrink-0">
-              <button onClick={() => setProviderFilter('all')} className={`px-3 py-1 text-xs rounded-lg font-semibold transition-colors border ${providerFilter === 'all' ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' : 'text-gray-500 hover:text-gray-300 border-transparent'}`}>全部</button>
-              {providerList.map(prov => <button key={prov} onClick={() => setProviderFilter(prov)} className={`px-3 py-1 text-xs rounded-lg font-semibold transition-colors border ${providerFilter === prov ? 'bg-white/10 text-white border-white/20' : 'text-gray-500 hover:text-gray-300 border-transparent'}`}>{prov}</button>)}
+              <button onClick={() => setProviderFilter('all')} className={`px-3 py-1 text-xs rounded-lg font-semibold transition-colors border ${providerFilter === 'all' ? 'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-500/10 dark:text-cyan-400 dark:border-cyan-500/20' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white border-transparent'}`}>全部</button>
+              {providerList.map(prov => <button key={prov} onClick={() => setProviderFilter(prov)} className={`px-3 py-1 text-xs rounded-lg font-semibold transition-colors border ${providerFilter === prov ? 'bg-bg-hover text-gray-700 dark:text-gray-200 border-border' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white border-transparent'}`}>{prov}</button>)}
             </div>
           </div>
           <div className="space-y-6">
@@ -1107,13 +1101,13 @@ function StatsView({ suppliers, supplierSummaries, channels, channelSummaries, c
               return (
                 <div key={prov}>
                   <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2"><span className="text-sm font-bold text-white">{prov}</span><span className="text-[11px] text-gray-600 px-2 py-0.5 rounded-full bg-white/5">{models.length} 个模型</span></div>
+                    <div className="flex items-center gap-2"><span className="text-sm font-bold text-gray-900 dark:text-white">{prov}</span><span className="text-[11px] text-gray-600 px-2 py-0.5 rounded-full bg-bg-hover">{models.length} 个模型</span></div>
                     {linkedChannels.length > 0 && <span className="text-[11px] text-gray-500 flex items-center gap-1 flex-wrap"><Network size={10} />{linkedChannels.length} 条关联通道：{linkedChannels.map(c => <span key={c.id} className="px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-cyan-500/10 text-cyan-300">{c.name} {(c.discount_rate * 100).toFixed(0)}%折</span>)}</span>}
                   </div>
-                  <div className="rounded-xl border border-white/10 overflow-hidden">
+                  <div className="rounded-xl border border-border overflow-hidden">
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs">
-                        <thead><tr className="text-left text-[11px] text-gray-500 uppercase tracking-wider bg-white/[0.02]">
+                        <thead><tr className="text-left text-[11px] text-gray-500 uppercase tracking-wider bg-bg-hover/30">
                           <th className="px-4 py-2.5 font-semibold">模型</th>
                           <th className="px-4 py-2.5 font-semibold text-right">输入 $/1M</th>
                           <th className="px-4 py-2.5 font-semibold text-right">输出 $/1M</th>
@@ -1123,8 +1117,8 @@ function StatsView({ suppliers, supplierSummaries, channels, channelSummaries, c
                         </tr></thead>
                         <tbody>
                           {models.map((m, i) => (
-                            <tr key={m.id} className={`border-t ${i % 2 === 0 ? 'bg-white/[0.01]' : ''}`} style={{ borderColor: '#ffffff08' }}>
-                              <td className="px-4 py-2.5"><div className="font-semibold text-white">{m.name}</div>{m.version_id && <div className="text-[11px] text-gray-600 font-mono">{m.version_id}</div>}</td>
+                            <tr key={m.id} className={`border-t border-border ${i % 2 === 0 ? 'bg-bg-hover/30' : ''}`}>
+                              <td className="px-4 py-2.5"><div className="font-semibold text-gray-900 dark:text-white">{m.name}</div>{m.version_id && <div className="text-[11px] text-gray-600 font-mono">{m.version_id}</div>}</td>
                               <td className="px-4 py-2.5 text-right tabular-nums text-emerald-400 font-semibold">{fmtUSD(m.input_price)}</td>
                               <td className="px-4 py-2.5 text-right tabular-nums text-orange-400 font-semibold">{fmtUSD(m.output_price)}</td>
                               <td className="px-4 py-2.5 text-right tabular-nums text-blue-400">{m.cache_read_price != null ? fmtUSD(m.cache_read_price) : '—'}</td>
@@ -1163,12 +1157,12 @@ function ChannelFormModal({ form, setForm, suppliers, editing, saving, onClose, 
         <div>
           <SectionLabel>基本信息</SectionLabel>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="所属供应商" required><SearchableSelect options={[{ id: 0, label: '请选择…' }, ...suppliers.map(s => ({ id: s.id, label: s.name }))]} value={form.supplier_id || 0} onChange={(v) => upd({ supplier_id: (v as number) || 0 })} clearValue={0} /></Field>
+            <Field label="所属供应商" required><SearchableSelect options={[{ value: 0, label: '请选择…' }, ...suppliers.map(s => ({ value: s.id, label: s.name }))]} value={form.supplier_id || 0} onChange={(v) => upd({ supplier_id: (v as number) || 0 })} /></Field>
             <Field label="通道名称" required><input value={form.name} onChange={e => upd({ name: e.target.value })} placeholder="如 AWS 通道 / CC 号池" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" /></Field>
             <Field label="通道编码" hint="如 AWS-01"><input value={form.code} onChange={e => upd({ code: e.target.value })} placeholder="AWS-01" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" /></Field>
             <Field label="模型族"><input value={form.model_type} onChange={e => upd({ model_type: e.target.value })} placeholder="Anthropic Claude / OpenAI GPT" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" /></Field>
-            <Field label="通道类型"><SearchableSelect options={KINDS.map(k => ({ id: k, label: k }))} value={form.kind} onChange={(v) => upd({ kind: v === 0 ? '' : String(v) })} clearValue="" /></Field>
-            <Field label="状态"><SearchableSelect options={CHANNEL_STATUSES.map(s => ({ id: s, label: s }))} value={form.status} onChange={(v) => upd({ status: v === 0 ? '' : String(v) })} clearValue="" /></Field>
+            <Field label="通道类型"><SearchableSelect options={KINDS.map(k => ({ value: k, label: k }))} value={form.kind} onChange={(v) => upd({ kind: v === null ? '' : String(v) })} /></Field>
+            <Field label="状态"><SearchableSelect options={CHANNEL_STATUSES.map(s => ({ value: s, label: s }))} value={form.status} onChange={(v) => upd({ status: v === null ? '' : String(v) })} /></Field>
           </div>
         </div>
         <div>
@@ -1244,7 +1238,7 @@ function KpiCard({ icon: Icon, label, value, sub, color, gradient }: {
         <Icon size={14} style={{ color }} strokeWidth={2.4} />
         <span className="text-[11px] text-gray-400 font-medium">{label}</span>
       </div>
-      <div className="relative text-2xl md:text-[28px] font-black text-white leading-none tabular-nums">{value}</div>
+      <div className="relative text-2xl md:text-[28px] font-black text-gray-900 dark:text-white leading-none tabular-nums">{value}</div>
       {sub && <p className="relative text-[11px] text-gray-500 mt-1.5">{sub}</p>}
       <div className="relative h-0.5 mt-3 rounded-full opacity-50 group-hover:opacity-100 transition-opacity" style={{ background: `linear-gradient(to right, ${color}, transparent)` }} />
     </div>
@@ -1273,7 +1267,7 @@ function StatBox({ label, value, sub, tone }: { label: string; value: string; su
 function SlaBox({ label, value, tone }: { label: string; value: string; tone: 'green' | 'blue' | 'purple' | 'orange' }) {
   const colors: Record<string, string> = { green: 'text-emerald-400', blue: 'text-blue-400', purple: 'text-violet-400', orange: 'text-orange-400' }
   return (
-    <div className="rounded-md p-2 bg-black/20">
+    <div className="rounded-md p-2 bg-bg-hover/50">
       <div className="text-[11px] text-gray-500">{label}</div>
       <div className={`mt-0.5 text-sm font-bold tabular-nums ${colors[tone]}`}>{value}</div>
     </div>

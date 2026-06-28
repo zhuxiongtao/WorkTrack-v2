@@ -40,16 +40,14 @@ export function RolesTab() {
   }, [])
 
   const handleDeleteRole = useCallback(async (r: RoleData) => {
-    const msg = r.is_system
-      ? `「${r.name}」是系统内置角色，删除后该角色的所有用户/部门/用户组关联将一并移除，确定继续？`
-      : `确定删除角色「${r.name}」？删除后关联的用户/部门/用户组将自动解除该角色。`
-    if (!await showConfirm(msg)) return
+    if (r.is_system) return  // 系统内置角色不可删除（按钮已禁用，双重保护）
+    if (!await showConfirm(`确定删除角色「${r.name}」？删除后关联的用户/部门/用户组将自动解除该角色。`)) return
     deleteMutation.mutate(r.id, {
       onSuccess: () => {
         if (selectedRoleId === r.id) setSelectedRoleId(null)
       },
     })
-  }, [selectedRoleId, showToast, showConfirm, deleteMutation])
+  }, [selectedRoleId, showConfirm, deleteMutation])
 
   return (
     <div className="flex flex-col lg:flex-row gap-5">

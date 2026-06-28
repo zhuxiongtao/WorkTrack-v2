@@ -8,7 +8,7 @@ import RichTextEditor from '../components/RichTextEditor'
 import { useUnsavedGuard } from '../hooks/useUnsavedGuard'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
-import { PageHeader, EmptyState } from '../components/design-system'
+import { PageHeader } from '../components/design-system'
 
 interface Meeting {
   id: number; title: string; meeting_date: string; content_md: string; audio_url: string | null; customer_id: number | null; project_id: number | null; user_id: number
@@ -32,7 +32,7 @@ export default function MeetingsPage() {
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   
-  const [memberList, setMemberList] = useState<any[]>([])
+  const [, setMemberList] = useState<any[]>([])
   const [form, setForm] = useState({ title: '', content_md: '', project_id: 0, customer_id: 0, meeting_date: new Date().toISOString().slice(0, 16), files_json: null as string | null })
   // 表单初始快照（用于检测未保存修改）
   const [formInitial, setFormInitial] = useState<string>('')
@@ -652,10 +652,10 @@ export default function MeetingsPage() {
   )
 
   const statusColors: Record<string, string> = {
-    '进行中': 'text-blue-400 bg-blue-500/10 border-blue-500/20',
+    '进行中': 'bg-blue-50 text-blue-700 border-blue-200 dark:text-blue-400 dark:bg-blue-500/10 dark:border-blue-500/20',
     '已完成': 'text-green-400 bg-green-500/10 border-green-500/20',
     '暂停': 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20',
-    '已取消': 'text-red-400 bg-red-500/10 border-red-500/20',
+    '已取消': 'bg-red-50 text-red-700 border-red-200 dark:text-red-400 dark:bg-red-500/10 dark:border-red-500/20',
     '待启动': 'text-gray-400 bg-gray-500/10 border-gray-500/20',
   }
 
@@ -728,7 +728,7 @@ export default function MeetingsPage() {
                     <Share2 size={10} className="text-[#8B5CF6]" />
                     <span className="text-[11px] text-[#8B5CF6] font-medium">{m.owner_name} 分享</span>
                     <span className={`text-[11px] px-1.5 py-0.5 rounded-full border ${
-                      m.shared_permission === 'editor' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                      m.shared_permission === 'editor' ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20' :
                       'bg-gray-500/10 text-gray-400 border-gray-500/20'
                     }`}>
                       {m.shared_permission === 'editor' ? '可编辑' : '只读'}
@@ -800,7 +800,7 @@ export default function MeetingsPage() {
                     return linkedC ? (
                       <button
                         onClick={(e) => { e.stopPropagation(); window.open(`/customers?customer=${linkedC.id}`, '_blank') }}
-                        className="inline-flex items-center gap-1 text-[11px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20 hover:bg-emerald-500/20 hover:text-emerald-300 transition-colors"
+                        className="inline-flex items-center gap-1 text-[11px] text-emerald-700 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-500/20 hover:bg-emerald-500/20 hover:text-emerald-300 transition-colors"
                       >
                         <Building2 size={10} />{linkedC.name}
                         <ExternalLink size={9} className="text-emerald-500/50" />
@@ -811,7 +811,7 @@ export default function MeetingsPage() {
                   {linkedProject && (
                     <button
                       onClick={(e) => { e.stopPropagation(); window.open(`/projects?project=${linkedProject.id}`, '_blank') }}
-                      className="inline-flex items-center gap-1 text-[11px] text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-md border border-blue-500/20 hover:bg-blue-500/20 hover:text-blue-300 transition-colors"
+                      className="inline-flex items-center gap-1 text-[11px] text-blue-700 bg-blue-50 dark:text-blue-400 dark:bg-blue-500/10 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-500/20 hover:bg-blue-500/20 hover:text-blue-300 transition-colors"
                     >
                       <Building2 size={10} />{linkedProject.name}
                       <span className={`text-[11px] px-1 py-0 rounded-full border ${statusColors[linkedProject.status] || ''}`}>{linkedProject.status}</span>
@@ -994,7 +994,7 @@ export default function MeetingsPage() {
                 <div className="flex items-center gap-2">
                   <div className="flex-1">
                     <SearchableSelect
-                      options={allUsers.filter((u: any) => u.id !== currentUser?.id).map((u: any) => ({ id: u.id, label: u.name || u.username }))}
+                      options={allUsers.filter((u: any) => u.id !== currentUser?.id).map((u: any) => ({ value: u.id, label: u.name || u.username }))}
                       value={shareUserId}
                       onChange={(val) => setShareUserId(val as number)}
                       placeholder="选择用户..."
@@ -1004,12 +1004,11 @@ export default function MeetingsPage() {
                   </div>
                   <SearchableSelect
                     options={[
-                      { id: 'viewer', label: '只读' },
-                      { id: 'editor', label: '可编辑' },
+                      { value: 'viewer', label: '只读' },
+                      { value: 'editor', label: '可编辑' },
                     ]}
                     value={shareLevel}
-                    onChange={(v) => setShareLevel(v === 0 ? '' : String(v))}
-                    clearValue=""
+                    onChange={(v) => setShareLevel(v === null ? '' : String(v))}
                   />
                   <button onClick={handleAddShare} disabled={shareLoading || !shareUserId}
                     className="px-3 py-2 rounded-lg bg-[#3B82F6] text-[#fff] text-xs font-medium hover:bg-blue-600 disabled:opacity-50 transition-all">
@@ -1078,7 +1077,7 @@ export default function MeetingsPage() {
                   {/* 客户 */}
                   <div className="min-w-[140px] flex-1 max-w-[220px]">
                     <SearchableSelect
-                      options={customers.map(c => ({ id: c.id, label: c.name }))}
+                      options={customers.map(c => ({ value: c.id, label: c.name }))}
                       value={form.customer_id}
                       onChange={(val) => setForm({ ...form, customer_id: (val as number) || 0 })}
                       placeholder="关联客户..."
@@ -1089,7 +1088,7 @@ export default function MeetingsPage() {
                   {/* 项目 */}
                   <div className="min-w-[160px] flex-1 max-w-[260px]">
                     <SearchableSelect
-                      options={projects.map(p => ({ id: p.id, label: p.name, sub: p.customer_name }))}
+                      options={projects.map(p => ({ value: p.id, label: p.name, hint: p.customer_name }))}
                       value={form.project_id}
                       onChange={(val) => {
                         const pid = val as number
@@ -1117,7 +1116,7 @@ export default function MeetingsPage() {
                       ? isPaused
                         ? 'bg-yellow-500/10 border-yellow-500/30'
                         : 'bg-red-500/10 border-red-500/30'
-                      : 'bg-green-500/10 border-green-500/30'
+                      : 'bg-green-50 border-green-200 dark:bg-green-500/10 dark:border-green-500/30'
                   }`}>
                     {recording ? (
                       <>
@@ -1167,10 +1166,9 @@ export default function MeetingsPage() {
                       <div className="flex items-center gap-1.5">
                         {audioDevices.length > 1 && (
                           <SearchableSelect
-                            options={audioDevices.map((d) => ({ id: d.deviceId, label: d.label || `麦克风 ${d.deviceId.slice(0, 6)}` }))}
+                            options={audioDevices.map((d) => ({ value: d.deviceId, label: d.label || `麦克风 ${d.deviceId.slice(0, 6)}` }))}
                             value={selectedDeviceId}
-                            onChange={(v) => updateDevicePreference(v === 0 ? '' : String(v))}
-                            clearValue=""
+                            onChange={(v) => updateDevicePreference(v === null ? '' : String(v))}
                           />
                         )}
                         <button onClick={startRecording} className="flex items-center gap-1.5 text-xs text-red-400 hover:text-white px-2.5 py-1.5 rounded-lg hover:bg-red-500 transition-all border border-red-500/30 hover:border-red-500">

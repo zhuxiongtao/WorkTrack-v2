@@ -7,6 +7,8 @@ from datetime import datetime, date
 from typing import Optional
 from sqlmodel import SQLModel, Field
 
+from app.utils.time import now
+
 
 class ExpenseItem(SQLModel, table=True):
     __tablename__ = "expense_item"
@@ -23,5 +25,5 @@ class ExpenseItem(SQLModel, table=True):
     remark: str = Field(default="", max_length=500, description="备注")
     attachments: Optional[str] = Field(default=None, description="票据 JSON 数组（FileMeta[] 序列化）")
     sort_order: int = Field(default=0)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: now())
+    updated_at: datetime = Field(default_factory=lambda: now())

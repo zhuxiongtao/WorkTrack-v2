@@ -22,6 +22,7 @@ from typing import Optional
 from sqlmodel import Session, select
 
 from app.models.approval import ApprovalFlow, ApprovalInstance, ApprovalRecord
+from app.models.department import Department
 from app.models.user import User
 
 
@@ -47,8 +48,12 @@ def _resolve_dept_manager(submitter: User, db: Session) -> list[int]:
     return []
 
 
-def resolve_approvers(approver_type: str, approver_value: str, submitter: User, db: Session) -> list[int]:
-    """把单个节点的审批人定义解析成 user_id 列表（去掉发起人自己，避免自审）"""
+def resolve_approvers(approver_type: str, approver_value: str, submitter: User, db: Session,
+                      target_obj=None) -> list[int]:
+    """把单个节点的审批人定义解析成 user_id 列表（去掉发起人自己，避免自审）
+
+    target_obj: 业务对象（如 HireRequest），仅 target_dept_manager 类型用到，用于按业务对象所在部门解析负责人。
+    """
     ids: list[int] = []
 
     if approver_type == "user":
@@ -71,6 +76,15 @@ def resolve_approvers(approver_type: str, approver_value: str, submitter: User, 
             merged.add(submitter.leader_id)
         merged.update(_resolve_dept_manager(submitter, db))
         ids = list(merged)
+
+    elif approver_type == "target_dept_manager":
+        # 「业务对象所在部门负责人」：从 target_obj.department_id 解析
+        # 适用场景：入职申请按候选人拟入职部门路由审批人，而非按申请人(HR)所在部门
+        target_dept_id = getattr(target_obj, "department_id", None) if target_obj else None
+        if target_dept_id:
+            dept = db.get(Department, target_dept_id)
+            if dept and dept.manager_id:
+                ids = [dept.manager_id]
 
     elif approver_type == "role":
         from app.models.rbac import Role, UserRole, DepartmentRole
@@ -160,7 +174,11 @@ def get_active_instance(target_type: str, target_id: int, db: Session) -> Option
 
 def start_approval(target_type: str, target_id: int, target_obj, title: str,
                    submitter: User, db: Session) -> Optional[ApprovalInstance]:
-    """发起审批。返回实例；若该业务类型无匹配模板（无需审批）返回 None。"""
+    """发起审批。返回实例；若该业务类型无匹配模板（无需审批）返回 None。
+
+    预检：若匹配到审批流但所有节点审批人均为空，抛 ValueError 拒绝提交，
+    避免本应审批的单据被 _auto_skip_empty 自动放行。
+    """
     existing = get_active_instance(target_type, target_id, db)
     if existing:
         raise ValueError("该数据已有进行中的审批")
@@ -174,7 +192,8 @@ def start_approval(target_type: str, target_id: int, target_obj, title: str,
     snapshot = []
     for n in nodes:
         approver_ids = resolve_approvers(
-            n.get("approver_type", ""), str(n.get("approver_value", "")), submitter, db
+            n.get("approver_type", ""), str(n.get("approver_value", "")), submitter, db,
+            target_obj=target_obj,
         )
         snapshot.append({
             "name": n.get("name", ""),
@@ -190,6 +209,13 @@ def start_approval(target_type: str, target_id: int, target_obj, title: str,
             "decided_by": None,
             "decided_at": None,
         })
+
+    # 预检：所有节点审批人均为空时拒绝提交（避免单据被自动放行）
+    empty_nodes = [s["name"] for s in snapshot if not s.get("approver_ids")]
+    if empty_nodes and len(empty_nodes) == len(snapshot):
+        raise ValueError(
+            "审批流配置异常：所有节点均无可用审批人，请联系管理员检查审批流配置或组织架构"
+        )
 
     inst = ApprovalInstance(
         flow_id=flow.id,
@@ -494,7 +520,7 @@ def _on_finished(instance: ApprovalInstance, db: Session) -> None:
         if lv:
             if instance.status == "approved":
                 lv.status = "已批准"
-                # 扣减假期额度
+                # 扣减假期额度（失败时写补偿记录，不静默吞掉）
                 try:
                     leave_balance_service.apply_leave(lv, db, operator_id=instance.submitted_by)
                 except Exception as e:
@@ -502,6 +528,7 @@ def _on_finished(instance: ApprovalInstance, db: Session) -> None:
                     logging.getLogger("worktrack").warning(
                         "请假 #%s 扣减额度失败: %s", lv.id, e
                     )
+                    _write_error_record(db, instance, f"⚠️ 假期额度扣减失败：{e}（需 HR 人工处理）")
             elif instance.status == "rejected":
                 lv.status = "已驳回"
             elif instance.status == "cancelled":
@@ -517,14 +544,18 @@ def _on_finished(instance: ApprovalInstance, db: Session) -> None:
         if ot:
             if instance.status == "approved":
                 ot.status = "已批准"
-                # 若补偿方式为调休，授予调休额度
+                # 若补偿方式为调休，授予调休额度；加班费则创建付款申请
                 try:
-                    leave_balance_service.grant_overtime_compensate(ot, db)
+                    if ot.compensate_type == "加班费":
+                        _create_overtime_payment(ot, db)
+                    else:
+                        leave_balance_service.grant_overtime_compensate(ot, db)
                 except Exception as e:
                     import logging
                     logging.getLogger("worktrack").warning(
-                        "加班 #%s 授予调休额度失败: %s", ot.id, e
+                        "加班 #%s 补偿处理失败: %s", ot.id, e
                     )
+                    _write_error_record(db, instance, f"⚠️ 加班补偿处理失败：{e}（需 HR 人工处理）")
             elif instance.status == "rejected":
                 ot.status = "已驳回"
             elif instance.status == "cancelled":
@@ -538,7 +569,17 @@ def _on_finished(instance: ApprovalInstance, db: Session) -> None:
         e = db.get(ExpenseRequest, instance.target_id)
         if e:
             if instance.status == "approved":
-                e.status = "已批准"
+                # 审批链含「出纳付款」执行节点，全部通过即视为已付款
+                # 取最后一个 execution 节点的审批人作为付款操作人
+                e.status = "已付款"
+                try:
+                    snap = json.loads(instance.nodes_snapshot or "[]")
+                    exec_node = next((n for n in reversed(snap) if n.get("node_kind") == "execution"), None)
+                    if exec_node and exec_node.get("decided_by"):
+                        e.paid_by = exec_node["decided_by"]
+                        e.paid_at = _now()
+                except (TypeError, ValueError):
+                    pass
             elif instance.status == "rejected":
                 e.status = "已驳回"
             elif instance.status == "cancelled":
@@ -574,6 +615,176 @@ def _on_finished(instance: ApprovalInstance, db: Session) -> None:
             p.updated_at = _now()
             db.add(p)
             db.commit()
+
+    elif instance.target_type == "hire":
+        from app.models.hire_request import HireRequest
+        hr = db.get(HireRequest, instance.target_id)
+        if hr:
+            if instance.status == "approved":
+                # 最后一个 execution 节点（HR 执行入职）通过后，自动创建用户账号
+                _create_user_from_hire(hr, db)
+            elif instance.status == "rejected":
+                hr.status = "已驳回"
+            elif instance.status == "cancelled":
+                hr.status = "草稿"
+            hr.updated_at = _now()
+            db.add(hr)
+            db.commit()
+
+
+def _create_user_from_hire(hr, db: Session) -> None:
+    """入职审批通过后自动建账号（复用 users.py:create_user 核心逻辑）。
+
+    - 密码自动生成、首登强制改密
+    - leader_id 若空则兜底为部门负责人
+    - 角色按部门继承（DepartmentRole），无需单独分配
+    - 发送欢迎邮件（失败不阻断）
+    """
+    from app.models.user import User
+    from app.models.department import Department
+    from app.auth import hash_password, generate_initial_password
+    from app.routers.logs import write_log
+
+    # 二次校验唯一性（防并发）
+    existing = db.exec(select(User).where(User.username == hr.candidate_username)).first()
+    if existing:
+        # 已存在用户，直接关联并标记已入职
+        hr.created_user_id = existing.id
+        hr.status = "已入职"
+        hr.onboarded_at = _now()
+        write_log("warning", "hire",
+                  f"入职申请 #{hr.id} 审批通过，但用户名 {hr.candidate_username} 已存在，复用现有账号 #{existing.id}",
+                  db=db)
+        return
+
+    # leader_id 兜底：若未指定，取部门负责人
+    resolved_leader_id = hr.leader_id
+    if hr.department_id:
+        dept = db.get(Department, hr.department_id)
+        if dept and dept.manager_id and hr.leader_id is None:
+            resolved_leader_id = dept.manager_id
+
+    initial_password = generate_initial_password()
+    user = User(
+        username=hr.candidate_username,
+        password_hash=hash_password(initial_password),
+        name=hr.candidate_name,
+        email=hr.candidate_email,
+        is_admin=hr.is_admin,
+        use_shared_models=hr.use_shared_models,
+        leader_id=resolved_leader_id,
+        department_id=hr.department_id,
+        job_title=hr.job_title,
+        first_work_date=hr.first_work_date,
+        hire_date=hr.hire_date,
+        must_change_password=True,
+    )
+    db.add(user)
+    db.flush()
+    hr.created_user_id = user.id
+    hr.status = "已入职"
+    hr.onboarded_at = _now()
+
+    # 发送欢迎邮件（失败不阻断建号）
+    try:
+        from app.services.email_service import is_email_configured, send_welcome_email, _get_frontend_url
+        from app.config import settings
+        if is_email_configured():
+            base = _get_frontend_url() or (settings.cors_origins.split(",")[0] or "").strip()
+            login_url = f"{base.rstrip('/')}/login" if base else ""
+            send_welcome_email(
+                to=user.email, username=user.username, password=initial_password,
+                name=user.name, login_url=login_url,
+            )
+    except Exception:
+        import logging
+        logging.getLogger("worktrack").warning(
+            "入职申请 #%s 建账号欢迎邮件发送失败 user=%s", hr.id, user.username, exc_info=True
+        )
+
+    write_log("info", "hire",
+              f"入职申请 #{hr.id} 审批通过，已自动创建账号 #{user.id}（{user.username}），角色按部门继承",
+              db=db)
+
+
+def _write_error_record(db: Session, instance: ApprovalInstance, message: str) -> None:
+    """审批结束后业务回调失败时，写一条带 ⚠️ 标记的 ApprovalRecord 留痕。
+
+    复用 action="approve"（避免引入新枚举），comment 中带 ⚠️ 前缀以便前端识别和过滤。
+    """
+    try:
+        snap = json.loads(instance.nodes_snapshot or "[]")
+        last_node_name = snap[-1].get("name", "") if snap else ""
+        last_node_index = len(snap) - 1 if snap else 0
+    except (TypeError, ValueError):
+        last_node_name, last_node_index = "", 0
+
+    rec = ApprovalRecord(
+        instance_id=instance.id,
+        node_index=last_node_index,
+        node_name=last_node_name,
+        approver_id=instance.submitted_by,
+        action="approve",
+        comment=message,
+    )
+    db.add(rec)
+    db.commit()
+    import logging
+    logging.getLogger("worktrack").warning(
+        "审批实例 #%s 业务回调异常已留痕：%s", instance.id, message
+    )
+
+
+def _create_overtime_payment(overtime, db: Session) -> None:
+    """加班费补偿落地：创建一条草稿态 PaymentRequest，由 HR/出纳填金额后提交付款审批。
+
+    设计取舍：
+    - OvertimeRequest 模型无「时薪」字段，金额无法自动计算
+    - 因此创建 amount=0 的草稿付款单，reason 写明加班时长和加班单 ID
+    - HR/出纳根据公司薪资标准填金额后，走标准付款审批流程（payment_approval）
+    """
+    from app.models.payment import PaymentRequest
+    from app.models.user import User
+
+    applicant = db.get(User, overtime.user_id)
+    applicant_name = applicant.name or applicant.username if applicant else f"用户#{overtime.user_id}"
+
+    # 幂等：避免同一加班单重复创建付款单
+    existing = db.exec(
+        select(PaymentRequest).where(
+            PaymentRequest.user_id == overtime.user_id,
+            PaymentRequest.title == f"加班费-{overtime.title}",
+            PaymentRequest.reason.like(f"%加班单 #{overtime.id}%"),
+        )
+    ).first()
+    if existing:
+        return
+
+    p = PaymentRequest(
+        user_id=overtime.user_id,
+        payment_type="工资",
+        title=f"加班费-{overtime.title}",
+        amount=0,
+        amount_unit="元",
+        currency="CNY",
+        payee=applicant_name,
+        payee_account="",
+        reason=(
+            f"加班单 #{overtime.id} 审批通过，补偿方式=加班费。\n"
+            f"加班时长：{overtime.hours} 小时\n"
+            f"加班时段：{overtime.start_at.strftime('%Y-%m-%d %H:%M')} ~ "
+            f"{overtime.end_at.strftime('%Y-%m-%d %H:%M')}\n"
+            f"请 HR/出纳按公司薪资标准填写金额后提交付款审批。"
+        ),
+        status="草稿",
+    )
+    db.add(p)
+    db.commit()
+    import logging
+    logging.getLogger("worktrack").info(
+        "加班 #%s 补偿方式=加班费，已创建付款申请 #%s（草稿，待填金额）",
+        overtime.id, p.id,
+    )
 
 
 # ──────────────────────────── 待办查询 ────────────────────────────

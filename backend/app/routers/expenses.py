@@ -395,13 +395,17 @@ def delete_expense(
     return {"message": "ok"}
 
 
-@router.post("/{expense_id}/submit", response_model=ExpenseOut)
+@router.post("/{expense_id}/submit-approval", response_model=ExpenseOut)
+@router.post("/{expense_id}/submit", response_model=ExpenseOut, include_in_schema=False)
 def submit_expense(
     expense_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session),
 ):
-    """提交报销：触发统一审批引擎（business_type=expense）"""
+    """提交报销：触发统一审批引擎（business_type=expense）
+
+    旧路径 /{id}/submit 保留作为兼容别名（不在 OpenAPI 文档中暴露）。
+    """
     e = db.get(ExpenseRequest, expense_id)
     if not e:
         raise HTTPException(status_code=404, detail="报销申请不存在")
@@ -417,18 +421,32 @@ def submit_expense(
         rels = db.exec(select(ExpenseRelation).where(ExpenseRelation.expense_id == e.id)).all()
         if not rels:
             raise HTTPException(status_code=400, detail="差旅类报销必须关联出差申请单")
-    e.status = "审批中"
-    e.updated_at = now()
-    db.add(e)
-    db.commit()
-    # 触发审批流
+
+    # 触发审批流（先尝试匹配，无审批流时直接置「已付款」）
+    from app.services import approval_engine
     try:
-        from app.services import approval_engine
-        approval_engine.start_approval(
+        inst = approval_engine.start_approval(
             "expense", e.id, e, f"报销《{e.title}》", current_user, db,
         )
     except ValueError as ex:
-        logger.warning("触发审批流失败: %s", ex)
+        raise HTTPException(status_code=400, detail=str(ex))
+
+    if inst is None:
+        # 无审批流模板：直接走付款态（与 _on_finished approved 分支保持一致）
+        e.status = "已付款"
+        e.paid_at = now()
+        e.paid_by = current_user.id
+        e.updated_at = now()
+        db.add(e)
+        db.commit()
+        db.refresh(e)
+        return _to_out(e, db)
+
+    if inst.status == "pending":
+        e.status = "审批中"
+        e.updated_at = now()
+        db.add(e)
+        db.commit()
     db.refresh(e)
     return _to_out(e, db)
 

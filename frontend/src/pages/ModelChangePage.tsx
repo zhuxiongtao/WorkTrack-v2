@@ -113,7 +113,7 @@ const CHANGE_TYPE_LABELS: Record<string, string> = {
 const RISK_COLORS: Record<string, string> = {
   low: 'text-green-500 bg-green-500/10 border-green-500/20',
   medium: 'text-yellow-500 bg-yellow-500/10 border-yellow-500/20',
-  high: 'text-red-500 bg-red-500/10 border-red-500/20',
+  high: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20',
 }
 const RISK_LABELS: Record<string, string> = { low: '低风险', medium: '中风险', high: '高风险' }
 
@@ -128,8 +128,8 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 const STAGE_STATUS_COLORS: Record<string, string> = {
-  pending: 'bg-gray-500/20 text-gray-400', in_progress: 'bg-blue-500/20 text-blue-400',
-  awaiting_approval: 'bg-yellow-500/20 text-yellow-400', approved: 'bg-purple-500/20 text-purple-400',
+  pending: 'bg-gray-100 text-gray-500 border-gray-200 dark:bg-gray-500/10 dark:text-gray-400 dark:border-gray-500/20', in_progress: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20',
+  awaiting_approval: 'bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-500/10 dark:text-yellow-400 dark:border-yellow-500/20', approved: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/20',
   completed: 'bg-green-500/20 text-green-400',
 }
 const STAGE_STATUS_LABELS: Record<string, string> = {
@@ -521,10 +521,9 @@ export default function ModelChangePage() {
             <div className="py-2">
               <Field label="选择执行人" required>
                 <SearchableSelect
-                  options={[{ id: '', label: '请选择' }, ...users.map(u => ({ id: String(u.id), label: u.name || u.username }))]}
+                  options={[{ value: '', label: '请选择' }, ...users.map(u => ({ value: String(u.id), label: u.name || u.username }))]}
                   value={assignTo}
-                  onChange={(v) => setAssignTo(v === 0 ? '' : String(v))}
-                  clearValue=""
+                  onChange={(v) => setAssignTo(v === null ? '' : String(v))}
                 />
               </Field>
             </div>
@@ -605,24 +604,22 @@ export default function ModelChangePage() {
               <div className="grid grid-cols-2 gap-3">
                 <Field label="跟进状态">
                   <SearchableSelect
-                    options={Object.entries(TASK_STATUS_LABELS).map(([v, l]) => ({ id: v, label: l }))}
+                    options={Object.entries(TASK_STATUS_LABELS).map(([v, l]) => ({ value: v, label: l }))}
                     value={taskForm.status}
-                    onChange={(v) => setTaskForm({ ...taskForm, status: v === 0 ? '' : String(v) })}
-                    clearValue=""
+                    onChange={(v) => setTaskForm({ ...taskForm, status: v === null ? '' : String(v) })}
                   />
                 </Field>
                 <Field label="联系方式">
                   <SearchableSelect
                     options={[
-                      { id: '', label: '未选择' },
-                      { id: 'email', label: '邮件' },
-                      { id: 'phone', label: '电话' },
-                      { id: 'meeting', label: '会议' },
-                      { id: 'platform_msg', label: '平台消息' },
+                      { value: '', label: '未选择' },
+                      { value: 'email', label: '邮件' },
+                      { value: 'phone', label: '电话' },
+                      { value: 'meeting', label: '会议' },
+                      { value: 'platform_msg', label: '平台消息' },
                     ]}
                     value={taskForm.contact_method}
-                    onChange={(v) => setTaskForm({ ...taskForm, contact_method: v === 0 ? '' : String(v) })}
-                    clearValue=""
+                    onChange={(v) => setTaskForm({ ...taskForm, contact_method: v === null ? '' : String(v) })}
                   />
                 </Field>
               </div>
@@ -675,16 +672,14 @@ export default function ModelChangePage() {
             className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-bg-card border border-border text-sm text-text-primary placeholder-gray-500 focus:outline-none focus:border-accent-blue/50" />
         </div>
         <SearchableSelect
-          options={[{ id: '', label: '全部状态' }, ...Object.entries(STATUS_LABELS).map(([v, l]) => ({ id: v, label: l }))]}
+          options={[{ value: '', label: '全部状态' }, ...Object.entries(STATUS_LABELS).map(([v, l]) => ({ value: v, label: l }))]}
           value={filterStatus}
-          onChange={(v) => setFilterStatus(v === 0 ? '' : String(v))}
-          clearValue=""
+          onChange={(v) => setFilterStatus(v === null ? '' : String(v))}
         />
         <SearchableSelect
-          options={[{ id: '', label: '全部风险' }, ...Object.entries(RISK_LABELS).map(([v, l]) => ({ id: v, label: l }))]}
+          options={[{ value: '', label: '全部风险' }, ...Object.entries(RISK_LABELS).map(([v, l]) => ({ value: v, label: l }))]}
           value={filterRisk}
-          onChange={(v) => setFilterRisk(v === 0 ? '' : String(v))}
-          clearValue=""
+          onChange={(v) => setFilterRisk(v === null ? '' : String(v))}
         />
       </div>
 
@@ -763,18 +758,16 @@ export default function ModelChangePage() {
             <div className="grid grid-cols-2 gap-3">
               <Field label="供应商" required>
                 <SearchableSelect
-                  options={[{ id: '', label: '请选择' }, ...suppliers.map(s => ({ id: String(s.id), label: s.name }))]}
+                  options={[{ value: '', label: '请选择' }, ...suppliers.map(s => ({ value: String(s.id), label: s.name }))]}
                   value={form.supplier_id}
-                  onChange={(v) => setForm(f => ({ ...f, supplier_id: v === 0 ? '' : String(v) }))}
-                  clearValue=""
+                  onChange={(v) => setForm(f => ({ ...f, supplier_id: v === null ? '' : String(v) }))}
                 />
               </Field>
               <Field label="变更类型">
                 <SearchableSelect
-                  options={Object.entries(CHANGE_TYPE_LABELS).map(([v, l]) => ({ id: v, label: l }))}
+                  options={Object.entries(CHANGE_TYPE_LABELS).map(([v, l]) => ({ value: v, label: l }))}
                   value={form.change_type}
-                  onChange={(v) => setForm(f => ({ ...f, change_type: v === 0 ? '' : String(v) }))}
-                  clearValue=""
+                  onChange={(v) => setForm(f => ({ ...f, change_type: v === null ? '' : String(v) }))}
                 />
               </Field>
             </div>
@@ -782,13 +775,12 @@ export default function ModelChangePage() {
               <Field label="风险等级">
                 <SearchableSelect
                   options={[
-                    { id: 'low', label: '低风险' },
-                    { id: 'medium', label: '中风险' },
-                    { id: 'high', label: '高风险' },
+                    { value: 'low', label: '低风险' },
+                    { value: 'medium', label: '中风险' },
+                    { value: 'high', label: '高风险' },
                   ]}
                   value={form.risk_level}
-                  onChange={(v) => setForm(f => ({ ...f, risk_level: v === 0 ? '' : String(v) }))}
-                  clearValue=""
+                  onChange={(v) => setForm(f => ({ ...f, risk_level: v === null ? '' : String(v) }))}
                 />
               </Field>
               <Field label="上游生效日期">

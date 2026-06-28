@@ -57,15 +57,15 @@ const STATUS_OPTIONS = [
   { key: 'wontfix', label: '不予处理' },
 ]
 const STATUS_CLS: Record<string, string> = {
-  pending: 'text-gray-400 bg-gray-500/10', reviewing: 'text-blue-400 bg-blue-500/10',
-  processing: 'text-amber-400 bg-amber-500/10', done: 'text-green-400 bg-green-500/10',
-  closed: 'text-gray-500 bg-gray-500/10', wontfix: 'text-rose-400 bg-rose-500/10',
+  pending: 'bg-gray-100 text-gray-500 border-gray-200 dark:bg-gray-500/10 dark:text-gray-400 dark:border-gray-500/20', reviewing: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20',
+  processing: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20', done: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20',
+  closed: 'bg-gray-100 text-gray-500 border-gray-200 dark:bg-gray-500/10 dark:text-gray-400 dark:border-gray-500/20', wontfix: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20',
 }
 const PRIORITY_OPTIONS = [
   { key: 'low', label: '低' }, { key: 'medium', label: '中' }, { key: 'high', label: '高' },
 ]
 const PRIORITY_CLS: Record<string, string> = {
-  low: 'text-gray-400', medium: 'text-amber-400', high: 'text-rose-400',
+  low: 'text-gray-600 dark:text-gray-400', medium: 'text-amber-600 dark:text-amber-400', high: 'text-rose-600 dark:text-rose-400',
 }
 
 function statusLabel(s: string) { return STATUS_OPTIONS.find(o => o.key === s)?.label || s }
@@ -204,29 +204,25 @@ export default function FeedbackAdminPage() {
           />
         </div>
         <SearchableSelect
-          options={[{ id: '', label: '全部类型' }, ...Object.entries(CATEGORY_META).map(([k, v]) => ({ id: k, label: v.label }))]}
+          options={[{ value: '', label: '全部类型' }, ...Object.entries(CATEGORY_META).map(([k, v]) => ({ value: k, label: v.label }))]}
           value={fCategory}
-          onChange={(v) => setFCategory(v === 0 ? '' : String(v))}
-          clearValue=""
+          onChange={(v) => setFCategory(v === null ? '' : String(v))}
         />
         <SearchableSelect
-          options={[{ id: '', label: '全部状态' }, ...STATUS_OPTIONS.map(o => ({ id: o.key, label: o.label }))]}
+          options={[{ value: '', label: '全部状态' }, ...STATUS_OPTIONS.map(o => ({ value: o.key, label: o.label }))]}
           value={fStatus}
-          onChange={(v) => setFStatus(v === 0 ? '' : String(v))}
-          clearValue=""
+          onChange={(v) => setFStatus(v === null ? '' : String(v))}
         />
         <SearchableSelect
-          options={[{ id: '', label: '全部紧急度' }, ...PRIORITY_OPTIONS.map(o => ({ id: o.key, label: o.label }))]}
+          options={[{ value: '', label: '全部紧急度' }, ...PRIORITY_OPTIONS.map(o => ({ value: o.key, label: o.label }))]}
           value={fPriority}
-          onChange={(v) => setFPriority(v === 0 ? '' : String(v))}
-          clearValue=""
+          onChange={(v) => setFPriority(v === null ? '' : String(v))}
         />
         {stats && stats.by_module.length > 0 && (
           <SearchableSelect
-            options={[{ id: '', label: '全部模块' }, ...stats.by_module.map(m => ({ id: m.module, label: `${m.module} (${m.count})` }))]}
+            options={[{ value: '', label: '全部模块' }, ...stats.by_module.map(m => ({ value: m.module, label: `${m.module} (${m.count})` }))]}
             value={fModule}
-            onChange={(v) => setFModule(v === 0 ? '' : String(v))}
-            clearValue=""
+            onChange={(v) => setFModule(v === null ? '' : String(v))}
           />
         )}
       </div>
@@ -365,10 +361,9 @@ export default function FeedbackAdminPage() {
                 <div>
                   <label className="block text-xs text-gray-400 mb-1.5">处理人</label>
                   <SearchableSelect
-                    options={[{ id: 0, label: '未指派' }, ...users.map(u => ({ id: u.id, label: u.name || u.username }))]}
+                    options={[{ value: 0, label: '未指派' }, ...users.map(u => ({ value: u.id, label: u.name || u.username }))]}
                     value={active.handler_id || 0}
                     onChange={(v) => patchActive({ handler_id: (v as number) || 0 })}
-                    clearValue={0}
                   />
                 </div>
 

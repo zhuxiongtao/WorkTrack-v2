@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import type { JSX } from 'react'
 import { createPortal } from 'react-dom'
 import SearchableSelect from '../components/SearchableSelect'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
@@ -7,7 +8,7 @@ import {
   ArrowLeft, Loader2, X, Check, BookOpen, Maximize2, Minimize2,
   Sun, Moon, Monitor, Edit3, Share2, Users, Shield, Copy, Globe,
   Lock, Info, Calendar, UserCheck, ShieldAlert, Key, Clock, RefreshCw,
-  Sparkles, Send, ArrowRightLeft, CornerDownLeft, Building2, Search, UserPlus,
+  Sparkles, Send, ArrowRightLeft, CornerDownLeft, Building2, Search,
   Crown, ArrowUpRight
 } from 'lucide-react'
 import { marked } from 'marked'
@@ -181,7 +182,7 @@ function CollabDeptNode({ node, selectedDeptId, level, onSelect }: {
   )
 }
 
-function CollabDeptMembers({ deptId, departmentTree, deptUsers, onAdd, permission }: {
+function CollabDeptMembers({ deptId, departmentTree, deptUsers, onAdd }: {
   deptId: number
   departmentTree: DepartmentTreeNode[]
   deptUsers: UserListItem[]
@@ -774,11 +775,7 @@ export default function WikiPage() {
       // 复制失败时，显示弹窗让用户手动复制
       const copyPrompt = window.prompt('复制失败，请手动复制以下链接：', shareUrl)
       if (copyPrompt === null) return
-      
-      let scopeText = '整知识库空间'
-      if (shareScope === 'single') scopeText = '仅当前文档单页'
-      if (shareScope === 'descendants') scopeText = '当前页及所有子文档'
-      
+
       let passText = sharePassword.trim() && usePassword ? ` (提取码: ${sharePassword.trim()})` : ''
       showToast(`链接已显示，您可以手动复制${passText}`, 'info')
     }
@@ -2143,13 +2140,12 @@ export default function WikiPage() {
                       <label className="block text-[11px] font-bold text-gray-600 dark:text-gray-400 mb-1.5">共享访问范围</label>
                       <SearchableSelect
                         options={[
-                          { id: 'space', label: '整知识库空间所有文档' },
-                          { id: 'descendants', label: '当前页及所有子文档' },
-                          { id: 'single', label: '仅当前文档页面' },
+                          { value: 'space', label: '整知识库空间所有文档' },
+                          { value: 'descendants', label: '当前页及所有子文档' },
+                          { value: 'single', label: '仅当前文档页面' },
                         ]}
                         value={shareScope}
-                        onChange={(v) => setShareScope((v === 0 ? 'space' : String(v)) as any)}
-                        clearValue=""
+                        onChange={(v) => setShareScope((v === null ? 'space' : String(v)) as any)}
                       />
                     </div>
 
@@ -2159,12 +2155,12 @@ export default function WikiPage() {
                         <label className="block text-[11px] font-bold text-gray-600 dark:text-gray-400 mb-1.5">链接有效期</label>
                         <SearchableSelect
                           options={[
-                            { id: 'permanent', label: '永久有效' },
-                            { id: 'custom', label: '设置到期时间' },
+                            { value: 'permanent', label: '永久有效' },
+                            { value: 'custom', label: '设置到期时间' },
                           ]}
                           value={expireMode}
                           onChange={async (v) => {
-                            const val = (v === 0 ? 'permanent' : String(v)) as 'permanent' | 'custom'
+                            const val = (v === null ? 'permanent' : String(v)) as 'permanent' | 'custom'
                             setExpireMode(val)
                             let nextExpire = shareExpiresAt
                             if (val === 'permanent') {
@@ -2173,7 +2169,6 @@ export default function WikiPage() {
                             }
                             await syncShareConfig(isSpacePublic, usePassword, sharePassword, val, nextExpire)
                           }}
-                          clearValue=""
                         />
                       </div>
 
@@ -2375,13 +2370,12 @@ export default function WikiPage() {
                     <div className="flex-1">
                       <SearchableSelect
                         options={[
-                          { id: 'viewer', label: '查看者 (只读)' },
-                          { id: 'editor', label: '编辑者 (可写)' },
-                          { id: 'admin', label: '管理员 (统筹)' },
+                          { value: 'viewer', label: '查看者 (只读)' },
+                          { value: 'editor', label: '编辑者 (可写)' },
+                          { value: 'admin', label: '管理员 (统筹)' },
                         ]}
                         value={selectedPermission}
-                        onChange={(v) => setSelectedPermission((v === 0 ? 'viewer' : String(v)) as any)}
-                        clearValue=""
+                        onChange={(v) => setSelectedPermission((v === null ? 'viewer' : String(v)) as any)}
                       />
                     </div>
                   </div>

@@ -74,6 +74,7 @@ from app.models.purchase_supplier import PurchaseSupplier
 from app.models.asset import Asset
 from app.models.asset_record import AssetRecord
 from app.models.backup_record import BackupRecord
+from app.schemas.backup_record import BackupRecordOut
 from app.utils.time import utc_now
 from app.services.excel_export_service import (
     EXCEL_MODULES, DOMAIN_LABELS, get_modules_summary, export_excel,
@@ -415,7 +416,7 @@ def backup_sql(
 # 备份历史
 # ══════════════════════════════════════════════════════════════
 
-@router.get("/backup/history")
+@router.get("/backup/history", response_model=list[BackupRecordOut])
 def backup_history(
     current_user: User = Depends(require_permission("data:export")),
     db: Session = Depends(get_session),
@@ -435,22 +436,24 @@ def backup_history(
         if r.file_exists != exists:
             r.file_exists = exists
             db.add(r)
-        result.append({
-            "id": r.id,
-            "backup_type": r.backup_type,
-            "filename": r.filename,
-            "size": r.size_bytes,
-            "size_label": _format_size(r.size_bytes),
-            "model_count": r.model_count,
-            "record_count": r.record_count,
-            "modules": r.modules,
-            "operator_name": r.operator_name,
-            "note": r.note,
-            "file_exists": exists,
-            "created_at": r.created_at.isoformat() if r.created_at else None,
-        })
+        result.append(BackupRecordOut(
+            id=r.id,
+            backup_type=r.backup_type,
+            filename=r.filename,
+            file_path=r.file_path,
+            size_bytes=r.size_bytes,
+            size_label=_format_size(r.size_bytes),
+            model_count=r.model_count,
+            record_count=r.record_count,
+            modules=r.modules,
+            operator_id=r.operator_id,
+            operator_name=r.operator_name,
+            note=r.note,
+            file_exists=exists,
+            created_at=r.created_at,
+        ))
     db.commit()
-    return {"records": result}
+    return result
 
 
 @router.get("/backup/{record_id}/download")

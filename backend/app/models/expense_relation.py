@@ -10,6 +10,8 @@ from datetime import datetime
 from typing import Optional
 from sqlmodel import SQLModel, Field
 
+from app.utils.time import now
+
 
 class ExpenseRelation(SQLModel, table=True):
     __tablename__ = "expense_relation"
@@ -19,4 +21,4 @@ class ExpenseRelation(SQLModel, table=True):
     target_type: str = Field(max_length=30, index=True, description="关联单据类型: business_trip/leave/purchase")
     target_id: int = Field(index=True, description="关联单据主键")
     relation_note: str = Field(default="", max_length=200, description="关联说明")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: now())

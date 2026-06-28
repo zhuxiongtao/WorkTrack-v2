@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   Sparkles, Loader2, LayoutDashboard, Brain, RefreshCw,
-  ArrowRight, TrendingUp, Briefcase, Calendar, BookOpen, FileText, Users,
+  ArrowRight, TrendingUp, Briefcase, Calendar, FileText, Users,
   GitBranch, AlertTriangle, Clock, CheckCircle2, Zap, ChevronRight,
   Building2, Cpu, Activity, type LucideIcon,
 } from 'lucide-react'
@@ -57,36 +57,30 @@ function isCachedToday(insight: InsightData): boolean {
 
 /* ──── 小工具 ──── */
 
-function fmtAmount(n: number): string {
-  if (n >= 1e8) return `${(n / 1e8).toFixed(1)}亿`
-  if (n >= 1e4) return `${(n / 1e4).toFixed(1)}万`
-  return n.toFixed(0)
-}
-
 function fmtDate(iso: string): string {
   const d = new Date(iso)
   return `${d.getMonth() + 1}/${d.getDate()}`
 }
 
-/* ──── 风险色 ──── */
+/* ──── 风险色（状态语义，双主题） ──── */
 const RISK_COLOR: Record<string, string> = {
-  low: 'text-green-400',
-  medium: 'text-amber-400',
-  high: 'text-red-400',
+  low: 'text-emerald-700 dark:text-emerald-400',
+  medium: 'text-amber-700 dark:text-amber-400',
+  high: 'text-red-700 dark:text-red-400',
 }
 const RISK_DOT: Record<string, string> = {
-  low: 'bg-green-500',
+  low: 'bg-emerald-500',
   medium: 'bg-amber-500',
   high: 'bg-red-500',
 }
 
-/* ──── 合同状态配色 ──── */
+/* ──── 合同状态配色（状态语义色，双主题） ──── */
 const CONTRACT_STATUS_STYLE: Record<string, { bar: string; text: string; bg: string }> = {
-  '草稿':   { bar: 'bg-gray-500',   text: 'text-gray-400',   bg: 'bg-gray-500/10' },
-  '审批中': { bar: 'bg-amber-500',  text: 'text-amber-400',  bg: 'bg-amber-500/10' },
-  '生效中': { bar: 'bg-green-500',  text: 'text-green-400',  bg: 'bg-green-500/10' },
-  '已驳回': { bar: 'bg-red-500',    text: 'text-red-400',    bg: 'bg-red-500/10' },
-  '已终止': { bar: 'bg-gray-600',   text: 'text-gray-500',   bg: 'bg-gray-600/10' },
+  '草稿':   { bar: 'bg-gray-400 dark:bg-gray-500',   text: 'text-gray-600 dark:text-gray-400',   bg: 'bg-gray-100 dark:bg-gray-500/10' },
+  '审批中': { bar: 'bg-amber-400 dark:bg-amber-500', text: 'text-amber-700 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-500/10' },
+  '生效中': { bar: 'bg-emerald-400 dark:bg-emerald-500', text: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
+  '已驳回': { bar: 'bg-red-400 dark:bg-red-500',     text: 'text-red-700 dark:text-red-400',     bg: 'bg-red-50 dark:bg-red-500/10' },
+  '已终止': { bar: 'bg-gray-400 dark:bg-gray-500',   text: 'text-gray-600 dark:text-gray-400',   bg: 'bg-gray-100 dark:bg-gray-500/10' },
 }
 
 /* ──── 项目状态 ──── */
@@ -162,14 +156,6 @@ export default function DashboardPage() {
 
   /* ── 日期范围文本 ── */
 
-  const queryParams = useMemo(() => {
-    const p = new URLSearchParams()
-    p.set('preset', preset)
-    if (customStart) p.set('start_date', customStart)
-    if (customEnd) p.set('end_date', customEnd)
-    return p.toString()
-  }, [preset, customStart, customEnd])
-
   const dateRangeText = useMemo(() => {
     if (customStart && customEnd) return `${customStart} — ${customEnd}`
     const now = new Date()
@@ -222,9 +208,9 @@ export default function DashboardPage() {
   }
 
   const INSIGHT_PERIODS = [
-    { key: 'week',    label: '周度', icon: Brain,     color: '#8B5CF6' },
-    { key: 'month',   label: '月度', icon: TrendingUp, color: '#3B82F6' },
-    { key: 'quarter', label: '季度', icon: Briefcase,  color: '#10B981' },
+    { key: 'week',    label: '周度', icon: Brain },
+    { key: 'month',   label: '月度', icon: TrendingUp },
+    { key: 'quarter', label: '季度', icon: Briefcase },
   ] as const
 
   const presets: { key: PresetKey; label: string }[] = [
@@ -238,24 +224,22 @@ export default function DashboardPage() {
     <div className="mx-auto space-y-4">
 
       {/* ── 头部：问候 + MarqueeBanner ── */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-500/10 via-purple-500/5 to-pink-500/10 border border-border/50 p-3 md:p-4">
-        <div className="absolute top-0 right-0 w-48 h-48 -translate-y-12 translate-x-12 bg-blue-500/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 left-0 w-40 h-40 translate-y-8 -translate-x-8 bg-purple-500/5 rounded-full blur-3xl" />
+      <div className="relative overflow-hidden rounded-2xl bg-bg-card border border-border p-3 md:p-4">
         <div className="relative flex flex-col gap-2 lg:flex-row lg:items-stretch lg:gap-3">
           <div className="flex flex-col shrink-0 min-w-0 flex-1">
             <div className="flex-1 flex items-center px-1">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <Sparkles size={15} className="text-amber-500 shrink-0" />
-                  <h2 className="text-lg font-bold leading-tight" style={{ color: 'var(--text-primary)' }}>
+                  <h2 className="text-lg font-bold leading-tight text-gray-900 dark:text-white">
                     {getGreeting()}，{user?.name || user?.username}
                   </h2>
-                  <span className="text-[11px] text-gray-500">· {dateRangeText}</span>
+                  <span className="text-[11px] text-gray-500 dark:text-gray-400">· {dateRangeText}</span>
                 </div>
                 {(() => {
                   const sub = getSubGreeting()
                   return (
-                    <p className={`text-xs mt-0.5 pl-[23px] ${sub.accent ? 'text-amber-400 dark:text-amber-400' : 'text-gray-500 dark:text-gray-500'}`}>
+                    <p className={`text-xs mt-0.5 pl-[23px] ${sub.accent ? 'text-amber-700 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'}`}>
                       {sub.accent && <span className="mr-1">⚠</span>}{sub.text}
                     </p>
                   )
@@ -263,19 +247,19 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-1.5 mt-2">
-              <div className="flex flex-wrap items-center gap-0.5 bg-gray-100 dark:bg-white/5 rounded-lg border border-gray-300 dark:border-border/40 p-0.5">
+              <div className="flex flex-wrap items-center gap-0.5 bg-bg-hover border border-border rounded-lg p-0.5">
                 {presets.map(p => (
                   <button key={p.key} onClick={() => { setPreset(p.key); setCustomStart(''); setCustomEnd('') }}
-                    className={`px-2.5 py-0.5 text-[11px] rounded-md transition-all ${preset === p.key && !customStart ? 'bg-blue-500/20 text-blue-700 dark:text-blue-300 font-medium' : 'text-gray-600 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300'}`}>
+                    className={`px-2.5 py-0.5 text-[11px] rounded-md transition-all ${preset === p.key && !customStart ? 'bg-accent-blue/15 text-accent-blue font-medium' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}>
                     {p.label}
                   </button>
                 ))}
-                <div className="w-px h-3.5 bg-gray-300 dark:bg-border/50 mx-0.5" />
+                <div className="w-px h-3.5 bg-border mx-0.5" />
                 <input ref={startDateRef} type="date" value={customStart}
                   onChange={e => { setCustomStart(e.target.value); if (e.target.value) setPreset('week') }}
                   className="sr-only" />
                 <button onClick={() => startDateRef.current?.showPicker()}
-                  className="text-[11px] text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 px-1 transition-colors">
+                  className="text-[11px] text-gray-500 dark:text-gray-400 hover:text-accent-blue px-1 transition-colors">
                   {customStart || '开始'}
                 </button>
                 <span className="text-gray-400 text-[11px]">—</span>
@@ -283,7 +267,7 @@ export default function DashboardPage() {
                   onChange={e => { setCustomEnd(e.target.value); if (e.target.value) setPreset('week') }}
                   className="sr-only" />
                 <button onClick={() => endDateRef.current?.showPicker()}
-                  className="text-[11px] text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 px-1 transition-colors">
+                  className="text-[11px] text-gray-500 dark:text-gray-400 hover:text-accent-blue px-1 transition-colors">
                   {customEnd || '结束'}
                 </button>
               </div>
@@ -295,14 +279,14 @@ export default function DashboardPage() {
 
       {/* ── 加载态 ── */}
       {loading ? (
-        <div className="flex items-center justify-center py-24 text-gray-500">
+        <div className="flex items-center justify-center py-24 text-gray-500 dark:text-gray-400">
           <Loader2 size={24} className="animate-spin mr-2" />加载数据中…
         </div>
       ) : !overview ? (
         <div className="text-center py-20">
-          <LayoutDashboard size={40} className="mx-auto text-gray-600 mb-3" />
-          <p className="text-gray-500 text-sm mb-2">数据加载失败</p>
-          <button onClick={loadOverview} className="text-sm text-blue-400 hover:underline">点击重试</button>
+          <LayoutDashboard size={40} className="mx-auto text-gray-400 dark:text-gray-500 mb-3" />
+          <p className="text-gray-500 dark:text-gray-400 text-sm mb-2">数据加载失败</p>
+          <button onClick={loadOverview} className="text-sm text-accent-blue hover:underline">点击重试</button>
         </div>
       ) : (
         <>
@@ -313,7 +297,7 @@ export default function DashboardPage() {
               label="待我审批"
               count={overview.approvals.pending_for_me}
               emptyText="暂无待审批"
-              tone="amber"
+              tone="warning"
               onClick={() => navigate('/approvals')}
             />
             <ActionAlertCard
@@ -321,7 +305,7 @@ export default function DashboardPage() {
               label="我发起的审批进行中"
               count={overview.approvals.my_pending_submissions}
               emptyText="无进行中申请"
-              tone="blue"
+              tone="info"
               onClick={() => navigate('/approvals')}
             />
             {overview.contracts.visible && (
@@ -330,7 +314,7 @@ export default function DashboardPage() {
                 label="合同即将到期（30天内）"
                 count={overview.contracts.expiring_soon}
                 emptyText="无即将到期合同"
-                tone="red"
+                tone="danger"
                 onClick={() => navigate('/contracts')}
               />
             )}
@@ -341,7 +325,7 @@ export default function DashboardPage() {
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
               {overview.contracts.visible && (
                 <BizCard
-                  icon={FileText} label="合同" tone="indigo"
+                  icon={FileText} label="合同"
                   main={`${overview.contracts.status['生效中'] ?? 0}`} mainSub="生效中"
                   sub={`共 ${overview.contracts.total} 份${overview.contracts.total_active_amount > 0 ? ' · 在效 ¥' + overview.contracts.total_active_amount.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 1 }) + ' 万' : ''}`}
                   onClick={() => navigate('/contracts')}
@@ -349,7 +333,7 @@ export default function DashboardPage() {
               )}
               {overview.projects.visible && (
                 <BizCard
-                  icon={Briefcase} label="项目" tone="blue"
+                  icon={Briefcase} label="项目"
                   main={`${overview.projects.status['进行中'] ?? 0}`} mainSub="进行中"
                   sub={`共 ${overview.projects.total} 个`}
                   onClick={() => navigate('/projects')}
@@ -357,7 +341,7 @@ export default function DashboardPage() {
               )}
               {overview.customers.visible && (
                 <BizCard
-                  icon={Users} label="客户" tone="green"
+                  icon={Users} label="客户"
                   main={`${overview.customers.total}`} mainSub="总客户"
                   sub={`本月新增 +${overview.customers.new_this_month}`}
                   onClick={() => navigate('/customers')}
@@ -365,7 +349,7 @@ export default function DashboardPage() {
               )}
               {overview.suppliers.visible && (
                 <BizCard
-                  icon={Building2} label="供应商" tone="purple"
+                  icon={Building2} label="供应商"
                   main={`${overview.suppliers.active}`} mainSub="合作中"
                   sub={`共 ${overview.suppliers.total} 家`}
                   onClick={() => navigate('/suppliers')}
@@ -373,7 +357,7 @@ export default function DashboardPage() {
               )}
               {overview.channels.visible && (
                 <BizCard
-                  icon={Cpu} label="通道" tone="cyan"
+                  icon={Cpu} label="通道"
                   main={`${overview.channels.active}`} mainSub="合作中"
                   sub={`共 ${overview.channels.total} 条`}
                   onClick={() => navigate('/channels')}
@@ -392,39 +376,39 @@ export default function DashboardPage() {
 
               {/* 合同状态分布 */}
               {overview.contracts.visible && (
-              <div className="rounded-2xl bg-bg-card border border-border/50 p-5">
+              <div className="rounded-2xl bg-bg-card border border-border p-5">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-indigo-500/15 flex items-center justify-center">
-                      <FileText size={14} className="text-indigo-400" />
+                    <div className="w-7 h-7 rounded-lg bg-bg-hover flex items-center justify-center">
+                      <FileText size={14} className="text-gray-600 dark:text-gray-300" />
                     </div>
-                    <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>合同状态分布</span>
+                    <span className="text-sm font-bold text-gray-900 dark:text-white">合同状态分布</span>
                   </div>
                   <button onClick={() => navigate('/contracts')}
-                    className="flex items-center gap-1 text-[11px] text-gray-500 hover:text-gray-200 transition-colors">
+                    className="flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400 hover:text-accent-blue transition-colors">
                     查看全部 <ChevronRight size={12} />
                   </button>
                 </div>
                 {overview.contracts.total === 0 ? (
-                  <p className="text-xs text-gray-500 text-center py-4">暂无合同数据</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 text-center py-4">暂无合同数据</p>
                 ) : (
                   <>
                     <div className="flex h-2 rounded-full overflow-hidden mb-4 gap-0.5">
                       {Object.entries(overview.contracts.status).map(([status, count]) => {
-                        const style = CONTRACT_STATUS_STYLE[status] || { bar: 'bg-gray-500', text: 'text-gray-400', bg: 'bg-gray-500/10' }
+                        const style = CONTRACT_STATUS_STYLE[status] || CONTRACT_STATUS_STYLE['草稿']
                         const pct = (count / overview.contracts.total) * 100
                         return <div key={status} className={`${style.bar} rounded-full`} style={{ width: `${pct}%` }} title={`${status}: ${count}`} />
                       })}
                     </div>
                     <div className="flex flex-wrap gap-x-5 gap-y-2">
                       {Object.entries(overview.contracts.status).map(([status, count]) => {
-                        const style = CONTRACT_STATUS_STYLE[status] || { bar: 'bg-gray-500', text: 'text-gray-400', bg: 'bg-gray-500/10' }
+                        const style = CONTRACT_STATUS_STYLE[status] || CONTRACT_STATUS_STYLE['草稿']
                         return (
                           <div key={status} className="flex items-center gap-2">
                             <div className={`w-2.5 h-2.5 rounded-full ${style.bar}`} />
                             <span className={`text-[11px] font-medium ${style.text}`}>{status}</span>
-                            <span className="text-[13px] font-bold" style={{ color: 'var(--text-primary)' }}>{count}</span>
-                            <span className="text-[11px] text-gray-600">({Math.round(count / overview.contracts.total * 100)}%)</span>
+                            <span className="text-[13px] font-bold text-gray-900 dark:text-white">{count}</span>
+                            <span className="text-[11px] text-gray-500 dark:text-gray-400">({Math.round(count / overview.contracts.total * 100)}%)</span>
                           </div>
                         )
                       })}
@@ -436,46 +420,46 @@ export default function DashboardPage() {
 
               {/* 进行中的模型变更 */}
               {overview.model_changes_visible && (
-              <div className="rounded-2xl bg-bg-card border border-border/50 p-5">
+              <div className="rounded-2xl bg-bg-card border border-border p-5">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-amber-500/15 flex items-center justify-center">
-                      <Activity size={14} className="text-amber-400" />
+                    <div className="w-7 h-7 rounded-lg bg-bg-hover flex items-center justify-center">
+                      <Activity size={14} className="text-gray-600 dark:text-gray-300" />
                     </div>
-                    <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>进行中的模型变更</span>
+                    <span className="text-sm font-bold text-gray-900 dark:text-white">进行中的模型变更</span>
                     {overview.model_changes.length > 0 && (
-                      <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-bold">
+                      <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20 font-medium">
                         {overview.model_changes.length}
                       </span>
                     )}
                   </div>
                   <button onClick={() => navigate('/model-changes')}
-                    className="flex items-center gap-1 text-[11px] text-gray-500 hover:text-gray-200 transition-colors">
+                    className="flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400 hover:text-accent-blue transition-colors">
                     查看全部 <ChevronRight size={12} />
                   </button>
                 </div>
                 {overview.model_changes.length === 0 ? (
                   <div className="flex items-center gap-2 py-4 justify-center">
-                    <CheckCircle2 size={16} className="text-green-500" />
-                    <span className="text-xs text-gray-500">当前没有进行中的模型变更事件</span>
+                    <CheckCircle2 size={16} className="text-emerald-500" />
+                    <span className="text-xs text-gray-500 dark:text-gray-400">当前没有进行中的模型变更事件</span>
                   </div>
                 ) : (
                   <div className="space-y-2">
                     {overview.model_changes.map(ev => (
                       <button key={ev.id} onClick={() => navigate('/model-changes')}
-                        className="w-full flex items-center gap-3 p-3 rounded-xl bg-bg-hover/30 hover:bg-bg-hover/60 border border-border/30 hover:border-border/60 transition-all text-left">
+                        className="w-full flex items-center gap-3 p-3 rounded-xl bg-bg-hover/30 hover:bg-bg-hover/60 border border-border transition-all text-left">
                         <div className={`w-2 h-2 rounded-full shrink-0 ${RISK_DOT[ev.risk_level] || 'bg-gray-500'}`} />
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium truncate" style={{ color: 'var(--text-primary)' }}>{ev.title}</p>
+                          <p className="text-xs font-medium truncate text-gray-900 dark:text-white">{ev.title}</p>
                           <div className="flex items-center gap-2 mt-0.5">
                             {ev.current_stage_name && (
-                              <span className="text-[11px] text-blue-400">
+                              <span className="text-[11px] text-accent-blue">
                                 阶段 {ev.current_stage_order}：{ev.current_stage_name}
-                                {ev.current_stage_status === 'awaiting_approval' && <span className="ml-1 text-amber-400">（待审批）</span>}
+                                {ev.current_stage_status === 'awaiting_approval' && <span className="ml-1 text-amber-600 dark:text-amber-400">（待审批）</span>}
                               </span>
                             )}
                             {ev.effective_date && (
-                              <span className="text-[11px] text-gray-500">生效 {fmtDate(ev.effective_date)}</span>
+                              <span className="text-[11px] text-gray-500 dark:text-gray-400">生效 {fmtDate(ev.effective_date)}</span>
                             )}
                           </div>
                         </div>
@@ -497,35 +481,35 @@ export default function DashboardPage() {
 
               {/* 个人统计 */}
               {(overview.personal.meetings_visible || overview.personal.customers_visible) && (
-              <div className="rounded-2xl bg-bg-card border border-border/50 p-5">
+              <div className="rounded-2xl bg-bg-card border border-border p-5">
                 <div className="flex items-center gap-2 mb-4">
-                  <div className="w-7 h-7 rounded-lg bg-blue-500/15 flex items-center justify-center">
-                    <Zap size={14} className="text-blue-400" />
+                  <div className="w-7 h-7 rounded-lg bg-bg-hover flex items-center justify-center">
+                    <Zap size={14} className="text-gray-600 dark:text-gray-300" />
                   </div>
-                  <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>个人统计</span>
+                  <span className="text-sm font-bold text-gray-900 dark:text-white">个人统计</span>
                 </div>
                 <div className="space-y-3">
                   {overview.personal.meetings_visible && (
                   <div className="flex items-center justify-between p-3 rounded-xl bg-bg-hover/30">
                     <div className="flex items-center gap-2">
-                      <Calendar size={13} className="text-green-400" />
-                      <span className="text-xs text-gray-400">本月会议</span>
+                      <Calendar size={13} className="text-gray-500 dark:text-gray-400" />
+                      <span className="text-xs text-gray-600 dark:text-gray-300">本月会议</span>
                     </div>
                     <div className="flex items-baseline gap-1">
-                      <span className="text-xl font-bold text-green-400">{overview.personal.meetings_this_month}</span>
-                      <span className="text-[11px] text-gray-500">次</span>
+                      <span className="text-xl font-bold text-gray-900 dark:text-white">{overview.personal.meetings_this_month}</span>
+                      <span className="text-[11px] text-gray-500 dark:text-gray-400">次</span>
                     </div>
                   </div>
                   )}
                   {overview.personal.customers_visible && (
                   <div className="flex items-center justify-between p-3 rounded-xl bg-bg-hover/30">
                     <div className="flex items-center gap-2">
-                      <Users size={13} className="text-purple-400" />
-                      <span className="text-xs text-gray-400">本月新增客户</span>
+                      <Users size={13} className="text-gray-500 dark:text-gray-400" />
+                      <span className="text-xs text-gray-600 dark:text-gray-300">本月新增客户</span>
                     </div>
                     <div className="flex items-baseline gap-1">
-                      <span className="text-xl font-bold text-purple-400">{overview.customers.new_this_month}</span>
-                      <span className="text-[11px] text-gray-500">家</span>
+                      <span className="text-xl font-bold text-gray-900 dark:text-white">{overview.customers.new_this_month}</span>
+                      <span className="text-[11px] text-gray-500 dark:text-gray-400">家</span>
                     </div>
                   </div>
                   )}
@@ -535,21 +519,21 @@ export default function DashboardPage() {
 
               {/* 项目状态 */}
               {overview.projects.visible && (
-              <div className="rounded-2xl bg-bg-card border border-border/50 p-5">
+              <div className="rounded-2xl bg-bg-card border border-border p-5">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-blue-500/15 flex items-center justify-center">
-                      <Briefcase size={14} className="text-blue-400" />
+                    <div className="w-7 h-7 rounded-lg bg-bg-hover flex items-center justify-center">
+                      <Briefcase size={14} className="text-gray-600 dark:text-gray-300" />
                     </div>
-                    <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>项目状态</span>
+                    <span className="text-sm font-bold text-gray-900 dark:text-white">项目状态</span>
                   </div>
                   <button onClick={() => navigate('/projects')}
-                    className="text-[11px] text-gray-500 hover:text-gray-200 transition-colors flex items-center gap-1">
+                    className="text-[11px] text-gray-500 dark:text-gray-400 hover:text-accent-blue transition-colors flex items-center gap-1">
                     查看 <ChevronRight size={12} />
                   </button>
                 </div>
                 {overview.projects.total === 0 ? (
-                  <p className="text-xs text-gray-500 text-center py-3">暂无项目数据</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 text-center py-3">暂无项目数据</p>
                 ) : (
                   <div className="space-y-2.5">
                     {Object.entries(overview.projects.status).sort((a, b) => b[1] - a[1]).map(([status, count]) => {
@@ -558,8 +542,8 @@ export default function DashboardPage() {
                       return (
                         <div key={status}>
                           <div className="flex items-center justify-between mb-1">
-                            <span className="text-[11px] text-gray-400">{status}</span>
-                            <span className="text-[11px] font-semibold" style={{ color: 'var(--text-primary)' }}>{count} <span className="text-[11px] text-gray-600 font-normal">({pct}%)</span></span>
+                            <span className="text-[11px] text-gray-600 dark:text-gray-300">{status}</span>
+                            <span className="text-[11px] font-semibold text-gray-900 dark:text-white">{count} <span className="text-[11px] text-gray-500 dark:text-gray-400 font-normal">({pct}%)</span></span>
                           </div>
                           <div className="h-1.5 bg-bg-hover rounded-full overflow-hidden">
                             <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
@@ -578,32 +562,28 @@ export default function DashboardPage() {
 
           {/* ══ AI 智能洞察 ══ */}
           {hasPermission('ai:use') && (
-          <div className="rounded-2xl bg-bg-card border border-border/50 p-5">
+          <div className="rounded-2xl bg-bg-card border border-border p-5">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2.5">
-                <div className="relative">
-                  <div className="absolute inset-0 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg blur-md opacity-60 animate-pulse" />
-                  <div className="relative w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-                    <Brain size={15} className="text-white" strokeWidth={2.5} />
-                  </div>
+                <div className="w-8 h-8 rounded-lg bg-accent-blue/10 flex items-center justify-center">
+                  <Brain size={15} className="text-accent-blue" strokeWidth={2.5} />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold flex items-center gap-1.5" style={{ color: 'var(--text-primary)' }}>
+                  <h4 className="text-sm font-bold flex items-center gap-1.5 text-gray-900 dark:text-white">
                     AI 智能洞察
-                    <span className="text-[11px] px-1.5 py-0.5 rounded-full font-bold bg-gradient-to-r from-purple-500 to-pink-500 text-white">AI</span>
+                    <span className="text-[11px] px-1.5 py-0.5 rounded-full font-medium bg-accent-blue/10 text-accent-blue border border-accent-blue/20">AI</span>
                   </h4>
-                  <p className="text-[11px] text-gray-500 mt-0.5">
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
                     {insights[aiTab]?.updatedAt
                       ? `更新于 ${formatUpdatedAt(insights[aiTab]!.updatedAt!)}`
                       : '基于项目/客户/会议/日报数据自动生成'}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-1 bg-bg-hover/50 rounded-lg p-0.5 ring-1 ring-white/5">
-                {INSIGHT_PERIODS.map(({ key, label, color }) => (
+              <div className="flex items-center gap-0.5 bg-bg-hover border border-border rounded-lg p-0.5">
+                {INSIGHT_PERIODS.map(({ key, label }) => (
                   <button key={key} onClick={() => setAiTab(key)}
-                    className={`px-2.5 py-1 text-[11px] rounded-md font-medium transition-all ${aiTab === key ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
-                    style={aiTab === key ? { background: `${color}25`, color } : {}}>
+                    className={`px-2.5 py-1 text-[11px] rounded-md font-medium transition-all ${aiTab === key ? 'bg-accent-blue/15 text-accent-blue' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}>
                     {label}
                   </button>
                 ))}
@@ -612,7 +592,7 @@ export default function DashboardPage() {
 
             {(() => {
               const period = INSIGHT_PERIODS.find(p => p.key === aiTab)!
-              const { key, label, color } = period
+              const { key, label } = period
               const data = insights[key]
               const isLoading = insightLoading[key]
               return isLoading ? (
@@ -620,31 +600,30 @@ export default function DashboardPage() {
                   {[1, 2, 3].map(i => <div key={i} className="h-10 rounded-xl bg-bg-hover animate-pulse" style={{ animationDelay: `${i * 0.1}s` }} />)}
                 </div>
               ) : !data?.items.length ? (
-                <div className="relative overflow-hidden py-8 px-4 text-center rounded-2xl border border-dashed border-purple-500/20 bg-gradient-to-br from-purple-500/[0.03] via-transparent to-pink-500/[0.03]">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500/15 to-pink-500/15 border border-purple-500/20 flex items-center justify-center mx-auto mb-3">
-                    <Brain size={20} className="text-purple-400" strokeWidth={1.8} />
+                <div className="py-8 px-4 text-center rounded-2xl border border-dashed border-border bg-bg-hover/30">
+                  <div className="w-12 h-12 rounded-2xl bg-accent-blue/10 border border-accent-blue/20 flex items-center justify-center mx-auto mb-3">
+                    <Brain size={20} className="text-accent-blue" strokeWidth={1.8} />
                   </div>
-                  <p className="text-sm font-bold text-gray-300 mb-1">暂无{label}洞察</p>
-                  <p className="text-[11px] text-gray-500 mb-3">让 AI 深度分析当前周期的工作数据</p>
+                  <p className="text-sm font-bold text-gray-900 dark:text-white mb-1">暂无{label}洞察</p>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-3">让 AI 深度分析当前周期的工作数据</p>
                   <button onClick={() => loadInsights(key)}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs font-bold hover:shadow-lg hover:shadow-purple-500/30 transition-all">
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-accent-blue hover:bg-blue-600 text-white text-xs font-medium hover:shadow-lg hover:shadow-blue-500/30 transition-all">
                     <Sparkles size={12} strokeWidth={2.5} />生成{label}洞察
                   </button>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {data.items.map((line, i) => (
-                    <div key={i} className="flex items-start gap-3 p-3 rounded-xl border border-border/30 hover:border-purple-500/30 bg-gradient-to-r from-white/[0.02] to-transparent hover:from-purple-500/5 transition-all">
-                      <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5"
-                        style={{ background: `${color}25`, color }}>
+                    <div key={i} className="flex items-start gap-3 p-3 rounded-xl border border-border bg-bg-hover/30 hover:bg-bg-hover/60 transition-all">
+                      <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5 bg-accent-blue/10 text-accent-blue">
                         {i + 1}
                       </span>
-                      <p className="text-xs text-gray-300 leading-relaxed">{line}</p>
+                      <p className="text-xs text-gray-700 dark:text-gray-200 leading-relaxed">{line}</p>
                     </div>
                   ))}
                   <div className="flex justify-end pt-1 md:col-span-3">
                     <button onClick={() => loadInsights(key)} disabled={isLoading}
-                      className="flex items-center gap-1 text-[11px] text-gray-500 hover:text-white transition-colors">
+                      className="flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400 hover:text-accent-blue transition-colors">
                       <RefreshCw size={11} className={isLoading ? 'animate-spin' : ''} />重新生成
                     </button>
                   </div>
@@ -661,36 +640,48 @@ export default function DashboardPage() {
 
 /* ══════════════════════════════ 子组件 ══════════════════════════════ */
 
-const TONE_STYLES = {
-  amber:  { icon: 'bg-amber-500/15',  text: 'text-amber-400',  border: 'border-amber-500/30',  badge: 'bg-amber-500/15 text-amber-400',  glow: 'hover:border-amber-500/40' },
-  blue:   { icon: 'bg-blue-500/15',   text: 'text-blue-400',   border: 'border-blue-500/20',   badge: 'bg-blue-500/15 text-blue-400',   glow: 'hover:border-blue-500/40' },
-  red:    { icon: 'bg-red-500/15',    text: 'text-red-400',    border: 'border-red-500/20',    badge: 'bg-red-500/15 text-red-400',    glow: 'hover:border-red-500/40' },
-  green:  { icon: 'bg-green-500/15',  text: 'text-green-400',  border: 'border-green-500/20',  badge: 'bg-green-500/15 text-green-400',  glow: 'hover:border-green-500/40' },
-  purple: { icon: 'bg-purple-500/15', text: 'text-purple-400', border: 'border-purple-500/20', badge: 'bg-purple-500/15 text-purple-400', glow: 'hover:border-purple-500/40' },
-  indigo: { icon: 'bg-indigo-500/15', text: 'text-indigo-400', border: 'border-indigo-500/20', badge: 'bg-indigo-500/15 text-indigo-400', glow: 'hover:border-indigo-500/40' },
-  cyan:   { icon: 'bg-cyan-500/15',   text: 'text-cyan-400',   border: 'border-cyan-500/20',   badge: 'bg-cyan-500/15 text-cyan-400',   glow: 'hover:border-cyan-500/40' },
+// ActionAlertCard 仅用状态语义色：warning（待处理）/ danger（到期）/ info（进行中）
+const ALERT_TONES = {
+  warning: {
+    icon: 'bg-amber-50 dark:bg-amber-500/10',
+    text: 'text-amber-700 dark:text-amber-400',
+    border: 'border-amber-200 dark:border-amber-500/30',
+    glow: 'hover:border-amber-300 dark:hover:border-amber-500/50',
+  },
+  danger: {
+    icon: 'bg-red-50 dark:bg-red-500/10',
+    text: 'text-red-700 dark:text-red-400',
+    border: 'border-red-200 dark:border-red-500/30',
+    glow: 'hover:border-red-300 dark:hover:border-red-500/50',
+  },
+  info: {
+    icon: 'bg-accent-blue/10',
+    text: 'text-accent-blue',
+    border: 'border-accent-blue/20 dark:border-accent-blue/30',
+    glow: 'hover:border-accent-blue/40',
+  },
 }
 
 function ActionAlertCard({
   icon: Icon, label, count, emptyText, tone, onClick,
 }: {
   icon: LucideIcon; label: string; count: number; emptyText: string
-  tone: keyof typeof TONE_STYLES; onClick: () => void
+  tone: keyof typeof ALERT_TONES; onClick: () => void
 }) {
-  const s = TONE_STYLES[tone]
+  const s = ALERT_TONES[tone]
   const hasItems = count > 0
   return (
     <button onClick={onClick}
-      className={`w-full text-left flex items-center gap-3 p-4 rounded-xl bg-bg-card border transition-all group ${hasItems ? `${s.border} ${s.glow}` : 'border-border/30 hover:border-border/60'}`}>
-      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${hasItems ? s.icon : 'bg-gray-500/10'}`}>
-        <Icon size={16} className={hasItems ? s.text : 'text-gray-500'} />
+      className={`w-full text-left flex items-center gap-3 p-4 rounded-xl bg-bg-card border transition-all group ${hasItems ? `${s.border} ${s.glow}` : 'border-border hover:border-accent-blue/40'}`}>
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${hasItems ? s.icon : 'bg-bg-hover'}`}>
+        <Icon size={16} className={hasItems ? s.text : 'text-gray-500 dark:text-gray-400'} />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-[11px] text-gray-400 leading-tight">{label}</p>
+        <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-tight">{label}</p>
         {hasItems ? (
-          <p className={`text-lg font-bold leading-tight ${s.text}`}>{count} <span className="text-xs font-normal text-gray-500">条</span></p>
+          <p className={`text-lg font-bold leading-tight ${s.text}`}>{count} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">条</span></p>
         ) : (
-          <p className="text-xs text-gray-600 leading-tight">{emptyText}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 leading-tight">{emptyText}</p>
         )}
       </div>
       {hasItems && (
@@ -701,26 +692,25 @@ function ActionAlertCard({
 }
 
 function BizCard({
-  icon: Icon, label, tone, main, mainSub, sub, onClick,
+  icon: Icon, label, main, mainSub, sub, onClick,
 }: {
-  icon: LucideIcon; label: string; tone: keyof typeof TONE_STYLES
+  icon: LucideIcon; label: string
   main: string; mainSub: string; sub: string; onClick: () => void
 }) {
-  const s = TONE_STYLES[tone]
   return (
     <button onClick={onClick}
-      className="w-full text-left p-4 rounded-xl bg-bg-card border border-border/50 hover:border-border/80 transition-all group">
+      className="w-full text-left p-4 rounded-xl bg-bg-card border border-border hover:border-accent-blue/40 transition-all group">
       <div className="flex items-center justify-between mb-3">
-        <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${s.icon}`}>
-          <Icon size={14} className={s.text} />
+        <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-bg-hover">
+          <Icon size={14} className="text-gray-600 dark:text-gray-300" />
         </div>
-        <span className="text-[11px] text-gray-500 font-medium">{label}</span>
+        <span className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">{label}</span>
       </div>
       <div className="flex items-baseline gap-1 mb-1">
-        <span className={`text-2xl font-bold ${s.text}`}>{main}</span>
-        <span className="text-[11px] text-gray-500">{mainSub}</span>
+        <span className="text-2xl font-bold text-gray-900 dark:text-white">{main}</span>
+        <span className="text-[11px] text-gray-500 dark:text-gray-400">{mainSub}</span>
       </div>
-      <p className="text-[11px] text-gray-600 truncate">{sub}</p>
+      <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{sub}</p>
     </button>
   )
 }

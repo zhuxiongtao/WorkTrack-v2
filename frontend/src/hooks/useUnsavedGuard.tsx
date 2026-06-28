@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, type JSX } from 'react'
 import ConfirmDialog from '../components/ConfirmDialog'
 
 interface UseUnsavedGuardReturn {

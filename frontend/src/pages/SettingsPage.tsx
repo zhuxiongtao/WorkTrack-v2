@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Plus, X, Save, Trash2, Loader2, Key, Globe, Cpu, Settings2, ListChecks, Sparkles, Brain, Eye, EyeOff, Mic, MessageSquare, Search, ChevronDown, Home, RotateCcw, Edit3, User, Package, MapPin, Activity, Cloud, Palette, Upload, Copy, Terminal, Zap, Pencil, AlertTriangle, Sliders, Layers, Megaphone, RefreshCw, CheckCircle2, Power, Mail, Send, Briefcase, Building2, Users, Calendar, Wallet, Receipt } from 'lucide-react'
+import { Plus, X, Save, Trash2, Loader2, Key, Globe, Cpu, Settings2, ListChecks, Sparkles, Brain, Eye, EyeOff, Mic, Search, ChevronDown, Home, RotateCcw, Edit3, User, Package, MapPin, Activity, Cloud, Palette, Upload, Copy, Terminal, Zap, Pencil, Sliders, Layers, Megaphone, RefreshCw, CheckCircle2, Power, Mail, Send, Briefcase, Building2, Users, Calendar, Receipt } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useSearchParams } from 'react-router-dom'
 import ModelDetailDrawer from '../components/ModelDetailDrawer'
 import TaskOverrideModal from '../components/TaskOverrideModal'
-import { IconBox, StatusBadge, SectionHeader, TASK_GROUP_ICONS, SUBTASK_ICONS } from '../components/design-system'
+import { IconBox, StatusBadge, TASK_GROUP_ICONS } from '../components/design-system'
 import RichTextEditor from '../components/RichTextEditor'
 import SearchableSelect from '../components/SearchableSelect'
 import { ErrorBoundary } from '../components/ErrorBoundary'
@@ -483,7 +483,7 @@ function AnnouncementTab({
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex items-center gap-2 px-5 py-2 rounded-lg bg-[#10B981] text-white text-sm font-medium hover:bg-emerald-600 disabled:opacity-50 transition-colors"
+            className="flex items-center gap-2 px-5 py-2 rounded-lg bg-accent-blue text-white text-sm font-medium hover:bg-blue-600 disabled:opacity-50 transition-colors"
           >
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             {saving ? '保存中...' : (enabled ? '保存并发布' : '保存（停用）')}
@@ -610,6 +610,41 @@ export default function SettingsPage() {
   // 品牌自定义
   const [branding, setBranding] = useState({ logo_url: '', site_title: 'WorkTrack', frontend_url: '' })
   const [brandLogoFile, setBrandLogoFile] = useState<File | null>(null)
+
+  // SVG → PNG 转换（利用浏览器原生 SVG 渲染，避免后端依赖 cairo/resvg）
+  // 输出 512x512 PNG，对侧边栏和主屏图标都足够清晰
+  const svgToPngFile = (svgFile: File): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const img = new Image()
+        img.onload = () => {
+          const size = 512
+          const canvas = document.createElement('canvas')
+          canvas.width = size
+          canvas.height = size
+          const ctx = canvas.getContext('2d')
+          if (!ctx) { reject(new Error('canvas 不可用')); return }
+          // 居中绘制，保持比例
+          const scale = Math.min(size / img.naturalWidth, size / img.naturalHeight)
+          const w = img.naturalWidth * scale
+          const h = img.naturalHeight * scale
+          const x = (size - w) / 2
+          const y = (size - h) / 2
+          ctx.drawImage(img, x, y, w, h)
+          canvas.toBlob((blob) => {
+            if (!blob) { reject(new Error('PNG 转换失败')); return }
+            const pngName = svgFile.name.replace(/\.svg$/i, '.png')
+            resolve(new File([blob], pngName, { type: 'image/png' }))
+          }, 'image/png')
+        }
+        img.onerror = () => reject(new Error('SVG 加载失败'))
+        img.src = reader.result as string
+      }
+      reader.onerror = () => reject(new Error('文件读取失败'))
+      reader.readAsDataURL(svgFile)
+    })
+  }
   const [brandLogoPreview, setBrandLogoPreview] = useState('')
   const [brandSaving, setBrandSaving] = useState(false)
   const [brandMsg, setBrandMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -1026,9 +1061,9 @@ export default function SettingsPage() {
       showToast('提示词已恢复默认', 'success')
     } catch { /* noop */ }
   }
-  const categoryLabels: Record<string, string> = { product: '涉及产品', project_scenario: '项目场景', sales_person: '销售', project_status: '项目状态', cloud: '供应商' }
-  const categoryIcons: Record<string, any> = { product: Package, project_scenario: MapPin, sales_person: User, project_status: Activity, cloud: Cloud }
-  const categoryColors: Record<string, string> = { product: '#3B82F6', project_scenario: '#8B5CF6', sales_person: '#F59E0B', project_status: '#10B981', cloud: '#EC4899' }
+  const categoryLabels: Record<string, string> = { product: '涉及产品', project_scenario: '项目场景', project_status: '项目状态', cloud: '客户技术能力' }
+  const categoryIcons: Record<string, any> = { product: Package, project_scenario: MapPin, project_status: Activity, cloud: Cloud }
+  const categoryColors: Record<string, string> = { product: '#3B82F6', project_scenario: '#8B5CF6', project_status: '#10B981', cloud: '#EC4899' }
   const loadFieldOptions = () => { fetchWithAuth('/api/v1/settings/field-options').then((r) => r.json()).then((d) => setFieldOptions(d as FieldOption[])) }
   useEffect(() => { loadFieldOptions() }, [fetchWithAuth])
 
@@ -1351,7 +1386,7 @@ export default function SettingsPage() {
           </div>
           {canManageShared && (
             <button onClick={() => openPresetEditor(null)}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#A78BFA] text-white text-xs hover:bg-purple-600 shrink-0">
+              className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-accent-blue text-white text-xs hover:bg-blue-600 shrink-0">
               <Plus size={12} />新建预设
             </button>
           )}
@@ -1728,7 +1763,7 @@ export default function SettingsPage() {
                           <button
                             onClick={() => generatePrompt(taskType)}
                             disabled={aiGenerating || !aiReq.trim()}
-                            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#8B5CF6] text-white text-xs font-medium hover:bg-purple-600 disabled:opacity-40 transition-colors"
+                            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-accent-blue text-white text-xs font-medium hover:bg-blue-600 disabled:opacity-40 transition-colors"
                           >
                             {aiGenerating && <Loader2 size={12} className="animate-spin" />}
                             <Sparkles size={12} />{aiGenerating ? 'AI 思考中...' : '生成提示词'}
@@ -1812,16 +1847,29 @@ export default function SettingsPage() {
                     type="file"
                     accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.ico"
                     className="hidden"
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const file = e.target.files?.[0]
                       if (!file) return
                       if (file.size > 2 * 1024 * 1024) {
                         setBrandMsg({ type: 'error', text: '文件大小不能超过 2MB' })
                         return
                       }
-                      setBrandLogoFile(file)
-                      setBrandLogoPreview(URL.createObjectURL(file))
-                      setBrandMsg(null)
+                      // SVG 文件先用浏览器 canvas 转成 PNG（iOS 主屏图标不支持 SVG，
+                      // 且后端 Python 无可靠的 SVG→PNG 转换库）
+                      if (file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.svg')) {
+                        try {
+                          const pngFile = await svgToPngFile(file)
+                          setBrandLogoFile(pngFile)
+                          setBrandLogoPreview(URL.createObjectURL(pngFile))
+                          setBrandMsg({ type: 'success', text: 'SVG 已自动转换为 PNG（用于兼容手机主屏图标）' })
+                        } catch (err: any) {
+                          setBrandMsg({ type: 'error', text: 'SVG 转换失败：' + (err?.message || '未知错误') })
+                        }
+                      } else {
+                        setBrandLogoFile(file)
+                        setBrandLogoPreview(URL.createObjectURL(file))
+                        setBrandMsg(null)
+                      }
                     }}
                   />
                   <p className="text-[11px] text-gray-400">推荐 200×200 px 方形图片</p>
@@ -2601,7 +2649,7 @@ export default function SettingsPage() {
                     }
                   }}
                   disabled={passwordSaving}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500 text-[#fff] text-sm font-medium hover:bg-amber-600 disabled:opacity-50"
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-blue text-white text-sm font-medium hover:bg-blue-600 disabled:opacity-50"
                 >
                   {passwordSaving && <Loader2 size={14} className="animate-spin" />}
                   <Key size={14} />{passwordSaving ? '修改中...' : '修改密码'}
@@ -2825,7 +2873,7 @@ export default function SettingsPage() {
               <button onClick={() => setPresetEditor({ open: false, preset: null })}
                 className="px-4 py-2 rounded-lg bg-bg-hover text-xs text-gray-400 hover:text-white border border-border">取消</button>
               <button onClick={handleSavePreset} disabled={presetSaving || !presetForm.name.trim()}
-                className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-[#A78BFA] text-white text-sm font-medium hover:bg-purple-600 disabled:opacity-50">
+                className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-accent-blue text-white text-sm font-medium hover:bg-blue-600 disabled:opacity-50">
                 {presetSaving && <Loader2 size={14} className="animate-spin" />}
                 <Save size={14} />{presetSaving ? '保存中...' : '保存预设'}
               </button>
@@ -3131,7 +3179,7 @@ function LegalEntityManager({ showToast }: { showToast: (m: string, t?: 'success
                 <label className="block text-xs text-gray-500 mb-1">账户余额（元）</label>
                 <input type="number" step="0.01" value={form.balance ?? ''} onChange={e => {
                     const v = e.target.value
-                    setForm({ ...form, balance: v === '' ? null : parseFloat(v) || 0 })
+                    setForm({ ...form, balance: v === '' ? undefined : parseFloat(v) || 0 })
                   }}
                   className="w-full px-3 py-1.5 rounded-lg border border-border bg-bg-card text-sm focus:border-accent-blue outline-none" />
               </div>

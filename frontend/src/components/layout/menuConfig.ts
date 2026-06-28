@@ -2,7 +2,7 @@ import {
   Briefcase, Calendar, Clock, BookOpen,
   FileText, Users, UsersRound, LayoutDashboard,
   Share2, BarChart3, Home, Layers, Calculator, CheckSquare, RefreshCw, MessageSquarePlus,
-  Wallet, Stamp, CalendarDays, Database, Receipt, Plane, ShoppingCart, Package, type LucideIcon,
+  Wallet, Stamp, CalendarDays, type LucideIcon,
 } from 'lucide-react'
 
 export interface MenuItem {

@@ -254,7 +254,10 @@ def store_purchase(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session),
 ):
-    """标记入库完成（需 purchase:manage 权限）。仅已采购状态可操作。"""
+    """标记入库完成（需 purchase:manage 权限）。仅已采购状态可操作。
+
+    设备类采购入库时，按 items 自动创建 Asset 资产台账记录。
+    """
     if not _can_manage_procurement(current_user, db):
         raise HTTPException(403, "无权执行入库操作")
     p = db.get(PurchaseRequest, purchase_id)
@@ -268,7 +271,89 @@ def store_purchase(
     db.add(p)
     db.commit()
     db.refresh(p)
-    write_log("info", "purchase", f"采购申请 #{purchase_id} 已由 {current_user.username} 执行入库", db=db)
+
+    # 设备类采购：按 items 自动建资产台账
+    created_assets = _auto_create_assets_from_purchase(p, current_user, db)
+
+    msg = f"采购申请 #{purchase_id} 已由 {current_user.username} 执行入库"
+    if created_assets:
+        msg += f"，已自动创建 {len(created_assets)} 条资产台账记录"
+    write_log("info", "purchase", msg, db=db)
     nm = _name_map(db, [p.user_id])
     sm = _supplier_map(db, [p.supplier_id] if p.supplier_id else [])
-    return _to_out(p, nm, sm)
+    out = _to_out(p, nm, sm)
+    if created_assets:
+        out["created_asset_ids"] = created_assets
+    return out
+
+
+def _auto_create_assets_from_purchase(p: PurchaseRequest, operator: User, db: Session) -> list[int]:
+    """设备类采购入库时，按 items 自动创建 Asset + AssetRecord（入库履历）。
+
+    幂等：已存在 asset_no="PUR-{purchase_id}-{idx}" 的资产不重复创建。
+    仅 purchase_type="设备" 时触发；其他类型（办公用品/服务/其他）不建资产。
+    """
+    if p.purchase_type != "设备":
+        return []
+
+    import json
+    from app.models.asset import Asset
+    from app.models.asset_record import AssetRecord
+
+    try:
+        items = json.loads(p.items or "[]")
+    except (TypeError, ValueError):
+        items = []
+
+    # 若没有 items 但有 total_amount，建一条汇总资产
+    if not items:
+        items = [{"name": p.title, "spec": "", "qty": 1, "unit_price": p.total_amount, "amount": p.total_amount}]
+
+    created_ids: list[int] = []
+    for idx, it in enumerate(items):
+        asset_no = f"PUR-{p.id}-{idx + 1}"
+        # 幂等检查
+        existing = db.exec(select(Asset).where(Asset.asset_no == asset_no)).first()
+        if existing:
+            continue
+
+        qty = int(it.get("qty") or 1)
+        unit_price = float(it.get("unit_price") or 0)
+        # qty > 1 时按数量逐条建资产（每条独立资产编号便于流转管理）
+        for n in range(qty):
+            asset_no_n = asset_no if qty == 1 else f"{asset_no}-{n + 1}"
+            if db.exec(select(Asset).where(Asset.asset_no == asset_no_n)).first():
+                continue
+            a = Asset(
+                name=(it.get("name") or p.title)[:200],
+                asset_no=asset_no_n,
+                category="电子设备",
+                spec=(it.get("spec") or "")[:200],
+                purchase_date=p.stored_at,
+                purchase_price=unit_price,
+                amount_unit=p.amount_unit,
+                currency=p.currency,
+                status="闲置",
+                location=None,
+                user_id=None,
+                supplier_id=p.supplier_id,
+                remarks=f"采购单 #{p.id} 入库自动创建",
+            )
+            db.add(a)
+            db.flush()
+            # 写入库履历
+            db.add(AssetRecord(
+                asset_id=a.id,
+                action="入库",
+                from_user_id=None,
+                to_user_id=None,
+                operator_id=operator.id,
+                from_status=None,
+                to_status="闲置",
+                note=f"采购单 #{p.id} 入库自动创建",
+            ))
+            created_ids.append(a.id)
+
+    if created_ids:
+        db.commit()
+    return created_ids

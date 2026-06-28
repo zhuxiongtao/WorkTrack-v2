@@ -12,7 +12,7 @@ from sqlmodel import Session, select
 from app.database import get_session
 from app.models.user import User
 from app.models.approval import ApprovalFlow, ApprovalInstance, ApprovalRecord
-from app.auth import get_current_user
+from app.auth import get_current_user, require_permission
 from app.schemas.approval import ApprovalActionIn, ApprovalFlowCreate, ApprovalFlowUpdate
 from app.services import approval_engine
 from app.utils.time import BEIJING_TZ, now
@@ -131,12 +131,10 @@ def _flow_to_dict(f: ApprovalFlow) -> dict:
 @router.post("/flows")
 def create_flow(
     body: ApprovalFlowCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("approval:manage")),
     db: Session = Depends(get_session),
 ):
     """新建审批流模板（仅管理员）"""
-    if not current_user.is_admin:
-        raise HTTPException(403, "仅管理员可新建审批流")
     if db.exec(select(ApprovalFlow).where(ApprovalFlow.code == body.code)).first():
         raise HTTPException(400, f"code「{body.code}」已存在")
     nodes = [n.model_dump() for n in body.nodes]
@@ -160,12 +158,10 @@ def create_flow(
 def update_flow(
     flow_id: int,
     body: ApprovalFlowUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("approval:manage")),
     db: Session = Depends(get_session),
 ):
     """更新审批流模板（仅管理员）"""
-    if not current_user.is_admin:
-        raise HTTPException(403, "仅管理员可修改审批流")
     flow = db.get(ApprovalFlow, flow_id)
     if not flow:
         raise HTTPException(404, "审批流不存在")
@@ -190,12 +186,10 @@ def update_flow(
 @router.patch("/flows/{flow_id}/toggle")
 def toggle_flow(
     flow_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("approval:manage")),
     db: Session = Depends(get_session),
 ):
     """启用/停用审批流（仅管理员）"""
-    if not current_user.is_admin:
-        raise HTTPException(403, "仅管理员可操作")
     from datetime import datetime, timezone
     flow = db.get(ApprovalFlow, flow_id)
     if not flow:
@@ -211,12 +205,10 @@ def toggle_flow(
 @router.delete("/flows/{flow_id}")
 def delete_flow(
     flow_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("approval:manage")),
     db: Session = Depends(get_session),
 ):
     """删除审批流（仅管理员；系统预置不可删）"""
-    if not current_user.is_admin:
-        raise HTTPException(403, "仅管理员可删除审批流")
     flow = db.get(ApprovalFlow, flow_id)
     if not flow:
         raise HTTPException(404, "审批流不存在")

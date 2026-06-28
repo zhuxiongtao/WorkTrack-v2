@@ -42,10 +42,6 @@ function formatTimeAgo(iso: string | null): string {
   return new Date(iso).toLocaleDateString('zh-CN')
 }
 
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
-}
-
 // ============= 单条资讯行（固定高度，整列对齐）=============
 function NewsRow({ n, onClick }: { n: NewsItem; onClick: () => void }) {
   const cs = CATEGORY_STYLES[n.category] || CATEGORY_STYLES.other

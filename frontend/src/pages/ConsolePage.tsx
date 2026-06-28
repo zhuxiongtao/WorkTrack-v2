@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import {
   LayoutGrid, Users, Briefcase, Calendar, FileText, ChevronRight, ChevronDown,
-  BarChart3, TrendingUp, Clock, Search, User, X, type LucideIcon
+  BarChart3, Search, User, X, type LucideIcon
 } from 'lucide-react'
 import { IconBox } from '../components/design-system'
 import type { Tone } from '../theme/tokens'
@@ -162,7 +162,7 @@ export default function ConsolePage() {
       <div key={node.id}>
         <div
           className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
-            isSelected ? 'bg-bg-hover text-white' : 'hover:bg-bg-hover/50 text-gray-300'
+            isSelected ? 'bg-bg-hover text-gray-900 dark:text-white' : 'hover:bg-bg-hover/50 text-gray-700 dark:text-gray-200'
           }`}
           style={{ paddingLeft: `${depth * 12 + 12}px` }}
           onClick={() => handleDeptClick(node.id)}
@@ -191,7 +191,7 @@ export default function ConsolePage() {
       <div className="flex items-center gap-3 max-md:gap-2">
         <IconBox icon={Icon} size="md" tone={tone} variant="solid" />
         <div>
-          <div className="text-2xl max-md:text-xl font-bold text-white">{value}</div>
+          <div className="text-2xl max-md:text-xl font-bold text-gray-900 dark:text-white">{value}</div>
           <div className="text-xs max-md:text-[11px] text-gray-500">{label}</div>
         </div>
       </div>
@@ -212,7 +212,7 @@ export default function ConsolePage() {
         )}
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-sm text-white truncate">{member.name}</div>
+        <div className="text-sm text-gray-900 dark:text-white truncate">{member.name}</div>
         <div className="text-[11px] text-gray-500 truncate">{member.department_name}</div>
       </div>
       <div className="flex items-center gap-6 max-md:gap-3 text-xs shrink-0">
@@ -259,7 +259,7 @@ export default function ConsolePage() {
         <div className="p-4 border-b border-border">
           <div className="flex items-center gap-2.5">
             <IconBox icon={LayoutGrid} size="md" tone="red" variant="solid" />
-            <h2 className="text-sm font-medium text-white">管理总览</h2>
+            <h2 className="text-sm font-medium text-gray-900 dark:text-white">管理总览</h2>
           </div>
         </div>
         
@@ -272,12 +272,12 @@ export default function ConsolePage() {
               placeholder="搜索成员..."
               value={searchText}
               onChange={e => setSearchText(e.target.value)}
-              className="w-full bg-bg-hover border border-border rounded-lg pl-8 pr-8 py-1.5 text-xs text-gray-300 placeholder-gray-500 focus:outline-none focus:border-[#3B82F6]/50"
+              className="w-full bg-bg-hover border border-border rounded-lg pl-8 pr-8 py-1.5 text-xs text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-[#3B82F6]/50"
             />
             {searchText && (
               <button
                 onClick={() => setSearchText('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white"
               >
                 <X size={12} />
               </button>
@@ -299,7 +299,7 @@ export default function ConsolePage() {
           <div className="p-3 border-t border-border">
             <button
               onClick={handleBackToOverview}
-              className="w-full px-3 py-2 text-xs text-gray-400 hover:text-white bg-bg-hover rounded-lg transition-colors"
+              className="w-full px-3 py-2 text-xs text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-white bg-bg-hover rounded-lg transition-colors"
             >
               返回总览
             </button>
@@ -327,7 +327,7 @@ export default function ConsolePage() {
         {/* 成员列表 */}
         <div className="flex-1 overflow-y-auto p-6 max-md:p-4">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-medium text-white flex items-center gap-2">
+            <h3 className="text-sm font-medium text-gray-900 dark:text-white flex items-center gap-2">
               {selectedDeptId && deptMembers ? (
                 <>
                   <Users size={16} className="text-blue-500" />
@@ -367,10 +367,10 @@ export default function ConsolePage() {
       {selectedMemberId && (
         <div className="w-80 max-md:fixed max-md:inset-0 max-md:w-full max-md:z-50 max-md:bg-bg-card shrink-0 bg-bg-card border-l border-border max-md:border-l-0 flex flex-col">
           <div className="p-4 border-b border-border flex items-center justify-between">
-            <h3 className="text-sm font-medium text-white">成员详情</h3>
+            <h3 className="text-sm font-medium text-gray-900 dark:text-white">成员详情</h3>
             <button
               onClick={() => setSelectedMemberId(null)}
-              className="text-gray-500 hover:text-gray-300"
+              className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white"
             >
               <X size={16} />
             </button>
@@ -434,7 +434,7 @@ function MemberDetail({ memberId }: { memberId: number }) {
           )}
         </div>
         <div>
-          <div className="text-sm font-medium text-white">{data.user.name}</div>
+          <div className="text-sm font-medium text-gray-900 dark:text-white">{data.user.name}</div>
           <div className="text-xs text-gray-500">@{data.user.username}</div>
         </div>
       </div>
@@ -447,8 +447,8 @@ function MemberDetail({ memberId }: { memberId: number }) {
             onClick={() => setActiveTab(tab.key)}
             className={`flex-1 px-3 py-1.5 text-xs rounded-md transition-colors ${
               activeTab === tab.key
-                ? 'bg-bg-card text-white shadow-sm'
-                : 'text-gray-400 hover:text-gray-300'
+                ? 'bg-bg-card text-gray-900 dark:text-white shadow-sm'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
             }`}
           >
             {tab.label} ({tab.count})
@@ -468,7 +468,7 @@ function MemberDetail({ memberId }: { memberId: number }) {
                 href={`/reports`}
                 className="block p-3 bg-bg-hover rounded-lg hover:bg-bg-hover/80 transition-colors"
               >
-                <div className="text-xs text-white mb-1">{r.date}</div>
+                <div className="text-xs text-gray-900 dark:text-white mb-1">{r.date}</div>
                 <div className="text-[11px] text-gray-400 line-clamp-2">{r.summary}</div>
               </a>
             ))
@@ -484,11 +484,11 @@ function MemberDetail({ memberId }: { memberId: number }) {
                 href={`/projects`}
                 className="block p-3 bg-bg-hover rounded-lg hover:bg-bg-hover/80 transition-colors"
               >
-                <div className="text-xs text-white mb-1">{p.name}</div>
+                <div className="text-xs text-gray-900 dark:text-white mb-1">{p.name}</div>
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] text-gray-500">{p.customer_name}</span>
                   <span className={`text-[11px] px-1.5 py-0.5 rounded ${
-                    p.status === '进行中' ? 'bg-blue-500/20 text-blue-400' : 'bg-gray-500/20 text-gray-400'
+                    p.status === '进行中' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20' : 'bg-gray-100 text-gray-500 border-gray-200 dark:bg-gray-500/10 dark:text-gray-400 dark:border-gray-500/20'
                   }`}>{p.status}</span>
                 </div>
               </a>
@@ -505,7 +505,7 @@ function MemberDetail({ memberId }: { memberId: number }) {
                 href={`/meetings`}
                 className="block p-3 bg-bg-hover rounded-lg hover:bg-bg-hover/80 transition-colors"
               >
-                <div className="text-xs text-white mb-1">{m.title}</div>
+                <div className="text-xs text-gray-900 dark:text-white mb-1">{m.title}</div>
                 <div className="text-[11px] text-gray-500">{m.date}</div>
               </a>
             ))

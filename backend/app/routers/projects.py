@@ -144,6 +144,11 @@ def create_project(data: ProjectCreate, background_tasks: BackgroundTasks, curre
     create_data["user_id"] = current_user.id
     if not create_data.get("status"):
         create_data["status"] = "待立项"
+    # 销售负责人默认为创建者，若未显式指定 user_id 则回填当前用户
+    if not create_data.get("sales_person_user_id"):
+        create_data["sales_person_user_id"] = current_user.id
+        if not create_data.get("sales_person"):
+            create_data["sales_person"] = current_user.name or current_user.username
     project = Project(**create_data)
     db.add(project)
     db.commit()

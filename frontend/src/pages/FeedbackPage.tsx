@@ -43,11 +43,11 @@ const CATEGORY_LABEL: Record<string, string> = {
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
   pending:    { label: '待处理', cls: 'text-gray-400 bg-gray-500/10' },
-  reviewing:  { label: '已读待评估', cls: 'text-blue-400 bg-blue-500/10' },
-  processing: { label: '处理中', cls: 'text-amber-400 bg-amber-500/10' },
+  reviewing:  { label: '已读待评估', cls: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20' },
+  processing: { label: '处理中', cls: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20' },
   done:       { label: '已完成', cls: 'text-green-400 bg-green-500/10' },
   closed:     { label: '已关闭', cls: 'text-gray-500 bg-gray-500/10' },
-  wontfix:    { label: '不予处理', cls: 'text-rose-400 bg-rose-500/10' },
+  wontfix:    { label: '不予处理', cls: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20' },
 }
 
 const CUSTOM_VALUE = '__custom__'
@@ -215,13 +215,12 @@ export default function FeedbackPage() {
             <label className="block text-xs text-gray-400 mb-1.5">功能模块</label>
             <SearchableSelect
               options={[
-                ...modules.map((m) => ({ id: m, label: m })),
-                { id: CUSTOM_VALUE, label: '＋ 自定义模块' },
+                ...modules.map((m) => ({ value: m, label: m })),
+                { value: CUSTOM_VALUE, label: '＋ 自定义模块' },
               ]}
               value={moduleSel}
-              onChange={(v) => setModuleSel(v === 0 ? '' : String(v))}
+              onChange={(v) => setModuleSel(v === null ? '' : String(v))}
               placeholder="请选择功能模块…"
-              clearValue=""
             />
             {moduleSel === CUSTOM_VALUE && (
               <input

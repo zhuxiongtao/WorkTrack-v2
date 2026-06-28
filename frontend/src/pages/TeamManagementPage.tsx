@@ -254,11 +254,11 @@ export default function TeamManagementPage() {
             <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-bg-hover border border-border">
               <button
                 onClick={() => setTab('daily')}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${tab === 'daily' ? 'bg-bg-card text-white shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${tab === 'daily' ? 'bg-accent-blue/15 text-accent-blue' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
               >日报</button>
               <button
                 onClick={() => setTab('weekly')}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${tab === 'weekly' ? 'bg-bg-card text-white shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${tab === 'weekly' ? 'bg-accent-blue/15 text-accent-blue' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
               >周报</button>
             </div>
           </div>

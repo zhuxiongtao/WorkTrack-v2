@@ -10,11 +10,8 @@ export interface CustomerOption {
 export interface FieldOptions {
   product: string[]
   project_scenario: string[]
-  sales_person: string[]
   project_status: string[]
   cloud: string[]
-  tech_support?: string[]
-  contract_period?: string[]
 }
 
 export interface ContractOption {
@@ -97,10 +94,10 @@ export function useProjectFormOptions() {
   const { fetchWithAuth } = useAuth()
   const [customers, setCustomers] = useState<CustomerOption[]>([])
   const [options, setOptions] = useState<FieldOptions>({
-    product: [], project_scenario: DEFAULT_AI_SCENARIOS, sales_person: [], project_status: [],
+    product: [],
+    project_scenario: DEFAULT_AI_SCENARIOS,
+    project_status: [],
     cloud: DEFAULT_TECH_CAPABILITIES,
-    tech_support: [],
-    contract_period: ['月度', '季度', '半年', '1年', '2年', '3年', '自定义'],
   })
   const [channels, setChannels] = useState<ChannelOption[]>([])
   const [modelCatalog, setModelCatalog] = useState<ModelCatalogOption[]>([])
@@ -130,14 +127,18 @@ export function useProjectFormOptions() {
       }
       if (optRes && optRes.ok) {
         const data = await optRes.json()
+        // 后端返回扁平数组 [{id, category, value, sort_order}, ...]，按 category 归组
+        const flat: Array<{ category: string; value: string; sort_order: number }> = Array.isArray(data) ? data : []
+        const grouped: Record<string, string[]> = {}
+        for (const item of flat) {
+          if (!grouped[item.category]) grouped[item.category] = []
+          grouped[item.category].push(item.value)
+        }
         setOptions(prev => ({
-          product: data.product || [],
-          project_scenario: (Array.isArray(data.project_scenario) && data.project_scenario.length > 0) ? data.project_scenario : DEFAULT_AI_SCENARIOS,
-          sales_person: data.sales_person || [],
-          tech_support: data.tech_support || data.sales_person || [],
-          project_status: data.project_status || [],
-          cloud: (Array.isArray(data.cloud) && data.cloud.length > 0) ? data.cloud : DEFAULT_TECH_CAPABILITIES,
-          contract_period: data.contract_period || prev.contract_period,
+          product: grouped.product || [],
+          project_scenario: (grouped.project_scenario && grouped.project_scenario.length > 0) ? grouped.project_scenario : DEFAULT_AI_SCENARIOS,
+          project_status: grouped.project_status || [],
+          cloud: (grouped.cloud && grouped.cloud.length > 0) ? grouped.cloud : DEFAULT_TECH_CAPABILITIES,
         }))
       }
       if (contractRes && contractRes.ok) {

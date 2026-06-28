@@ -192,8 +192,8 @@ export default function TaskOverrideModal({ taskType, taskLabel, current, onClos
               <div className="flex-1">
                 <SearchableSelect
                   options={[
-                    { id: 0, label: '不引用预设' },
-                    ...presets.map((p) => ({ id: p.id, label: `${p.is_system ? '🔒 ' : '👤 '}${p.name}${p.description ? ` — ${p.description}` : ''}` })),
+                    { value: 0, label: '不引用预设' },
+                    ...presets.map((p) => ({ value: p.id, label: `${p.is_system ? '🔒 ' : '👤 '}${p.name}${p.description ? ` — ${p.description}` : ''}` })),
                   ]}
                   value={form.preset_id || 0}
                   onChange={(v) => {
@@ -249,7 +249,7 @@ export default function TaskOverrideModal({ taskType, taskLabel, current, onClos
             <button onClick={onClose} className="px-4 py-2 rounded-lg bg-bg-hover text-xs text-gray-400 hover:text-white border border-border">取消</button>
             {canEdit && (
               <button onClick={handleSave} disabled={saving}
-                className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-[#F59E0B] text-white text-sm font-medium hover:bg-amber-600 disabled:opacity-50">
+                className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-accent-blue text-white text-sm font-medium hover:bg-blue-600 disabled:opacity-50">
                 {saving && <Loader2 size={14} className="animate-spin" />}
                 <Save size={14} />{saving ? '保存中...' : '保存覆盖'}
               </button>
@@ -305,10 +305,9 @@ function SelectField({ label, value, options, onChange, onNull }: { label: strin
         </button>
       </div>
       <SearchableSelect
-        options={options.map(o => ({ id: o.value, label: o.label }))}
+        options={options.map(o => ({ value: o.value, label: o.label }))}
         value={value || ''}
-        onChange={(v) => onChange(v === 0 ? null : (String(v) || null))}
-        clearValue=""
+        onChange={(v) => onChange(v === null ? null : (String(v) || null))}
       />
     </div>
   )

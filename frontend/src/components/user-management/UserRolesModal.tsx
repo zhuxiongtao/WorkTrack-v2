@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Loader2, Shield, Save, Building2, User, Info } from 'lucide-react'
-import { useToast } from '../../contexts/ToastContext'
 import type { UserData } from '../../services/types'
 import {
   useUserDirectRolesQuery,
@@ -23,8 +22,6 @@ interface UserRolesModalProps {
  * - 直接分配：可勾选切换（覆盖式保存）
  */
 export function UserRolesModal({ isOpen, user, onClose }: UserRolesModalProps) {
-  const { toast: showToast } = useToast()
-
   const { data: allRoles = [], isLoading: rolesLoading } = useRolesQuery()
   const { data: directRoleIds = [], isLoading: directLoading } = useUserDirectRolesQuery(user?.id ?? null)
   const setRolesMutation = useSetUserDirectRolesMutation()

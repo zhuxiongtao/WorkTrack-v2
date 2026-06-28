@@ -28,6 +28,7 @@ import ExpensesPage from '../../pages/ExpensesPage'
 import BusinessTripsPage from '../../pages/BusinessTripsPage'
 import PurchasesPage from '../../pages/PurchasesPage'
 import AssetsPage from '../../pages/AssetsPage'
+import HiresPage from '../../pages/HiresPage'
 import OACenterPage from '../../pages/OACenterPage'
 
 interface AppRoutesProps {
@@ -72,6 +73,7 @@ function AppRoutes({ homePage }: AppRoutesProps) {
       <Route path="/business-trips" element={<BusinessTripsPage />} />
       <Route path="/purchases"     element={<PurchasesPage />} />
       <Route path="/assets"        element={<AssetsPage />} />
+      <Route path="/hires"         element={<HiresPage />} />
       <Route path="/ai"            element={hasPermission('ai:use')         ? <AIPage />           : <Navigate to={homePage} replace />} />
       <Route path="/settings"      element={<SettingsPage />} />
 

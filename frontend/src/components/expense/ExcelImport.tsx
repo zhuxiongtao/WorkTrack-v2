@@ -78,7 +78,7 @@ function templateCsv() {
   return '﻿' + lines.join('\n')
 }
 
-export default function ExcelImport({ onImported, templateHref, departments: _departments }: Props) {
+export default function ExcelImport({ onImported, departments: _departments }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)

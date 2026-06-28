@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { Plus, X, Trash2, Loader2, Briefcase, Edit3, Save, Calendar, User, Building2, Activity, Search, Link2, ExternalLink, Pin, Cloud, Sparkles, RefreshCw, Tag, Filter, ChevronDown, FileText, Target, CheckCircle2, Zap, BarChart3, Hash, LayoutGrid, List, TrendingUp, Clock, Wrench, GitBranch, AlertTriangle } from 'lucide-react'
+import { Plus, X, Trash2, Loader2, Briefcase, Edit3, Calendar, User, Building2, Activity, Search, Link2, ExternalLink, Pin, Cloud, Sparkles, RefreshCw, Tag, Filter, ChevronDown, FileText, Target, Zap, BarChart3, Hash, LayoutGrid, List, Wrench, GitBranch, AlertTriangle } from 'lucide-react'
 import { ApprovalTimeline } from '../components/approval/ApprovalTimeline'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import { useToast } from '../contexts/ToastContext'
@@ -51,10 +51,6 @@ interface CostSummary {
   cost_items: CostItem[]
 }
 
-interface FieldOption {
-  id: number; category: string; value: string; sort_order: number
-}
-
 export default function ProjectsPage() {
   const { hasPermission } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -68,7 +64,6 @@ export default function ProjectsPage() {
   
   const [viewLayout, setViewLayout] = useState<'card' | 'list'>(() => (localStorage.getItem('projectsViewLayout') as 'card' | 'list') || 'card')
   useEffect(() => { localStorage.setItem('projectsViewLayout', viewLayout) }, [viewLayout])
-  const [options, setOptions] = useState<Record<string, string[]>>({})
   const [searchText, setSearchText] = useState('')
   const [selectedProduct, setSelectedProduct] = useState<string>('')
   const [selectedStatus, setSelectedStatus] = useState<string>('')
@@ -77,15 +72,14 @@ export default function ProjectsPage() {
   const [modalProject, setModalProject] = useState<Project | null>(null)
   const [linkedMeetings, setLinkedMeetings] = useState<MeetingLink[]>([])
   const [linkedContracts, setLinkedContracts] = useState<LinkedContract[]>([])
-  const [allMeetings, setAllMeetings] = useState<MeetingLink[]>([])
-  const [selectedMeetingIds, setSelectedMeetingIds] = useState<Set<number>>(new Set())
+  const [, setAllMeetings] = useState<MeetingLink[]>([])
+  const [, setSelectedMeetingIds] = useState<Set<number>>(new Set())
   const [costSummary, setCostSummary] = useState<CostSummary | null>(null)
 
   // 快捷跟进（旧 progress 文本方式，保留兼容）
-  const [quickProgressOpen, setQuickProgressOpen] = useState(false)
-  const [quickText, setQuickText] = useState('')
-  const [quickDate, setQuickDate] = useState(new Date().toISOString().slice(0, 10))
-  const [quickSaving, setQuickSaving] = useState(false)
+  const [, setQuickProgressOpen] = useState(false)
+  const [, setQuickText] = useState('')
+  const [, setQuickDate] = useState(new Date().toISOString().slice(0, 10))
   const [analyzingId, setAnalyzingId] = useState<number | null>(null)
   const [analysisOpen, setAnalysisOpen] = useState(false)
   const [submittingCharter, setSubmittingCharter] = useState(false)
@@ -101,7 +95,7 @@ export default function ProjectsPage() {
   const [followUpActiveTab, setFollowUpActiveTab] = useState<'all' | 'sales' | 'tech'>('all')
 
   // 客户列表（用于关联选择）
-  const [customers, setCustomers] = useState<{ id: number; name: string }[]>([])
+  const [, setCustomers] = useState<{ id: number; name: string }[]>([])
 
   const loadProjects = useCallback(() => {
     setLoading(true)
@@ -117,18 +111,6 @@ export default function ProjectsPage() {
       })
       .catch((e) => { console.error('[loadProjects] error:', e); setLoading(false) })
   }, [])
-
-  const loadOptions = () => {
-    fetch('/api/v1/settings/field-options')
-      .then((res) => res.json()).then((data) => {
-        const map: Record<string, string[]> = {}
-        ;(data as FieldOption[]).forEach((o) => {
-          if (!map[o.category]) map[o.category] = []
-          map[o.category].push(o.value)
-        })
-        setOptions(map)
-      })
-  }
 
   const loadMeetings = useCallback(async () => {
     try {
@@ -195,7 +177,6 @@ export default function ProjectsPage() {
   // 挂载触发监听
   useEffect(() => {
     loadProjects()
-    loadOptions()
     loadMeetings()
     loadCustomers()
   }, [loadProjects, loadMeetings, loadCustomers])
@@ -244,33 +225,6 @@ export default function ProjectsPage() {
     setFollowUps([])
     setFollowUpInputOpen(false)
     setFollowUpText('')
-  }
-
-  const handleQuickProgress = async () => {
-    if (!quickText.trim() || !modalProject) return
-    setQuickSaving(true)
-    try {
-      const dateStr = new Date(quickDate).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
-      const newEntry = `📌 ${dateStr}\n${quickText.trim()}`
-      // 新内容追加到现有进展后面
-      const updated = modalProject.progress
-        ? modalProject.progress + '\n\n---\n\n' + newEntry
-        : newEntry
-      await fetch(`/api/v1/projects/${modalProject.id}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ progress: updated }),
-      })
-      // 更新弹窗数据
-      setModalProject({ ...modalProject, progress: updated, updated_at: new Date().toISOString() })
-      setQuickText('')
-      setQuickDate(new Date().toISOString().slice(0, 10))
-      setQuickProgressOpen(false)
-      loadProjects()
-      showToast('跟进记录已保存', 'success')
-      // 自动触发 AI 分析
-      analyzeProject(modalProject.id)
-    } catch { /* ignore */ }
-    finally { setQuickSaving(false) }
   }
 
   const handleFollowUpSubmit = async () => {
@@ -393,9 +347,6 @@ export default function ProjectsPage() {
 
   const hasActiveFilter = selectedProduct || selectedStatus || selectedScenario
   const clearAllFilters = () => { setSelectedProduct(''); setSelectedStatus(''); setSelectedScenario('') }
-
-  const inputClass = "w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-300 outline-none focus:border-[#3B82F6] transition-colors"
-  const labelClass = "block text-xs text-gray-400 mb-1.5"
 
   return (
     <div>

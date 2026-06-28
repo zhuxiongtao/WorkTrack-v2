@@ -22,6 +22,7 @@ const MODULE_ICONS: Record<string, string> = {
   // OA 办公模块
   leave: '🌴', overtime: '⏰', expense: '🧾', trip: '✈️',
   purchase: '🛒', asset: '📦', purchase_supplier: '🏷️',
+  hire: '🧑‍💼', approval: '🔧',
 }
 
 const ACTION_LABELS: Record<string, string> = {

@@ -34,7 +34,7 @@ function formatWeekRange(start: string, end: string): string {
 
 export default function WeeklyReportPage() {
   const { toast: showToast } = useToast()
-  const { hasPermission, user: currentUser } = useAuth()
+  const { user: currentUser } = useAuth()
   const [weeks, setWeeks] = useState<WeekData[]>([])
   const [totalWeeks, setTotalWeeks] = useState(0)
   const [loading, setLoading] = useState(true)

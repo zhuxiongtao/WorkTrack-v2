@@ -12,6 +12,7 @@ const MODULE_ICONS: Record<string, string> = {
   // OA 办公模块
   leave: '🌴', overtime: '⏰', expense: '🧾', trip: '✈️',
   purchase: '🛒', asset: '📦', purchase_supplier: '🏷️',
+  hire: '🧑‍💼', approval: '🔧',
 }
 
 interface RoleDetailProps {
@@ -64,7 +65,16 @@ export function RoleDetail({ role, permissions, onEdit, onDelete }: RoleDetailPr
           <button onClick={() => onEdit(role)} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-bg-hover border border-gray-200 dark:border-border/30 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors">
             <Pencil size={11} /> 编辑
           </button>
-          <button onClick={() => onDelete(role)} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/15 transition-colors">
+          <button
+            onClick={() => !role.is_system && onDelete(role)}
+            disabled={role.is_system}
+            title={role.is_system ? '系统内置角色不可删除' : '删除角色'}
+            className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+              role.is_system
+                ? 'bg-gray-100 dark:bg-bg-hover/50 border-gray-200 dark:border-border/20 text-gray-300 dark:text-gray-600 cursor-not-allowed'
+                : 'bg-red-500/10 text-red-500 hover:bg-red-500/20 border-red-500/15'
+            }`}
+          >
             <Trash2 size={11} /> 删除
           </button>
         </div>

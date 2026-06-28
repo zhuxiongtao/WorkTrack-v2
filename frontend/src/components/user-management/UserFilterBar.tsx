@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { Search, X } from 'lucide-react'
-import { useTheme } from '../../contexts/ThemeContext'
 import type { RoleData } from '../../services/types'
 import SearchableSelect from '../SearchableSelect'
 
@@ -20,7 +19,6 @@ export function UserFilterBar({
   status, onStatusChange,
   roles,
 }: UserFilterBarProps) {
-  const { resolvedTheme: theme } = useTheme()
   const [localSearch, setLocalSearch] = useState(search)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -67,12 +65,11 @@ export function UserFilterBar({
         <div className="flex-1">
           <SearchableSelect
             options={[
-              { id: 'all', label: '全部系统角色' },
-              ...roles.map(r => ({ id: r.id, label: r.name })),
+              { value: 'all', label: '全部系统角色' },
+              ...roles.map(r => ({ value: r.id, label: r.name })),
             ]}
             value={roleId}
-            onChange={(v) => onRoleChange(v === 0 ? 'all' : v)}
-            clearValue=""
+            onChange={(v) => onRoleChange(v === 0 ? 'all' : (v ?? 'all'))}
           />
         </div>
       </div>
@@ -83,15 +80,14 @@ export function UserFilterBar({
         <div className="flex-1">
           <SearchableSelect
             options={[
-              { id: 'all', label: '不限状态' },
-              { id: 'active', label: '正常活跃' },
-              { id: 'disabled', label: '已停用' },
-              { id: 'resigned', label: '已离职' },
-              { id: 'locked', label: '锁定制中' },
+              { value: 'all', label: '不限状态' },
+              { value: 'active', label: '正常活跃' },
+              { value: 'disabled', label: '已停用' },
+              { value: 'resigned', label: '已离职' },
+              { value: 'locked', label: '锁定制中' },
             ]}
             value={status}
-            onChange={(v) => onStatusChange(v === 0 ? 'all' : String(v))}
-            clearValue=""
+            onChange={(v) => onStatusChange(v === null ? 'all' : String(v))}
           />
         </div>
       </div>

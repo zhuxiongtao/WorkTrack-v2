@@ -78,6 +78,7 @@ const initialState: ProjectFormState = {
   project_scenario: '',
   usage_scenario: '',
   sales_person: '',
+  sales_person_user_id: null,
   tech_support_person: '',
   tech_support_user_id: null,
   status: STATUS_DEFAULT,
@@ -137,6 +138,7 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
         project_scenario: editingProject.project_scenario || '',
         usage_scenario: editingProject.usage_scenario || '',
         sales_person: editingProject.sales_person || '',
+        sales_person_user_id: editingProject.sales_person_user_id ?? null,
         tech_support_person: editingProject.tech_support_person || '',
         tech_support_user_id: editingProject.tech_support_user_id ?? null,
         status: editingProject.status || STATUS_DEFAULT,
@@ -151,7 +153,7 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
       setFormInitial(JSON.stringify(initial))
       setShowCustomScenario(!!editingProject.project_scenario && !options.project_scenario.includes(editingProject.project_scenario))
     } else {
-      const newInitial = { ...initialState, sales_person: user?.name || '' }
+      const newInitial = { ...initialState, sales_person: user?.name || '', sales_person_user_id: user?.id ?? null }
       setForm(newInitial)
       setFormInitial(JSON.stringify(newInitial))
       setShowCustomScenario(false)
@@ -213,6 +215,7 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
       project_scenario: form.project_scenario || null,
       usage_scenario: form.usage_scenario || null,
       sales_person: form.sales_person || null,
+      sales_person_user_id: form.sales_person_user_id,
       tech_support_person: form.tech_support_person || null,
       tech_support_user_id: form.tech_support_user_id,
       status: form.status,
@@ -356,52 +359,46 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
                     </FormField>
 
                     <FormField label="销售负责人" icon={Briefcase}>
-                      {options.sales_person.length > 0 ? (
-                        <SearchableSelect
-                          options={[{ id: '', label: '不指定' }, ...options.sales_person.map(s => ({ id: s, label: s }))]}
-                          value={form.sales_person}
-                          onChange={(v) => updateField('sales_person', v === '' || v === 0 ? '' : String(v))}
-                          placeholder="选择销售负责人"
-                          clearValue=""
-                        />
-                      ) : (
-                        <input
-                          type="text"
-                          value={form.sales_person}
-                          onChange={(e) => updateField('sales_person', e.target.value)}
-                          placeholder="输入销售姓名"
-                          className="w-full px-3 py-2 rounded-lg bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-sm outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all"
-                        />
-                      )}
+                      <SearchableSelect
+                        options={[
+                          { value: 0, label: '不指定' },
+                          ...allUsers.map(u => ({ value: u.id, label: u.name || u.username }))
+                        ]}
+                        value={form.sales_person_user_id ?? 0}
+                        onChange={(v) => {
+                          const uid = v === null || v === 0 ? null : Number(v)
+                          const uname = uid ? (allUsers.find(u => u.id === uid)?.name || '') : ''
+                          setForm(prev => ({ ...prev, sales_person_user_id: uid, sales_person: uname }))
+                        }}
+                        placeholder="选择销售负责人"
+                      />
                     </FormField>
 
                     <FormField label="技术支持" icon={Wrench} hint="负责项目交付、问题排查">
                       <SearchableSelect
                         options={[
-                          { id: 0, label: '不指定' },
-                          ...allUsers.map(u => ({ id: u.id, label: u.name || u.username }))
+                          { value: 0, label: '不指定' },
+                          ...allUsers.map(u => ({ value: u.id, label: u.name || u.username }))
                         ]}
                         value={form.tech_support_user_id ?? 0}
                         onChange={(v) => {
-                          const uid = v === 0 || v === '' ? null : Number(v)
+                          const uid = v === null || v === 0 ? null : Number(v)
                           const uname = uid ? (allUsers.find(u => u.id === uid)?.name || '') : ''
                           setForm(prev => ({ ...prev, tech_support_user_id: uid, tech_support_person: uname }))
                         }}
                         placeholder="选择技术支持人员"
-                        clearValue={0}
                       />
                     </FormField>
 
                     <FormField label="项目状态">
                       <SearchableSelect
                         options={[
-                          { id: '', label: '未设置' },
-                          ...(options.project_status.length > 0 ? options.project_status : [STATUS_DEFAULT, '已签约', '已暂停', '已结束', '已流失']).map(s => ({ id: s, label: s }))
+                          { value: '', label: '未设置' },
+                          ...(options.project_status.length > 0 ? options.project_status : [STATUS_DEFAULT, '已签约', '已暂停', '已结束', '已流失']).map(s => ({ value: s, label: s }))
                         ]}
                         value={form.status}
-                        onChange={(v) => updateField('status', v === '' || v === 0 ? '' : String(v))}
+                        onChange={(v) => updateField('status', v === '' || v === null ? '' : String(v))}
                         placeholder="选择项目状态"
-                        clearValue=""
                       />
                     </FormField>
                   </div>
@@ -457,10 +454,10 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
                             const seen = new Set<string>()
                             return modelCatalog
                               .filter(m => { if (seen.has(m.name)) return false; seen.add(m.name); return true })
-                              .map(m => ({ id: m.name, label: m.name, sub: m.provider || undefined }))
+                              .map(m => ({ value: m.name, label: m.name, hint: m.provider || undefined }))
                           })()}
                           value={form.selectedModels}
-                          onChange={(v) => updateField('selectedModels', v as string[])}
+                          onChange={(v) => updateField('selectedModels', v as unknown as string[])}
                           placeholder="搜索并选择模型…"
                         />
                       )}
@@ -491,9 +488,9 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
                         <>
                           <SearchableSelect
                             options={[
-                              { id: '', label: '不指定' },
-                              ...options.project_scenario.map(s => ({ id: s, label: s })),
-                              { id: '__custom__', label: '— 自定义 —' },
+                              { value: '', label: '不指定' },
+                              ...options.project_scenario.map(s => ({ value: s, label: s })),
+                              { value: '__custom__', label: '— 自定义 —' },
                             ]}
                             value={showCustomScenario ? '__custom__' : form.project_scenario}
                             onChange={(v) => {
@@ -502,11 +499,10 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
                                 updateField('project_scenario', '')
                               } else {
                                 setShowCustomScenario(false)
-                                updateField('project_scenario', v === 0 ? '' : String(v))
+                                updateField('project_scenario', v === null ? '' : String(v))
                               }
                             }}
                             placeholder="选择 AI 应用场景"
-                            clearValue=""
                           />
                           {showCustomScenario && (
                             <input
@@ -533,10 +529,9 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
                           />
                           <SearchableSelect
                             className="flex-1"
-                            options={MCV_UNITS.map(u => ({ id: u, label: u }))}
+                            options={MCV_UNITS.map(u => ({ value: u, label: u }))}
                             value={form.monthly_call_volume_unit}
-                            onChange={(v) => updateField('monthly_call_volume_unit', v === 0 || v === '' ? '万 tokens/月' : String(v))}
-                            clearValue="万 tokens/月"
+                            onChange={(v) => updateField('monthly_call_volume_unit', v === null || v === '' ? '万 tokens/月' : String(v))}
                           />
                         </div>
                       </FormField>
@@ -572,9 +567,9 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
                         multiple
                         options={contracts
                           .filter(c => c.project_id == null || c.project_id === editingProject?.id)
-                          .map(c => ({ id: c.id, label: c.title, sub: c.sign_date || '' }))}
+                          .map(c => ({ value: c.id, label: c.title, hint: c.sign_date || '' }))}
                         value={form.selectedContractIds}
-                        onChange={(v) => updateField('selectedContractIds', v as number[])}
+                        onChange={(v) => updateField('selectedContractIds', v as unknown as number[])}
                         placeholder="搜索并选择合同"
                       />
                     </FormField>
@@ -582,9 +577,9 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
                     <FormField label="关联会议" hint="可关联多个相关会议纪要" icon={FileText}>
                       <SearchableSelect
                         multiple
-                        options={meetings.map(m => ({ id: m.id, label: m.title, sub: m.date }))}
+                        options={meetings.map(m => ({ value: m.id, label: m.title, hint: m.date }))}
                         value={form.selectedMeetingIds}
-                        onChange={(v) => updateField('selectedMeetingIds', v as number[])}
+                        onChange={(v) => updateField('selectedMeetingIds', v as unknown as number[])}
                         placeholder="搜索并选择相关会议"
                       />
                     </FormField>
@@ -601,7 +596,7 @@ export function ProjectFormModal({ isOpen, onClose, editingProject, onSubmit, is
 
                     <FormField label="附件" hint="支持拖拽、点击、粘贴；合同、报价单等">
                       <FileUpload
-                        value={form.files_json}
+                        filesJson={form.files_json}
                         onChange={(v) => updateField('files_json', v)}
                       />
                     </FormField>

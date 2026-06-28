@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
-  Calculator, Plus, X, Edit3, Trash2, Loader2, Search,
-  TrendingUp, TrendingDown, Briefcase, Network, BarChart3, AlertTriangle,
-  FileText, RefreshCw, Calendar, DollarSign, Activity, Hash,
-  CheckCircle2, Clock, AlertCircle, FileBarChart,
+  Calculator, Plus, Edit3, Trash2, Loader2,
+  TrendingUp, TrendingDown, BarChart3, AlertTriangle,
+  RefreshCw, Calendar, DollarSign, Activity,
+  CheckCircle2, Clock, FileBarChart,
   Upload, FileSpreadsheet, Eye, ChevronDown, ChevronRight, Filter, Info, Send, ClipboardCheck,
 } from 'lucide-react'
-import { PageHeader, IconBox, EmptyState, SectionHeader, Modal, ModalFooter, SectionLabel, Field } from '../components/design-system'
+import { PageHeader, IconBox, EmptyState, SectionHeader, Modal, ModalFooter, Field } from '../components/design-system'
 import SearchableSelect from '../components/SearchableSelect'
 import { useToast } from '../contexts/ToastContext'
 import { apiFetch, apiPost, apiPut, apiDelete } from '../services/api'
@@ -61,7 +61,6 @@ const SALES_STATUS = ['待开票', '已开票', '已收款', '争议']
 const SUPPLY_STATUS = ['待付款', '已收票', '已付款', '争议']
 const DIFF_TYPES = ['调用量差异', '报价差异', '厂商账单差异']
 const DIFF_STATUS = ['未处理', '已解释', '已处理', '已结案']
-const SUMMARY_STATUS = ['草稿', '已复核', '已锁定']
 
 const INVOICE_COLORS: Record<string, { bg: string; text: string }> = {
   '待开票': { bg: '#6B728015', text: '#9CA3AF' },
@@ -144,7 +143,7 @@ export default function ReconcilePage() {
   const [diff, setDiff] = useState<DiffRecord[]>([])
   const [summary, setSummary] = useState<SummaryRecord[]>([])
 
-  const [loading, setLoading] = useState(false)
+  const [loading] = useState(false)
 
   // 表单
   const [showSalesForm, setShowSalesForm] = useState(false)
@@ -295,10 +294,9 @@ export default function ReconcilePage() {
         right={
           <div className="flex items-center gap-2">
             <SearchableSelect
-              options={periods.length === 0 ? [{ id: period, label: period }] : periods.map(p => ({ id: p, label: p }))}
+              options={periods.length === 0 ? [{ value: period, label: period }] : periods.map(p => ({ value: p, label: p }))}
               value={period}
-              onChange={(v) => setPeriod(v === 0 ? '' : String(v))}
-              clearValue=""
+              onChange={(v) => setPeriod(v === null ? '' : String(v))}
             />
             {currentSummary && (
               <span className="inline-flex items-center px-2 py-1 text-[11px] font-bold rounded-md"
@@ -338,7 +336,7 @@ export default function ReconcilePage() {
       />
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 mb-4 border-b border-white/5 overflow-x-auto">
+      <div className="flex items-center gap-1 mb-4 border-b border-border overflow-x-auto">
         {[
           { key: 'overview' as const, label: '总览', icon: BarChart3 },
           { key: 'sales' as const, label: '销售对账', icon: TrendingUp },
@@ -351,13 +349,13 @@ export default function ReconcilePage() {
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`relative px-3 py-2.5 text-xs font-semibold flex items-center gap-1.5 transition-colors whitespace-nowrap ${
-              tab === t.key ? 'text-purple-400' : 'text-gray-500 hover:text-gray-300'
+              tab === t.key ? 'text-purple-400' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white'
             }`}
           >
             <t.icon size={14} />
             {t.label}
             {tab === t.key && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-t" />
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent-blue rounded-t" />
             )}
           </button>
         ))}
@@ -495,7 +493,7 @@ export default function ReconcilePage() {
 function OverviewView({
   overall, period, loading,
   sales, supply, diff,
-  projectMap, channelMap, supplierMap,
+  projectMap, channelMap, supplierMap: _supplierMap,
 }: {
   overall: OverallSummary | null
   period: string
@@ -546,8 +544,8 @@ function OverviewView({
           {sales.slice(0, 5).map(s => {
             const p = projectMap[s.project_id]
             return (
-              <div key={s.id} className="flex items-center justify-between text-[11px] py-1.5 border-b border-white/5 last:border-0">
-                <span className="text-gray-300 truncate flex-1">{p?.name || `项目 #${s.project_id}`}</span>
+              <div key={s.id} className="flex items-center justify-between text-[11px] py-1.5 border-b border-border last:border-0">
+                <span className="text-gray-700 dark:text-gray-200 truncate flex-1">{p?.name || `项目 #${s.project_id}`}</span>
                 <span className="text-emerald-400 tabular-nums">${fmt(s.amount_due)}</span>
               </div>
             )
@@ -557,8 +555,8 @@ function OverviewView({
           {supply.slice(0, 5).map(s => {
             const c = channelMap[s.channel_id]
             return (
-              <div key={s.id} className="flex items-center justify-between text-[11px] py-1.5 border-b border-white/5 last:border-0">
-                <span className="text-gray-300 truncate flex-1">{c?.name || `通道 #${s.channel_id}`}</span>
+              <div key={s.id} className="flex items-center justify-between text-[11px] py-1.5 border-b border-border last:border-0">
+                <span className="text-gray-700 dark:text-gray-200 truncate flex-1">{c?.name || `通道 #${s.channel_id}`}</span>
                 <span className="text-rose-400 tabular-nums">${fmt(s.amount_payable)}</span>
               </div>
             )
@@ -566,8 +564,8 @@ function OverviewView({
         </MiniList>
         <MiniList title="差异记录" icon={AlertTriangle} count={diff.length} total={overall.diff_amount_total} tone="orange">
           {diff.slice(0, 5).map(d => (
-            <div key={d.id} className="flex items-center justify-between text-[11px] py-1.5 border-b border-white/5 last:border-0">
-              <span className="text-gray-300 truncate flex-1">{d.diff_type}</span>
+            <div key={d.id} className="flex items-center justify-between text-[11px] py-1.5 border-b border-border last:border-0">
+              <span className="text-gray-700 dark:text-gray-200 truncate flex-1">{d.diff_type}</span>
               <span className="text-orange-400 tabular-nums">${fmt(d.diff_amount)}</span>
             </div>
           ))}
@@ -603,7 +601,7 @@ function BigStat({ label, value, tone, icon: Icon, sub }: { label: string; value
 function StatusCard({ title, items, colorMap, total }: { title: string; items: Record<string, number>; colorMap: Record<string, { bg: string; text: string }>; total: number }) {
   const entries = Object.entries(items)
   return (
-    <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
+    <div className="rounded-xl border border-border bg-bg-hover/30 p-4">
       <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3">{title}</div>
       {entries.length === 0 ? (
         <div className="text-[11px] text-gray-600 text-center py-3">无数据</div>
@@ -618,7 +616,7 @@ function StatusCard({ title, items, colorMap, total }: { title: string; items: R
                   <span style={{ color: c.text }} className="font-semibold">{k}</span>
                   <span className="text-gray-500 tabular-nums">${fmt(v)} ({pct.toFixed(0)}%)</span>
                 </div>
-                <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                <div className="h-1.5 bg-bg-hover rounded-full overflow-hidden">
                   <div className="h-full rounded-full" style={{ width: `${pct}%`, background: c.text }} />
                 </div>
               </div>
@@ -633,7 +631,7 @@ function StatusCard({ title, items, colorMap, total }: { title: string; items: R
 function MiniList({ title, icon: Icon, count, total, tone, children }: { title: string; icon: typeof TrendingUp; count: number; total: number; tone: 'green' | 'red' | 'orange'; children: React.ReactNode }) {
   const textColor = { green: 'text-emerald-400', red: 'text-rose-400', orange: 'text-orange-400' }[tone]
   return (
-    <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
+    <div className="rounded-xl border border-border bg-bg-hover/30 p-4">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-1.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
           <Icon size={12} />{title}
@@ -650,8 +648,8 @@ function MiniList({ title, icon: Icon, count, total, tone, children }: { title: 
 
 /* ═══════════════════ 销售对账 ═══════════════════ */
 function SalesView({
-  records, period, projects, projectMap, loading, readOnly,
-  onAdd, onEdit, onDelete, form, setForm, editing, onSaved,
+  records, period, projects: _projects, projectMap, loading: _loading, readOnly,
+  onAdd, onEdit, onDelete, form: _form, setForm: _setForm, editing: _editing, onSaved: _onSaved,
 }: {
   records: SalesRecord[]
   period: string
@@ -685,7 +683,7 @@ function SalesView({
       {records.length === 0 ? (
         <EmptyState icon={TrendingUp} title={`${period} 还没有销售对账记录`} description="录入本期每个项目的实际调用量与应收金额" actionLabel={readOnly ? undefined : "新增"} onAction={readOnly ? undefined : onAdd} tone="green" />
       ) : (
-        <div className="rounded-xl border border-white/5 bg-white/[0.02] overflow-hidden">
+        <div className="rounded-xl border border-border bg-bg-hover/30 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
@@ -705,8 +703,8 @@ function SalesView({
                   const p = projectMap[r.project_id]
                   const c = INVOICE_COLORS[r.invoice_status] || INVOICE_COLORS['待开票']
                   return (
-                    <tr key={r.id} className="border-t border-white/5 hover:bg-white/[0.02]">
-                      <td className="px-3 py-2 text-white font-semibold">{p?.name || `#${r.project_id}`}</td>
+                    <tr key={r.id} className="border-t border-border hover:bg-bg-hover/30">
+                      <td className="px-3 py-2 text-gray-900 dark:text-white font-semibold">{p?.name || `#${r.project_id}`}</td>
                       <td className="px-3 py-2 text-gray-400">{r.customer_name || p?.customer_name || '—'}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-cyan-300">{fmt(r.call_volume)} {unitLabel(r.call_volume_unit)}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-blue-300">${fmt(r.final_price)}</td>
@@ -737,8 +735,8 @@ function SalesView({
 
 /* ═══════════════════ 供应对账 ═══════════════════ */
 function SupplyView({
-  records, period, channels, suppliers, channelMap, supplierMap, loading, readOnly,
-  onAdd, onEdit, onDelete, form, setForm, editing, onSaved,
+  records, period, channels: _channels, suppliers: _suppliers, channelMap, supplierMap, loading: _loading, readOnly,
+  onAdd, onEdit, onDelete, form: _form, setForm: _setForm, editing: _editing, onSaved: _onSaved,
 }: {
   records: SupplyRecord[]
   period: string
@@ -774,7 +772,7 @@ function SupplyView({
       {records.length === 0 ? (
         <EmptyState icon={TrendingDown} title={`${period} 还没有供应对账记录`} description="录入本期每个通道的厂商账单与应付金额" actionLabel={readOnly ? undefined : "新增"} onAction={readOnly ? undefined : onAdd} tone="red" />
       ) : (
-        <div className="rounded-xl border border-white/5 bg-white/[0.02] overflow-hidden">
+        <div className="rounded-xl border border-border bg-bg-hover/30 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
@@ -795,8 +793,8 @@ function SupplyView({
                   const sup = supplierMap[r.supplier_id]
                   const bs = BILL_COLORS[r.bill_status] || BILL_COLORS['待付款']
                   return (
-                    <tr key={r.id} className="border-t border-white/5 hover:bg-white/[0.02]">
-                      <td className="px-3 py-2 text-white font-semibold">{c?.name || `#${r.channel_id}`}</td>
+                    <tr key={r.id} className="border-t border-border hover:bg-bg-hover/30">
+                      <td className="px-3 py-2 text-gray-900 dark:text-white font-semibold">{c?.name || `#${r.channel_id}`}</td>
                       <td className="px-3 py-2 text-gray-400">{sup?.name || '—'}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-cyan-300">{fmt(r.call_volume)} {unitLabel(r.call_volume_unit)}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-blue-300">${fmt(r.cost_price)}</td>
@@ -841,7 +839,7 @@ function SummaryListView({ records }: { records: SummaryRecord[] }) {
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <IconBox icon={Calendar} size="sm" tone="purple" />
-                  <span className="text-sm font-bold text-white">{r.period}</span>
+                  <span className="text-sm font-bold text-gray-900 dark:text-white">{r.period}</span>
                 </div>
                 <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: c.bg, color: c.text }}>{r.status}</span>
               </div>
@@ -866,7 +864,7 @@ function SummaryItem({ label, value, tone }: { label: string; value: string; ton
     green: 'text-emerald-400', red: 'text-rose-400', purple: 'text-violet-400', blue: 'text-blue-400', cyan: 'text-cyan-400',
   }
   return (
-    <div className="rounded-lg p-2 bg-black/20">
+    <div className="rounded-lg p-2 bg-bg-hover/50">
       <div className="text-[11px] text-gray-500">{label}</div>
       <div className={`mt-0.5 text-sm font-bold tabular-nums ${colors[tone]}`}>{value}</div>
     </div>
@@ -875,8 +873,8 @@ function SummaryItem({ label, value, tone }: { label: string; value: string; ton
 
 /* ═══════════════════ 差异分析 ═══════════════════ */
 function DiffView({
-  records, period, projects, channels, projectMap, channelMap, loading, readOnly,
-  onAdd, onEdit, onDelete, form, setForm, editing, onSaved,
+  records, period, projects: _projects, channels: _channels, projectMap, channelMap, loading: _loading, readOnly,
+  onAdd, onEdit, onDelete, form: _form, setForm: _setForm, editing: _editing, onSaved: _onSaved,
 }: {
   records: DiffRecord[]
   period: string
@@ -911,7 +909,7 @@ function DiffView({
       {records.length === 0 ? (
         <EmptyState icon={AlertTriangle} title={`${period} 还没有差异记录`} description="记录销售与供应两侧的调用量/金额差异，便于月末复盘" actionLabel={readOnly ? undefined : "新增"} onAction={readOnly ? undefined : onAdd} tone="orange" />
       ) : (
-        <div className="rounded-xl border border-white/5 bg-white/[0.02] overflow-hidden">
+        <div className="rounded-xl border border-border bg-bg-hover/30 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
@@ -932,8 +930,8 @@ function DiffView({
                   const target = r.project_id ? projectMap[r.project_id]?.name : (r.channel_id ? channelMap[r.channel_id]?.name : '—')
                   const c = DIFF_STATUS_COLORS[r.status] || DIFF_STATUS_COLORS['未处理']
                   return (
-                    <tr key={r.id} className="border-t border-white/5 hover:bg-white/[0.02]">
-                      <td className="px-3 py-2 text-white">{r.diff_type}</td>
+                    <tr key={r.id} className="border-t border-border hover:bg-bg-hover/30">
+                      <td className="px-3 py-2 text-gray-700 dark:text-gray-200">{r.diff_type}</td>
                       <td className="px-3 py-2 text-gray-400">{target || '—'}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-gray-400">{fmt(r.sales_call_volume)} / {fmt(r.supply_call_volume)}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-orange-300 font-bold">{fmt(r.diff_volume)}</td>
@@ -1028,10 +1026,9 @@ function SalesFormModal({ period, projects, projectMap, editing, onClose, onSave
       <div className="grid grid-cols-2 gap-3">
         <Field label="项目" required>
           <SearchableSelect
-            options={[{ id: 0, label: '请选择…' }, ...projects.map(p => ({ id: p.id, label: p.name }))]}
+            options={[{ value: 0, label: '请选择…' }, ...projects.map(p => ({ value: p.id, label: p.name }))]}
             value={form.project_id || 0}
             onChange={(v) => setForm({ ...form, project_id: (v as number) || 0 })}
-            clearValue={0}
           />
         </Field>
         <Field label="对账月份" required>
@@ -1045,10 +1042,9 @@ function SalesFormModal({ period, projects, projectMap, editing, onClose, onSave
         </Field>
         <Field label="开票状态">
           <SearchableSelect
-            options={SALES_STATUS.map(s => ({ id: s, label: s }))}
+            options={SALES_STATUS.map(s => ({ value: s, label: s }))}
             value={form.invoice_status}
-            onChange={(v) => setForm({ ...form, invoice_status: v === 0 ? '' : String(v) })}
-            clearValue=""
+            onChange={(v) => setForm({ ...form, invoice_status: v === null ? '' : String(v) })}
           />
         </Field>
         <Field label="调用量">
@@ -1058,14 +1054,13 @@ function SalesFormModal({ period, projects, projectMap, editing, onClose, onSave
         <Field label="计费单位">
           <SearchableSelect
             options={[
-              { id: 'per_1k_token', label: '/ 1K tokens' },
-              { id: 'per_1m_token', label: '/ 1M tokens（百万）' },
-              { id: 'per_request', label: '/ 次' },
-              { id: 'per_month', label: '/ 月' },
+              { value: 'per_1k_token', label: '/ 1K tokens' },
+              { value: 'per_1m_token', label: '/ 1M tokens（百万）' },
+              { value: 'per_request', label: '/ 次' },
+              { value: 'per_month', label: '/ 月' },
             ]}
             value={form.call_volume_unit}
-            onChange={(v) => setForm({ ...form, call_volume_unit: v === 0 ? '' : String(v) })}
-            clearValue=""
+            onChange={(v) => setForm({ ...form, call_volume_unit: v === null ? '' : String(v) })}
           />
         </Field>
         <Field label="成交单价 ($)">
@@ -1090,7 +1085,7 @@ function SalesFormModal({ period, projects, projectMap, editing, onClose, onSave
   )
 }
 
-function SupplyFormModal({ period, channels, suppliers, channelMap, supplierMap, editing, onClose, onSaved }: {
+function SupplyFormModal({ period, channels, suppliers, channelMap, supplierMap: _supplierMap, editing, onClose, onSaved }: {
   period: string; channels: Channel[]; suppliers: Supplier[]
   channelMap: Record<number, Channel>; supplierMap: Record<number, Supplier>
   editing: SupplyRecord | null; onClose: () => void; onSaved: () => void
@@ -1160,18 +1155,16 @@ function SupplyFormModal({ period, channels, suppliers, channelMap, supplierMap,
       <div className="grid grid-cols-2 gap-3">
         <Field label="通道" required>
           <SearchableSelect
-            options={[{ id: 0, label: '请选择…' }, ...channels.map(c => ({ id: c.id, label: c.name }))]}
+            options={[{ value: 0, label: '请选择…' }, ...channels.map(c => ({ value: c.id, label: c.name }))]}
             value={form.channel_id || 0}
             onChange={(v) => setForm({ ...form, channel_id: (v as number) || 0 })}
-            clearValue={0}
           />
         </Field>
         <Field label="供应商" required>
           <SearchableSelect
-            options={[{ id: 0, label: '请选择…' }, ...suppliers.map(s => ({ id: s.id, label: s.name }))]}
+            options={[{ value: 0, label: '请选择…' }, ...suppliers.map(s => ({ value: s.id, label: s.name }))]}
             value={form.supplier_id || 0}
             onChange={(v) => setForm({ ...form, supplier_id: (v as number) || 0 })}
-            clearValue={0}
           />
         </Field>
         <Field label="对账月份" required>
@@ -1180,10 +1173,9 @@ function SupplyFormModal({ period, channels, suppliers, channelMap, supplierMap,
         </Field>
         <Field label="付款状态">
           <SearchableSelect
-            options={SUPPLY_STATUS.map(s => ({ id: s, label: s }))}
+            options={SUPPLY_STATUS.map(s => ({ value: s, label: s }))}
             value={form.bill_status}
-            onChange={(v) => setForm({ ...form, bill_status: v === 0 ? '' : String(v) })}
-            clearValue=""
+            onChange={(v) => setForm({ ...form, bill_status: v === null ? '' : String(v) })}
           />
         </Field>
         <Field label="调用量">
@@ -1193,14 +1185,13 @@ function SupplyFormModal({ period, channels, suppliers, channelMap, supplierMap,
         <Field label="计费单位">
           <SearchableSelect
             options={[
-              { id: 'per_1k_token', label: '/ 1K tokens' },
-              { id: 'per_1m_token', label: '/ 1M tokens（百万）' },
-              { id: 'per_request', label: '/ 次' },
-              { id: 'per_month', label: '/ 月' },
+              { value: 'per_1k_token', label: '/ 1K tokens' },
+              { value: 'per_1m_token', label: '/ 1M tokens（百万）' },
+              { value: 'per_request', label: '/ 次' },
+              { value: 'per_month', label: '/ 月' },
             ]}
             value={form.call_volume_unit}
-            onChange={(v) => setForm({ ...form, call_volume_unit: v === 0 ? '' : String(v) })}
-            clearValue=""
+            onChange={(v) => setForm({ ...form, call_volume_unit: v === null ? '' : String(v) })}
           />
         </Field>
         <Field label="成本单价 ($)">
@@ -1286,26 +1277,23 @@ function DiffFormModal({ period, projects, channels, editing, onClose, onSaved }
         </Field>
         <Field label="差异类型">
           <SearchableSelect
-            options={DIFF_TYPES.map(t => ({ id: t, label: t }))}
+            options={DIFF_TYPES.map(t => ({ value: t, label: t }))}
             value={form.diff_type}
-            onChange={(v) => setForm({ ...form, diff_type: v === 0 ? '' : String(v) })}
-            clearValue=""
+            onChange={(v) => setForm({ ...form, diff_type: v === null ? '' : String(v) })}
           />
         </Field>
         <Field label="关联项目">
           <SearchableSelect
-            options={[{ id: 0, label: '无' }, ...projects.map(p => ({ id: p.id, label: p.name }))]}
+            options={[{ value: 0, label: '无' }, ...projects.map(p => ({ value: p.id, label: p.name }))]}
             value={form.project_id || 0}
             onChange={(v) => setForm({ ...form, project_id: v && v !== 0 ? (v as number) : null })}
-            clearValue={0}
           />
         </Field>
         <Field label="关联通道">
           <SearchableSelect
-            options={[{ id: 0, label: '无' }, ...channels.map(c => ({ id: c.id, label: c.name }))]}
+            options={[{ value: 0, label: '无' }, ...channels.map(c => ({ value: c.id, label: c.name }))]}
             value={form.channel_id || 0}
             onChange={(v) => setForm({ ...form, channel_id: v && v !== 0 ? (v as number) : null })}
-            clearValue={0}
           />
         </Field>
         <Field label="销售调用量">
@@ -1335,10 +1323,9 @@ function DiffFormModal({ period, projects, channels, editing, onClose, onSaved }
         </Field>
         <Field label="状态">
           <SearchableSelect
-            options={DIFF_STATUS.map(s => ({ id: s, label: s }))}
+            options={DIFF_STATUS.map(s => ({ value: s, label: s }))}
             value={form.status}
-            onChange={(v) => setForm({ ...form, status: v === 0 ? '' : String(v) })}
-            clearValue=""
+            onChange={(v) => setForm({ ...form, status: v === null ? '' : String(v) })}
           />
         </Field>
       </div>
@@ -1512,7 +1499,7 @@ function TokenUploadCard({ sourceType, period, uploads, locked, onUploaded, onDe
                   <tbody>
                     {rows.map((r, i) => (
                       <tr key={i} className="border-t border-border hover:bg-bg-hover">
-                        <td className="px-2 py-1 font-mono text-gray-300">{r.model_id}</td>
+                        <td className="px-2 py-1 font-mono text-gray-700 dark:text-gray-200">{r.model_id}</td>
                         <td className="px-2 py-1 text-gray-400">{fmtT(r.input_tokens)}</td>
                         <td className="px-2 py-1 text-gray-400">{fmtT(r.output_tokens)}</td>
                         <td className="px-2 py-1 font-semibold text-gray-200">{fmtT(r.total_tokens)}</td>
@@ -1642,11 +1629,11 @@ function TokenItemRow({ item, locked, onReviewed }: { item: TReconcileItem; lock
                 rows={2} className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-bg-input border border-border outline-none resize-none" />
               <div className="flex gap-2">
                 <button onClick={() => mark('confirmed')} disabled={saving}
-                  className="flex items-center gap-1 px-3 py-1 text-xs rounded-lg bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 transition-colors">
+                  className="flex items-center gap-1 px-3 py-1 text-xs rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors">
                   <CheckCircle2 size={11} />确认通过
                 </button>
                 <button onClick={() => mark('disputed')} disabled={saving}
-                  className="flex items-center gap-1 px-3 py-1 text-xs rounded-lg bg-orange-500/15 text-orange-400 hover:bg-orange-500/25 transition-colors">
+                  className="flex items-center gap-1 px-3 py-1 text-xs rounded-lg bg-orange-50 text-orange-700 border border-orange-200 dark:bg-orange-500/10 dark:text-orange-400 dark:border-orange-500/20 hover:bg-orange-100 dark:hover:bg-orange-500/20 transition-colors">
                   <AlertTriangle size={11} />标记争议
                 </button>
               </div>
@@ -1734,10 +1721,9 @@ function TokenTab() {
         <div className="flex items-center gap-2">
           <label className="text-xs text-gray-500">对账月份</label>
           <SearchableSelect
-            options={periods.map(p => ({ id: p, label: p }))}
+            options={periods.map(p => ({ value: p, label: p }))}
             value={period}
-            onChange={(v) => setPeriod(v === 0 ? '' : String(v))}
-            clearValue=""
+            onChange={(v) => setPeriod(v === null ? '' : String(v))}
           />
         </div>
         {statusInfo && (
@@ -1748,7 +1734,7 @@ function TokenTab() {
           </div>
         )}
         {session?.status === 'approved' && (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-semibold">✓ 月度账单已确认</span>
+          <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20 font-semibold">✓ 月度账单已确认</span>
         )}
       </div>
 
@@ -1781,7 +1767,7 @@ function TokenTab() {
         {session?.status === 'compared' && (
           <button onClick={handleSubmit} disabled={submitting}
             className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold transition-all disabled:opacity-50
-              ${totalDiff > 0 ? 'bg-orange-500/15 text-orange-400 hover:bg-orange-500/25' : 'bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25'}`}>
+              ${totalDiff > 0 ? 'bg-orange-50 text-orange-700 border border-orange-200 dark:bg-orange-500/10 dark:text-orange-400 dark:border-orange-500/20 hover:bg-orange-100 dark:hover:bg-orange-500/20' : 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20 hover:bg-emerald-100 dark:hover:bg-emerald-500/20'}`}>
             {submitting ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
             {submitting ? '提交中…' : totalDiff > 0 ? `提交审批（${totalDiff} 个差异待确认）` : '确认通过（无差异）'}
           </button>

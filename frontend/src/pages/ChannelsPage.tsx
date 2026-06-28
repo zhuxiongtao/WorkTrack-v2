@@ -338,7 +338,7 @@ export default function ChannelsPage() {
       />
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 mb-4 border-b border-white/5">
+      <div className="flex items-center gap-2 mb-4 border-b border-border">
         {[
           { key: 'list' as const, label: '通道列表', icon: Network },
           { key: 'summary' as const, label: '汇总统计', icon: BarChart3 },
@@ -354,7 +354,7 @@ export default function ChannelsPage() {
             <t.icon size={14} />
             {t.label}
             {tab === t.key && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-t" />
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent-blue rounded-t" />
             )}
           </button>
         ))}
@@ -364,39 +364,35 @@ export default function ChannelsPage() {
         <div className="grid grid-cols-12 gap-4">
           {/* 左：筛选 + 列表 */}
           <div className={`${selectedId ? 'col-span-12 lg:col-span-7' : 'col-span-12'} space-y-3`}>
-            <div className="flex flex-wrap items-center gap-2 p-3 rounded-xl bg-white/[0.02] border border-white/5">
+            <div className="flex flex-wrap items-center gap-2 p-3 rounded-xl bg-bg-hover/30 border border-border">
               <div className="relative flex-1 min-w-[160px]">
                 <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
                 <input
                   value={searchText}
                   onChange={e => setSearchText(e.target.value)}
                   placeholder="搜索通道名 / 编码 / 模型 / 供应商"
-                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-black/30 border border-white/10 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500/50"
+                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-bg-hover/30 border border-border rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500/50"
                 />
               </div>
               <SearchableSelect
-                options={[{ id: '', label: '全部供应商' }, ...suppliers.map(s => ({ id: String(s.id), label: s.name }))]}
+                options={[{ value: '', label: '全部供应商' }, ...suppliers.map(s => ({ value: String(s.id), label: s.name }))]}
                 value={filterSupplier}
-                onChange={(v) => setFilterSupplier(v === 0 ? '' : String(v))}
-                clearValue=""
+                onChange={(v) => setFilterSupplier(v === null ? '' : String(v))}
               />
               <SearchableSelect
-                options={[{ id: '', label: '全部类型' }, ...KINDS.map(k => ({ id: k, label: k }))]}
+                options={[{ value: '', label: '全部类型' }, ...KINDS.map(k => ({ value: k, label: k }))]}
                 value={filterKind}
-                onChange={(v) => setFilterKind(v === 0 ? '' : String(v))}
-                clearValue=""
+                onChange={(v) => setFilterKind(v === null ? '' : String(v))}
               />
               <SearchableSelect
-                options={[{ id: '', label: '全部模型' }, ...modelTypes.map(m => ({ id: m, label: m }))]}
+                options={[{ value: '', label: '全部模型' }, ...modelTypes.map(m => ({ value: m, label: m }))]}
                 value={filterModel}
-                onChange={(v) => setFilterModel(v === 0 ? '' : String(v))}
-                clearValue=""
+                onChange={(v) => setFilterModel(v === null ? '' : String(v))}
               />
               <SearchableSelect
-                options={[{ id: '', label: '全部状态' }, ...STATUSES.map(s => ({ id: s, label: s }))]}
+                options={[{ value: '', label: '全部状态' }, ...STATUSES.map(s => ({ value: s, label: s }))]}
                 value={filterStatus}
-                onChange={(v) => setFilterStatus(v === 0 ? '' : String(v))}
-                clearValue=""
+                onChange={(v) => setFilterStatus(v === null ? '' : String(v))}
               />
               <button onClick={openCreate}
                 className="ml-auto inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-cyan-500 to-blue-500 rounded-lg hover:opacity-90">
@@ -431,7 +427,7 @@ export default function ChannelsPage() {
                       className={`w-full text-left p-3 rounded-xl border transition-all ${
                         active
                           ? 'bg-cyan-500/10 border-cyan-500/40 shadow-lg shadow-cyan-500/5'
-                          : 'bg-white/[0.02] border-white/5 hover:bg-white/[0.04] hover:border-white/10'
+                          : 'bg-bg-hover/30 border-border hover:bg-bg-hover/50 hover:border-border'
                       }`}
                     >
                       <div className="flex items-start gap-3">
@@ -452,7 +448,7 @@ export default function ChannelsPage() {
                                 <Hash size={11} />{c.model_type}
                               </span>
                             )}
-                            <span className="inline-flex items-center gap-1 text-blue-300/80">
+                            <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-300">
                               <Percent size={11} />折扣率 {(c.discount_rate * 100).toFixed(0)}%
                             </span>
                             <span className="inline-flex items-center gap-1">
@@ -569,22 +565,22 @@ function ChannelDetailPanel({
 
       {/* 该族官方价格 × 折扣率 参考 */}
       {familyPrices.length > 0 && (
-        <div className="mt-4 pt-3 border-t border-white/5">
+        <div className="mt-4 pt-3 border-t border-border">
           <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
             <BookOpen size={12} />官方价格 × {(channel.discount_rate * 100).toFixed(0)}% 参考成本
           </div>
           <div className="space-y-1.5">
             {familyPrices.map(p => (
-              <div key={p.id} className="flex items-center justify-between text-[11px] py-1 px-2 rounded-lg bg-black/20">
+              <div key={p.id} className="flex items-center justify-between text-[11px] py-1 px-2 rounded-lg bg-bg-hover/50">
                 <span className="text-gray-300 font-medium truncate max-w-[110px]">{p.name}</span>
                 <div className="flex gap-3 text-[11px] tabular-nums shrink-0">
                   {p.input_price != null && (
-                    <span className="text-emerald-400">
+                    <span className="text-emerald-600 dark:text-emerald-400">
                       输入 {fmtUSD(p.input_price * channel.discount_rate)}/1M
                     </span>
                   )}
                   {p.output_price != null && (
-                    <span className="text-orange-400">
+                    <span className="text-orange-600 dark:text-orange-400">
                       输出 {fmtUSD(p.output_price * channel.discount_rate)}/1M
                     </span>
                   )}
@@ -598,7 +594,7 @@ function ChannelDetailPanel({
 
       {/* SLA */}
       {(sla.cache_hit_rate != null || sla.tpm != null || sla.rpm != null || sla.avg_latency_ms != null) && (
-        <div className="mt-4 pt-3 border-t border-white/5">
+        <div className="mt-4 pt-3 border-t border-border">
           <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
             <Activity size={12} />SLA & 技术指标
           </div>
@@ -612,7 +608,7 @@ function ChannelDetailPanel({
       )}
 
       {channel.remarks && (
-        <div className="mt-4 pt-3 border-t border-white/5">
+        <div className="mt-4 pt-3 border-t border-border">
           <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 flex items-center gap-1">
             <FileText size={12} />备注
           </div>
@@ -631,7 +627,7 @@ function ChannelDetailPanel({
         </div>
       )}
 
-      <div className="mt-4 pt-3 border-t border-white/5 flex gap-2 flex-wrap">
+      <div className="mt-4 pt-3 border-t border-border flex gap-2 flex-wrap">
         {channel.status === '合作中' && (
           <button
             onClick={onSubmitApproval}
@@ -723,20 +719,20 @@ function PriceRefTab({ prices, channels, loading }: {
     <div className="space-y-4">
       {/* 说明 + 筛选 */}
       <div className="flex items-center justify-between flex-wrap gap-3 p-3 rounded-xl bg-blue-500/5 border border-blue-500/20">
-        <div className="text-[11px] text-blue-300/80 leading-relaxed">
-          <span className="font-bold text-blue-300">价格来源：</span>
+        <div className="text-[11px] text-blue-600 dark:text-blue-300 leading-relaxed">
+          <span className="font-bold text-blue-600 dark:text-blue-300">价格来源：</span>
           官网公开定价（USD/1M tokens），在「管理后台 → 模型管理」中手动维护。通道折扣率 × 官网价 = 预估采购成本。
         </div>
         <div className="flex items-center gap-2 flex-wrap shrink-0">
           <button
             onClick={() => setProviderFilter('all')}
-            className={`px-3 py-1 text-xs rounded-lg font-semibold transition-colors border ${providerFilter === 'all' ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' : 'text-gray-500 hover:text-gray-300 border-transparent'}`}
+            className={`px-3 py-1 text-xs rounded-lg font-semibold transition-colors border ${providerFilter === 'all' ? 'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-500/10 dark:text-cyan-400 dark:border-cyan-500/20' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white border-transparent'}`}
           >全部</button>
           {providers.map(prov => (
             <button
               key={prov}
               onClick={() => setProviderFilter(prov)}
-              className={`px-3 py-1 text-xs rounded-lg font-semibold transition-colors border ${providerFilter === prov ? 'bg-white/10 text-white border-white/20' : 'text-gray-500 hover:text-gray-300 border-transparent'}`}
+              className={`px-3 py-1 text-xs rounded-lg font-semibold transition-colors border ${providerFilter === prov ? 'bg-bg-hover text-gray-700 dark:text-gray-200 border-border' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white border-transparent'}`}
             >{prov}</button>
           ))}
         </div>
@@ -751,7 +747,7 @@ function PriceRefTab({ prices, channels, loading }: {
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-bold text-white">{prov}</span>
-                  <span className="text-[11px] text-gray-600 px-2 py-0.5 rounded-full bg-white/5">{models.length} 个模型</span>
+                  <span className="text-[11px] text-gray-600 px-2 py-0.5 rounded-full bg-bg-hover/30">{models.length} 个模型</span>
                 </div>
                 {linkedChannels.length > 0 && (
                   <span className="text-[11px] text-gray-500 flex items-center gap-1 flex-wrap">
@@ -765,11 +761,11 @@ function PriceRefTab({ prices, channels, loading }: {
                 )}
               </div>
 
-              <div className="rounded-xl border border-white/10 overflow-hidden">
+              <div className="rounded-xl border border-border overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
-                      <tr className="text-left text-[11px] text-gray-500 uppercase tracking-wider bg-white/[0.02]">
+                      <tr className="text-left text-[11px] text-gray-500 uppercase tracking-wider bg-bg-hover/30">
                         <th className="px-4 py-2.5 font-semibold">模型</th>
                         <th className="px-4 py-2.5 font-semibold text-right">输入 $/1M</th>
                         <th className="px-4 py-2.5 font-semibold text-right">输出 $/1M</th>
@@ -785,15 +781,15 @@ function PriceRefTab({ prices, channels, loading }: {
                     </thead>
                     <tbody>
                       {models.map((m, i) => (
-                        <tr key={m.id} className={`border-t ${i % 2 === 0 ? 'bg-white/[0.01]' : ''}`} style={{ borderColor: '#ffffff08' }}>
+                        <tr key={m.id} className={`border-t ${i % 2 === 0 ? 'bg-bg-hover/20' : ''}`} style={{ borderColor: '#ffffff08' }}>
                           <td className="px-4 py-2.5">
                             <div className="font-semibold text-white">{m.name}</div>
                             {m.version_id && <div className="text-[11px] text-gray-600 font-mono">{m.version_id}</div>}
                           </td>
-                          <td className="px-4 py-2.5 text-right tabular-nums text-emerald-400 font-semibold">{fmtUSD(m.input_price)}</td>
-                          <td className="px-4 py-2.5 text-right tabular-nums text-orange-400 font-semibold">{fmtUSD(m.output_price)}</td>
-                          <td className="px-4 py-2.5 text-right tabular-nums text-blue-400">{m.cache_read_price != null ? fmtUSD(m.cache_read_price) : '—'}</td>
-                          <td className="px-4 py-2.5 text-right tabular-nums text-violet-400">{m.cache_write_price != null ? fmtUSD(m.cache_write_price) : '—'}</td>
+                          <td className="px-4 py-2.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400 font-semibold">{fmtUSD(m.input_price)}</td>
+                          <td className="px-4 py-2.5 text-right tabular-nums text-orange-600 dark:text-orange-400 font-semibold">{fmtUSD(m.output_price)}</td>
+                          <td className="px-4 py-2.5 text-right tabular-nums text-blue-600 dark:text-blue-400">{m.cache_read_price != null ? fmtUSD(m.cache_read_price) : '—'}</td>
+                          <td className="px-4 py-2.5 text-right tabular-nums text-violet-600 dark:text-violet-400">{m.cache_write_price != null ? fmtUSD(m.cache_write_price) : '—'}</td>
                           {linkedChannels.map(c => (
                             <td key={c.id} className="px-4 py-2.5 text-right tabular-nums">
                               {m.input_price != null && <div className="text-emerald-300/80 text-[11px]">↑ {fmtUSD(m.input_price * c.discount_rate)}</div>}
@@ -836,7 +832,7 @@ function SummaryView({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
+        <div className="rounded-xl border border-border bg-bg-hover/30 p-4">
           <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1">
             <Network size={12} />按通道类型
           </div>
@@ -850,7 +846,7 @@ function SummaryView({
                     <span style={{ color: c.text }} className="font-semibold">{k}</span>
                     <span className="text-gray-500 tabular-nums">{n} ({pct.toFixed(0)}%)</span>
                   </div>
-                  <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                  <div className="h-1.5 bg-bg-hover rounded-full overflow-hidden">
                     <div className="h-full rounded-full" style={{ width: `${pct}%`, background: c.text }} />
                   </div>
                 </div>
@@ -859,7 +855,7 @@ function SummaryView({
           </div>
         </div>
 
-        <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
+        <div className="rounded-xl border border-border bg-bg-hover/30 p-4">
           <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1">
             <Activity size={12} />按状态
           </div>
@@ -873,7 +869,7 @@ function SummaryView({
                     <span style={{ color: c.text }} className="font-semibold">{s}</span>
                     <span className="text-gray-500 tabular-nums">{n} ({pct.toFixed(0)}%)</span>
                   </div>
-                  <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                  <div className="h-1.5 bg-bg-hover rounded-full overflow-hidden">
                     <div className="h-full rounded-full" style={{ width: `${pct}%`, background: c.text }} />
                   </div>
                 </div>
@@ -883,8 +879,8 @@ function SummaryView({
         </div>
       </div>
 
-      <div className="rounded-xl border border-white/5 bg-white/[0.02] overflow-hidden">
-        <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
+      <div className="rounded-xl border border-border bg-bg-hover/30 overflow-hidden">
+        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
           <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1">
             <Cpu size={12} />通道明细
           </div>
@@ -908,7 +904,7 @@ function SummaryView({
               {summaries.map(s => {
                 const kindC = KIND_COLORS[s.kind] || KIND_COLORS['其他']
                 return (
-                  <tr key={s.channel_id} className="border-t border-white/5 hover:bg-white/[0.02]">
+                  <tr key={s.channel_id} className="border-t border-border hover:bg-bg-hover/30">
                     <td className="px-3 py-2 text-white font-semibold">{s.name}</td>
                     <td className="px-3 py-2 text-gray-400">{s.supplier_name}</td>
                     <td className="px-3 py-2">
@@ -952,10 +948,10 @@ function StatBox({ label, value, sub, tone }: { label: string; value: string; su
 
 function SlaBox({ label, value, tone }: { label: string; value: string; tone: 'green' | 'blue' | 'purple' | 'orange' }) {
   const colors: Record<string, string> = {
-    green: 'text-emerald-400', blue: 'text-blue-400', purple: 'text-violet-400', orange: 'text-orange-400',
+    green: 'text-emerald-600 dark:text-emerald-400', blue: 'text-blue-600 dark:text-blue-400', purple: 'text-violet-600 dark:text-violet-400', orange: 'text-orange-600 dark:text-orange-400',
   }
   return (
-    <div className="rounded-md p-2 bg-black/20">
+    <div className="rounded-md p-2 bg-bg-hover/50">
       <div className="text-[11px] text-gray-500">{label}</div>
       <div className={`mt-0.5 text-sm font-bold tabular-nums ${colors[tone]}`}>{value}</div>
     </div>
@@ -980,7 +976,7 @@ function BigStat({ label, value, tone, icon: Icon }: { label: string; value: str
     orange: 'from-orange-500/10 to-orange-500/0 border-orange-500/20',
   }
   const textColor: Record<string, string> = {
-    cyan: 'text-cyan-400', blue: 'text-blue-400', green: 'text-emerald-400', orange: 'text-orange-400',
+    cyan: 'text-cyan-400', blue: 'text-blue-600 dark:text-blue-400', green: 'text-emerald-600 dark:text-emerald-400', orange: 'text-orange-600 dark:text-orange-400',
   }
   return (
     <div className={`relative overflow-hidden rounded-xl p-4 bg-gradient-to-br ${colors[tone]} border`}>
@@ -1023,10 +1019,9 @@ function ChannelFormModal({
           <div className="grid grid-cols-2 gap-3">
             <Field label="所属供应商" required>
               <SearchableSelect
-                options={[{ id: 0, label: '请选择…' }, ...suppliers.map(s => ({ id: s.id, label: s.name }))]}
+                options={[{ value: 0, label: '请选择…' }, ...suppliers.map(s => ({ value: s.id, label: s.name }))]}
                 value={form.supplier_id || 0}
                 onChange={(v) => upd({ supplier_id: (v as number) || 0 })}
-                clearValue={0}
               />
             </Field>
             <Field label="通道名称" required>
@@ -1046,18 +1041,16 @@ function ChannelFormModal({
             </Field>
             <Field label="通道类型">
               <SearchableSelect
-                options={KINDS.map(k => ({ id: k, label: k }))}
+                options={KINDS.map(k => ({ value: k, label: k }))}
                 value={form.kind}
-                onChange={(v) => upd({ kind: v === 0 ? '' : String(v) })}
-                clearValue=""
+                onChange={(v) => upd({ kind: v === null ? '' : String(v) })}
               />
             </Field>
             <Field label="状态">
               <SearchableSelect
-                options={STATUSES.map(s => ({ id: s, label: s }))}
+                options={STATUSES.map(s => ({ value: s, label: s }))}
                 value={form.status}
-                onChange={(v) => upd({ status: v === 0 ? '' : String(v) })}
-                clearValue=""
+                onChange={(v) => upd({ status: v === null ? '' : String(v) })}
               />
             </Field>
           </div>
@@ -1066,7 +1059,7 @@ function ChannelFormModal({
         {/* 价格与商务：只保留折扣率和加价率 */}
         <div>
           <SectionLabel>价格与商务</SectionLabel>
-          <div className="mb-2 px-3 py-2 rounded-lg bg-blue-500/5 border border-blue-500/20 text-[11px] text-blue-300/80">
+          <div className="mb-2 px-3 py-2 rounded-lg bg-blue-500/5 border border-blue-500/20 text-[11px] text-blue-600 dark:text-blue-300">
             通道成本 = 官方模型定价 × 折扣率（见「官方参考价格」页签），无需手动填写单价。
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -1131,7 +1124,7 @@ function ChannelFormModal({
         {editing && (
           <div>
             <SectionLabel>
-              <AlertTriangle size={11} className="text-orange-400" />
+              <AlertTriangle size={11} className="text-orange-600 dark:text-orange-400" />
               库存（聚合字段，由交付/归还自动更新）
             </SectionLabel>
             <div className="grid grid-cols-2 gap-3">

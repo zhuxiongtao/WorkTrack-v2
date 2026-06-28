@@ -50,6 +50,7 @@ from app.models.employee_loan import EmployeeLoan
 from app.models.expense_item import ExpenseItem
 from app.models.expense_relation import ExpenseRelation
 from app.models.backup_record import BackupRecord
+from app.models.hire_request import HireRequest
 
 __all__ = [
     "User",

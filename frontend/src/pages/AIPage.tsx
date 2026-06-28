@@ -168,7 +168,6 @@ function getSmartPrompts(hasPermission: (p: string) => boolean): QuickPrompt[] {
 function ToolStepsBubble({ steps }: { steps: ToolStep[] }) {
   const [expanded, setExpanded] = useState(true)
   const running = steps.some((s) => s.status === 'running')
-  const done = steps.length > 0 && !running
 
   return (
     <div className="mb-2.5">
@@ -427,7 +426,7 @@ export default function AIPage() {
     }
   }
 
-  const handleCardClick = (card: typeof CAPABILITY_CARDS[0]) => {
+  const handleCardClick = (card: typeof CAPABILITY_CARDS_CONFIG[0]) => {
     if (card.fillInput) {
       setInput(card.prompt)
       textareaRef.current?.focus()

@@ -3,7 +3,7 @@ import {
   CalendarDays, Clock, Receipt, Plane, ShoppingCart, Package,
   Loader2, Plus, Send, ChevronDown, ChevronRight,
   CheckCircle2, AlertCircle, XCircle, Clock as ClockIcon, X,
-  Link2, AlertTriangle, Wallet, User, Building2, Calendar, Sparkles, Paperclip, Eye, Wand2, FileText,
+  Link2, Wallet, User, Building2, Calendar, Sparkles, Paperclip, Eye, Wand2, FileText, UserPlus,
 } from 'lucide-react'
 import { PageHeader, EmptyState, Modal, Field } from '../components/design-system'
 import { useToast } from '../contexts/ToastContext'
@@ -19,7 +19,7 @@ import ExcelImport from '../components/expense/ExcelImport'
 import SearchableSelect, { type SearchableSelectOption } from '../components/SearchableSelect'
 
 /* ──── 类型定义 ──── */
-type OAType = 'leave' | 'overtime' | 'expense' | 'trip' | 'purchase'
+type OAType = 'leave' | 'overtime' | 'expense' | 'trip' | 'purchase' | 'hire'
 
 interface ApprovalInstance {
   id: number
@@ -54,6 +54,7 @@ const OA_MODULES: Record<OAType, {
   expense:  { label: '报销申请', desc: '差旅/交通/办公等费用', icon: Receipt,       color: '#10B981', api: '/api/v1/expenses',       targetType: 'expense' },
   trip:     { label: '出差申请', desc: '出差审批与预算申报',   icon: Plane,         color: '#3B82F6', api: '/api/v1/business-trips', targetType: 'business_trip' },
   purchase: { label: '采购申请', desc: '办公用品/设备/服务',   icon: ShoppingCart,  color: '#F59E0B', api: '/api/v1/purchases',      targetType: 'purchase' },
+  hire:     { label: '员工入职', desc: '新员工入职申请与建账号', icon: UserPlus,      color: '#3B82F6', api: '/api/v1/hires',          targetType: 'hire' },
 }
 
 const OA_TARGET_MAP: Record<string, OAType> = {
@@ -62,13 +63,14 @@ const OA_TARGET_MAP: Record<string, OAType> = {
   expense: 'expense',
   business_trip: 'trip',
   purchase: 'purchase',
+  hire: 'hire',
 }
 
 /* ──── 状态映射 ──── */
 const STATUS_META: Record<string, { label: string; cls: string; icon: typeof CheckCircle2 }> = {
-  pending:   { label: '审批中', cls: 'text-amber-400 bg-amber-500/10 border-amber-500/30',   icon: ClockIcon },
+  pending:   { label: '审批中', cls: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20',   icon: ClockIcon },
   approved:  { label: '已通过', cls: 'text-green-400 bg-green-500/10 border-green-500/30',   icon: CheckCircle2 },
-  rejected:  { label: '已驳回', cls: 'text-red-400 bg-red-500/10 border-red-500/30',         icon: XCircle },
+  rejected:  { label: '已驳回', cls: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20',         icon: XCircle },
   cancelled: { label: '已撤回', cls: 'text-gray-400 bg-gray-500/10 border-gray-500/30',      icon: AlertCircle },
 }
 
@@ -101,15 +103,6 @@ function calcHours(start: string, end: string): number {
   if (isNaN(s.getTime()) || isNaN(e.getTime())) return 0
   const diff = (e.getTime() - s.getTime()) / (1000 * 60 * 60)
   return diff > 0 ? Math.round(diff * 100) / 100 : 0
-}
-
-function calcDays(start: string, end: string): number {
-  if (!start || !end) return 0
-  const s = new Date(start)
-  const e = new Date(end)
-  if (isNaN(s.getTime()) || isNaN(e.getTime())) return 0
-  const diff = (e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)
-  return diff >= 0 ? Math.round((diff + 1) * 10) / 10 : 0
 }
 
 // 请假档位时间：上午 09:00-12:00（0.5天）、下午 13:00-18:00（0.5天）
@@ -177,7 +170,6 @@ const AMOUNT_UNITS = ['元', '万元']
    主页面
 ════════════════════════════════════════════ */
 export default function OACenterPage() {
-  const { toast } = useToast()
   const { hasPermission } = useAuth()
   const [tab, setTab] = useState<'mine' | 'pending'>('mine')
   const [list, setList] = useState<ApprovalInstance[]>([])
@@ -202,7 +194,14 @@ export default function OACenterPage() {
 
   useEffect(() => { load() }, [load])
 
-  const openForm = (type: OAType) => setFormType(type)
+  const openForm = (type: OAType) => {
+    // hire 表单字段多且复杂，走独立页面 /hires
+    if (type === 'hire') {
+      window.location.href = '/hires'
+      return
+    }
+    setFormType(type)
+  }
   const closeForm = () => { setFormType(null); load() }
 
   return (
@@ -211,12 +210,16 @@ export default function OACenterPage() {
       <PageHeader
         icon={CalendarDays}
         title="OA 办公"
-        subtitle="统一发起请假、加班、报销、出差、采购申请，查看审批进度"
+        description="统一发起请假、加班、报销、出差、采购申请，查看审批进度"
       />
 
       {/* ── 功能卡片入口 ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
-        {(Object.keys(OA_MODULES) as OAType[]).map(key => {
+        {(Object.keys(OA_MODULES) as OAType[]).filter(key => {
+          // hire 模块仅 HR/管理员可见（需 hire:manage 权限）
+          if (key === 'hire') return hasPermission('hire:manage')
+          return true
+        }).map(key => {
           const mod = OA_MODULES[key]
           return (
             <button
@@ -292,7 +295,7 @@ export default function OACenterPage() {
         <EmptyState
           icon={tab === 'mine' ? Receipt : CheckCircle2}
           title={tab === 'mine' ? '还没有申请记录' : '没有待办审批'}
-          desc={tab === 'mine' ? '点击上方卡片发起申请' : '所有审批已处理完毕'}
+          description={tab === 'mine' ? '点击上方卡片发起申请' : '所有审批已处理完毕'}
         />
       ) : (
         <div className="space-y-2">
@@ -454,10 +457,6 @@ function OAFormModal({ type, onClose }: { type: OAType; onClose: () => void }) {
     relations: [] as Array<{ target_type: 'business_trip' | 'leave' | 'purchase'; target_id: number; relation_note: string; target_title?: string; target_meta?: any }>,
     // trip
     destination: '',
-    start_date: '',
-    start_slot: 'am' as 'am' | 'pm',
-    end_date: '',
-    end_slot: 'pm' as 'am' | 'pm',
     days: '',
     purpose: '',
     budget: '',
@@ -676,6 +675,9 @@ function OAFormModal({ type, onClose }: { type: OAType; onClose: () => void }) {
           reason: form.reason.trim(),
           attachments: form.attachments,
         }
+      default:
+        // hire 等复杂表单走独立页面 /hires，不在 OACenterPage 快速创建
+        return null
     }
   }
 
@@ -848,12 +850,12 @@ function OAFormModal({ type, onClose }: { type: OAType; onClose: () => void }) {
             <div className="grid grid-cols-2 gap-3">
               <Field label="开始时间" required>
                 <input type="datetime-local" value={form.start_at}
-                  onChange={e => { const next = { ...form, start_at: e.target.value }; const h = calcHours(next.start_at, next.end_at); if (h > 0) next.hours = String(h); setForm(next) }}
+                  onChange={e => { const next: Record<string, any> = { ...form, start_at: e.target.value }; const h = calcHours(next.start_at, next.end_at); if (h > 0) next.hours = String(h); setForm(next) }}
                   className={inputCls} />
               </Field>
               <Field label="结束时间" required>
                 <input type="datetime-local" value={form.end_at}
-                  onChange={e => { const next = { ...form, end_at: e.target.value }; const h = calcHours(next.start_at, next.end_at); if (h > 0) next.hours = String(h); setForm(next) }}
+                  onChange={e => { const next: Record<string, any> = { ...form, end_at: e.target.value }; const h = calcHours(next.start_at, next.end_at); if (h > 0) next.hours = String(h); setForm(next) }}
                   className={inputCls} />
               </Field>
             </div>
@@ -891,7 +893,7 @@ function OAFormModal({ type, onClose }: { type: OAType; onClose: () => void }) {
               </div>
               <div className="flex items-center gap-2 min-w-0">
                 <Calendar size={13} className="text-accent-blue shrink-0" />
-                <span className="text-[11px] text-gray-500 shrink-0">申请时间</span>
+                <span className="text-[11px] text-gray-500 shrink-0 w-[4em]">申请时间</span>
                 <span className="text-xs font-medium text-gray-800 dark:text-gray-100 truncate">
                   {applyTime}
                 </span>
@@ -911,7 +913,7 @@ function OAFormModal({ type, onClose }: { type: OAType; onClose: () => void }) {
                   value={form.invoice_entity_id ?? null}
                   onChange={(v) => update('invoice_entity_id', v)}
                   placeholder="请选择公司主体"
-                  options={legalEntities.map<SearchableSelectOption<number>>((e) => ({
+                  options={legalEntities.map<SearchableSelectOption>((e) => ({
                     value: e.id,
                     label: e.name,
                     hint: e.short_name,
@@ -1441,11 +1443,11 @@ function OAFormModal({ type, onClose }: { type: OAType; onClose: () => void }) {
               <label className="block text-xs text-gray-400 mb-1.5">开始时间 <span className="text-red-400">*</span></label>
               <div className="flex gap-2">
                 <input type="date" value={form.start_date}
-                  onChange={e => { const next = { ...form, start_date: e.target.value }; const d = calcTripDays(next.start_date, next.start_slot, next.end_date, next.end_slot); next.days = d > 0 ? String(d) : ''; setForm(next) }}
+                  onChange={e => { const next: Record<string, any> = { ...form, start_date: e.target.value }; const d = calcTripDays(next.start_date, next.start_slot, next.end_date, next.end_slot); next.days = d > 0 ? String(d) : ''; setForm(next) }}
                   className={`${inputCls} flex-1`} />
                 <div className="inline-flex rounded-lg border border-gray-200 dark:border-border/60 overflow-hidden shrink-0">
                   {(['am', 'pm'] as const).map(s => (
-                    <button key={s} type="button" onClick={() => { const next = { ...form, start_slot: s }; const d = calcTripDays(next.start_date, next.start_slot, next.end_date, next.end_slot); next.days = d > 0 ? String(d) : ''; setForm(next) }}
+                    <button key={s} type="button" onClick={() => { const next: Record<string, any> = { ...form, start_slot: s }; const d = calcTripDays(next.start_date, next.start_slot, next.end_date, next.end_slot); next.days = d > 0 ? String(d) : ''; setForm(next) }}
                       className={`px-3 text-xs transition-colors ${
                         form.start_slot === s
                           ? 'bg-accent-blue text-white'
@@ -1462,11 +1464,11 @@ function OAFormModal({ type, onClose }: { type: OAType; onClose: () => void }) {
               <label className="block text-xs text-gray-400 mb-1.5">结束时间 <span className="text-red-400">*</span></label>
               <div className="flex gap-2">
                 <input type="date" value={form.end_date}
-                  onChange={e => { const next = { ...form, end_date: e.target.value }; const d = calcTripDays(next.start_date, next.start_slot, next.end_date, next.end_slot); next.days = d > 0 ? String(d) : ''; setForm(next) }}
+                  onChange={e => { const next: Record<string, any> = { ...form, end_date: e.target.value }; const d = calcTripDays(next.start_date, next.start_slot, next.end_date, next.end_slot); next.days = d > 0 ? String(d) : ''; setForm(next) }}
                   className={`${inputCls} flex-1`} />
                 <div className="inline-flex rounded-lg border border-gray-200 dark:border-border/60 overflow-hidden shrink-0">
                   {(['am', 'pm'] as const).map(s => (
-                    <button key={s} type="button" onClick={() => { const next = { ...form, end_slot: s }; const d = calcTripDays(next.start_date, next.start_slot, next.end_date, next.end_slot); next.days = d > 0 ? String(d) : ''; setForm(next) }}
+                    <button key={s} type="button" onClick={() => { const next: Record<string, any> = { ...form, end_slot: s }; const d = calcTripDays(next.start_date, next.start_slot, next.end_date, next.end_slot); next.days = d > 0 ? String(d) : ''; setForm(next) }}
                       className={`px-3 text-xs transition-colors ${
                         form.end_slot === s
                           ? 'bg-accent-blue text-white'

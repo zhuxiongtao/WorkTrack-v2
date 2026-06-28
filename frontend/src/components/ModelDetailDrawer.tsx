@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { X, Save, Loader2, Brain, AlertCircle, RotateCcw, FileText, MessageSquare, Eye, Mic, Hash, Globe, ListChecks, Cpu, Sparkles, type LucideIcon } from 'lucide-react'
 import { useToast } from '../contexts/ToastContext'
 import { IconBox } from './design-system'
-import { TONES, type Tone } from '../theme/tokens'
+import { TONES } from '../theme/tokens'
 import SearchableSelect from './SearchableSelect'
 
 interface ModelDetail {
@@ -182,7 +182,7 @@ export default function ModelDetailDrawer({ providerId, providerName, modelId, m
           <div className="p-5 space-y-6">
 
             {/* P1 多模态：可执行任务类型 */}
-            <Section title="可执行任务类型" icon={ListChecks} color="#EC4899" hint="决定该模型能在哪些任务的下拉中可选。多模态模型可勾选多个">
+            <Section title="可执行任务类型" icon={ListChecks} tone="pink" hint="决定该模型能在哪些任务的下拉中可选。多模态模型可勾选多个">
               <div className="flex flex-wrap gap-2">
                 {TASK_TYPE_OPTIONS.map((opt) => {
                   const active = (form.supported_task_types || []).includes(opt.value)
@@ -210,7 +210,7 @@ export default function ModelDetailDrawer({ providerId, providerName, modelId, m
             </Section>
 
             {/* 基础采样 */}
-            <Section title="基础采样" icon={Sparkles} color="#3B82F6">
+            <Section title="基础采样" icon={Sparkles} tone="blue">
               <NumberField label="Temperature" hint="0=确定性，2=高随机。一般聊天 0.7，提取 0.1-0.3"
                 value={form.default_temperature} onChange={(v) => set('default_temperature', v)} onNull={() => setNull('default_temperature')} min={0} max={2} step={0.05} />
               <NumberField label="Top P" hint="核采样。建议 0.9-1.0"
@@ -233,7 +233,7 @@ export default function ModelDetailDrawer({ providerId, providerName, modelId, m
             </Section>
 
             {/* 输出控制 */}
-            <Section title="输出控制" icon={FileText} color="#10B981">
+            <Section title="输出控制" icon={FileText} tone="green">
               <SelectField label="Response Format" value={form.default_response_format} options={RESPONSE_FORMATS} onChange={(v) => set('default_response_format', v)} onNull={() => setNull('default_response_format')} />
               <div>
                 <label className="block text-xs text-gray-400 mb-1.5">JSON Schema <span className="text-[11px] text-gray-500">（仅 json_schema 模式）</span></label>
@@ -248,7 +248,7 @@ export default function ModelDetailDrawer({ providerId, providerName, modelId, m
             </Section>
 
             {/* 能力标签 */}
-            <Section title="能力标签" icon={Cpu} color="#F59E0B" hint="控制 ai_service 走哪种调用方式">
+            <Section title="能力标签" icon={Cpu} tone="orange" hint="控制 ai_service 走哪种调用方式">
               <NumberField label="Context Window" hint="上下文窗口 token 数"
                 value={form.context_window} onChange={(v) => set('context_window', v)} onNull={() => setNull('context_window')} min={0} step={1024} />
               <ToggleField label="Streaming" checked={!!form.supports_streaming} onChange={(v) => set('supports_streaming', v)} />
@@ -363,10 +363,9 @@ function SelectField({ label, value, options, onChange, onNull }: { label: strin
         </button>
       </div>
       <SearchableSelect
-        options={options.map(o => ({ id: o.value, label: o.label }))}
+        options={options.map(o => ({ value: o.value, label: o.label }))}
         value={value || ''}
-        onChange={(v) => onChange(v === 0 ? null : (String(v) || null))}
-        clearValue=""
+        onChange={(v) => onChange(v === null ? null : (String(v) || null))}
       />
     </div>
   )

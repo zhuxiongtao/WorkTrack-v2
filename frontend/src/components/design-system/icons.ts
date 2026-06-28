@@ -28,7 +28,7 @@ import {
   Wand2, Code2, Lightbulb, Terminal, Palette, Package,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import type { Tone } from '../theme/tokens'
+import type { Tone } from '../../theme/tokens'
 
 /**
  * 业务域图标（用于导航/分类）

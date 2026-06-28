@@ -325,7 +325,7 @@ export default function PurchasesPage() {
               key={t.key}
               onClick={() => setScope(t.key)}
               className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
-                scope === t.key ? 'bg-bg-card text-white shadow-sm' : 'text-gray-500 hover:text-gray-300'
+                scope === t.key ? 'bg-accent-blue/15 text-accent-blue' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
               }`}
             >
               {t.label}
@@ -453,7 +453,7 @@ export default function PurchasesPage() {
                   <button
                     onClick={() => submitApproval(detail)}
                     disabled={acting}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-orange-500 text-white text-xs font-bold hover:bg-orange-600 disabled:opacity-50 transition-colors"
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-blue text-white text-xs font-bold hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 disabled:opacity-50 transition-colors"
                   >
                     {acting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} 提交审批
                   </button>
@@ -484,7 +484,7 @@ export default function PurchasesPage() {
                 <button
                   onClick={() => procure(detail)}
                   disabled={acting}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-cyan-500 text-white text-xs font-bold hover:bg-cyan-600 disabled:opacity-50 transition-colors"
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-blue text-white text-xs font-bold hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 disabled:opacity-50 transition-colors"
                 >
                   {acting ? <Loader2 size={14} className="animate-spin" /> : <PackageCheck size={14} />} 执行采购
                 </button>
@@ -493,7 +493,7 @@ export default function PurchasesPage() {
                 <button
                   onClick={() => store(detail)}
                   disabled={acting}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-orange-500 text-white text-xs font-bold hover:bg-orange-600 disabled:opacity-50 transition-colors"
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-blue text-white text-xs font-bold hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 disabled:opacity-50 transition-colors"
                 >
                   {acting ? <Loader2 size={14} className="animate-spin" /> : <Warehouse size={14} />} 执行入库
                 </button>
@@ -554,10 +554,9 @@ export default function PurchasesPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="供应商（可选）">
                 <SearchableSelect
-                  options={[{ id: 0, label: '不指定' }, ...suppliers.map(s => ({ id: s.id, label: s.name }))]}
+                  options={[{ value: 0, label: '不指定' }, ...suppliers.map(s => ({ value: s.id, label: s.name }))]}
                   value={form.supplier_id || 0}
                   onChange={(v) => setForm({ ...form, supplier_id: v === 0 ? null : Number(v) })}
-                  clearValue={0}
                 />
               </Field>
               <Field label="期望到货日期（可选）">
@@ -675,10 +674,9 @@ export default function PurchasesPage() {
               </Field>
               <Field label="币种">
                 <SearchableSelect
-                  options={['CNY', 'USD', 'HKD', 'EUR'].map(c => ({ id: c, label: c }))}
+                  options={['CNY', 'USD', 'HKD', 'EUR'].map(c => ({ value: c, label: c }))}
                   value={form.currency}
-                  onChange={(v) => setForm({ ...form, currency: v === 0 ? '' : String(v) })}
-                  clearValue=""
+                  onChange={(v) => setForm({ ...form, currency: v === null ? '' : String(v) })}
                 />
               </Field>
             </div>

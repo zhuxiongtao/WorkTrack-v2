@@ -366,7 +366,7 @@ export default function ProjectCostPage() {
             {hasPermission('project:edit') && (
               <button
                 onClick={() => setShowAdd(true)}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#10B981] text-[#fff] text-xs font-bold hover:bg-emerald-600 hover:shadow-lg hover:shadow-emerald-500/30 transition-all cursor-pointer"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-accent-blue text-white text-xs font-bold hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 transition-all cursor-pointer"
               >
                 <Plus size={14} strokeWidth={2.5} />新增成本
               </button>
@@ -387,8 +387,8 @@ export default function ProjectCostPage() {
             onClick={() => setTab(t.key)}
             className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
               tab === t.key
-                ? 'bg-bg-card text-white shadow-sm'
-                : 'text-gray-500 hover:text-gray-300'
+                ? 'bg-accent-blue/15 text-accent-blue'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
             }`}
           >
             <t.icon size={12} />{t.label}
@@ -888,29 +888,26 @@ export default function ProjectCostPage() {
               <div>
                 <label className="text-[11px] text-gray-500 mb-1 block">项目 *</label>
                 <SearchableSelect
-                  options={[{ id: 0, label: '选择项目' }, ...projectList.map(p => ({ id: p.project_id, label: p.project_name }))]}
+                  options={[{ value: 0, label: '选择项目' }, ...projectList.map(p => ({ value: p.project_id, label: p.project_name }))]}
                   value={addForm.project_id || 0}
                   onChange={(v) => setAddForm(f => ({ ...f, project_id: (v as number) || 0 }))}
-                  clearValue={0}
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[11px] text-gray-500 mb-1 block">类别</label>
                   <SearchableSelect
-                    options={CATEGORIES.map(c => ({ id: c, label: c }))}
+                    options={CATEGORIES.map(c => ({ value: c, label: c }))}
                     value={addForm.category}
-                    onChange={(v) => setAddForm(f => ({ ...f, category: v === 0 ? '' : String(v) }))}
-                    clearValue=""
+                    onChange={(v) => setAddForm(f => ({ ...f, category: v === null ? '' : String(v) }))}
                   />
                 </div>
                 <div>
                   <label className="text-[11px] text-gray-500 mb-1 block">供应商</label>
                   <SearchableSelect
-                    options={[{ id: 0, label: '选择供应商' }, ...supplierList.filter(s => s.status === '合作中').map(s => ({ id: s.id, label: s.name }))]}
+                    options={[{ value: 0, label: '选择供应商' }, ...supplierList.filter(s => s.status === '合作中').map(s => ({ value: s.id, label: s.name }))]}
                     value={addForm.supplier_id || 0}
                     onChange={(v) => setAddForm(f => ({ ...f, supplier_id: (v as number) || 0 }))}
-                    clearValue={0}
                   />
                 </div>
               </div>
@@ -984,19 +981,17 @@ export default function ProjectCostPage() {
                 <div>
                   <label className="text-[11px] text-gray-500 mb-1 block">类别</label>
                   <SearchableSelect
-                    options={CATEGORIES.map(c => ({ id: c, label: c }))}
+                    options={CATEGORIES.map(c => ({ value: c, label: c }))}
                     value={editForm.category}
-                    onChange={(v) => setEditForm(f => ({ ...f, category: v === 0 ? '' : String(v) }))}
-                    clearValue=""
+                    onChange={(v) => setEditForm(f => ({ ...f, category: v === null ? '' : String(v) }))}
                   />
                 </div>
                 <div>
                   <label className="text-[11px] text-gray-500 mb-1 block">供应商</label>
                   <SearchableSelect
-                    options={[{ id: 0, label: '选择供应商' }, ...supplierList.map(s => ({ id: s.id, label: s.status !== '合作中' ? `${s.name} (${s.status})` : s.name }))]}
+                    options={[{ value: 0, label: '选择供应商' }, ...supplierList.map(s => ({ value: s.id, label: s.status !== '合作中' ? `${s.name} (${s.status})` : s.name }))]}
                     value={editForm.supplier_id || 0}
                     onChange={(v) => setEditForm(f => ({ ...f, supplier_id: (v as number) || 0 }))}
-                    clearValue={0}
                   />
                 </div>
               </div>

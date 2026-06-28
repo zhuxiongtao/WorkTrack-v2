@@ -163,6 +163,47 @@ def submit_leave_approval(leave_id: int, current_user: User = Depends(get_curren
         raise HTTPException(403, "无权操作该请假申请")
     if approval_engine.get_active_instance("leave", leave_id, db):
         raise HTTPException(400, "该请假申请已有进行中的审批")
+
+    # 额度校验：所有有额度的假期类型（年假/调休/婚假/产假/陪产假/丧假）不允许超过剩余额度
+    # 注意：需扣除"审批中"的同类型请假占用量，避免多个申请叠加后超额
+    if lv.leave_type in leave_balance_service.BALANCE_CONTROLLED_TYPES and lv.hours > 0:
+        bal = leave_balance_service.get_or_create_balance(
+            lv.user_id, lv.leave_type, lv.start_at.year, db,
+        )
+        remaining = bal.total_hours - bal.used_hours
+        # 计算同年度、同类型、审批中的请假占用量（排除自己）
+        pending_leaves = db.exec(
+            select(LeaveRequest).where(
+                LeaveRequest.user_id == lv.user_id,
+                LeaveRequest.leave_type == lv.leave_type,
+                LeaveRequest.status == "审批中",
+                LeaveRequest.id != lv.id,
+            )
+        ).all()
+        pending_hours = sum(
+            p.hours for p in pending_leaves
+            if p.start_at.year == lv.start_at.year
+        )
+        available = remaining - pending_hours
+        HOURS_PER_DAY = 8.0
+        if bal.total_hours == 0:
+            raise HTTPException(400, f"无可用{lv.leave_type}额度，请联系 HR 确认")
+        if lv.hours > available:
+            remaining_days = round(remaining / HOURS_PER_DAY, 1)
+            available_days = round(available / HOURS_PER_DAY, 1)
+            request_days = round(lv.hours / HOURS_PER_DAY, 1)
+            if pending_hours > 0:
+                pending_days = round(pending_hours / HOURS_PER_DAY, 1)
+                raise HTTPException(
+                    400,
+                    f"{lv.leave_type}剩余 {remaining_days} 天，其中 {pending_days} 天正在审批中，"
+                    f"实际可用 {available_days} 天，本次申请 {request_days} 天，超出可用余额，无法提交审批"
+                )
+            raise HTTPException(
+                400,
+                f"{lv.leave_type}剩余 {remaining_days} 天，本次申请 {request_days} 天，超出余额，无法提交审批"
+            )
+
     try:
         inst = approval_engine.start_approval(
             "leave", leave_id, lv, f"请假申请《{lv.title}》", current_user, db,

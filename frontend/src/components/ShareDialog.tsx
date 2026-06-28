@@ -35,7 +35,7 @@ export default function ShareDialog({ targetType, targetId, targetTitle, open, o
   const [selectedUserId, setSelectedUserId] = useState<number | ''>('')
   const [permission, setPermission] = useState<'viewer' | 'commenter'>('viewer')
   const [expiresAt, setExpiresAt] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -147,12 +147,11 @@ export default function ShareDialog({ targetType, targetId, targetTitle, open, o
             <label className="text-xs text-gray-400">分享给</label>
             <SearchableSelect
               options={[
-                { id: '', label: '选择用户...' },
-                ...users.map(u => ({ id: u.id, label: `${u.name} (@${u.username})` })),
+                { value: '', label: '选择用户...' },
+                ...users.map(u => ({ value: u.id, label: `${u.name} (@${u.username})` })),
               ]}
               value={selectedUserId}
               onChange={(v) => setSelectedUserId(v && v !== 0 ? (v as number) : '')}
-              clearValue=""
             />
 
             <div className="flex gap-3">

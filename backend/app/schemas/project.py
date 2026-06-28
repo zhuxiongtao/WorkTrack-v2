@@ -33,6 +33,7 @@ class ProjectCreate(BaseModel):
     contract_period: Optional[str] = None
     contract_ids: Optional[list[int]] = None
     tech_support_user_id: Optional[int] = None
+    sales_person_user_id: Optional[int] = None
 
 
 class ProjectUpdate(BaseModel):
@@ -64,6 +65,7 @@ class ProjectUpdate(BaseModel):
     usage_scenario: Optional[str] = None
     contract_period: Optional[str] = None
     contract_ids: Optional[list[int]] = None
+    sales_person_user_id: Optional[int] = None
 
 
 class ProjectOut(BaseModel):
@@ -107,6 +109,8 @@ class ProjectOut(BaseModel):
 
     # 技术支持用户 FK
     tech_support_user_id: Optional[int] = None
+    # 销售负责人用户 FK
+    sales_person_user_id: Optional[int] = None
 
     # 关联合同数（反查，避免前端 N+1）
     contract_count: int = 0
