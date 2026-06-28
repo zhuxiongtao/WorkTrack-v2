@@ -164,6 +164,18 @@ export async function batchUserAction(
   return res.json()
 }
 
+export async function unlockUser(
+  fetchWithAuth: FetchWithAuth,
+  id: number,
+): Promise<{ message: string }> {
+  const res = await fetchWithAuth(`/api/v1/users/${id}/unlock`, { method: 'POST' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: '解锁失败' }))
+    throw new Error(err.detail || '解锁账号失败')
+  }
+  return res.json()
+}
+
 // ===== 用户直接角色分配 =====
 export async function fetchUserDirectRoles(
   fetchWithAuth: FetchWithAuth,

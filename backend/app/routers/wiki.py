@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlmodel import Session, select
 from app.database import get_session
 from app.auth import get_current_user, require_permission, verify_password, hash_password, has_permission
@@ -16,6 +16,7 @@ from app.schemas import (
     WikiUserGroupCreate, WikiUserGroupOut, WikiUserGroupMemberAdd,
 )
 from app.utils.time import BEIJING_TZ, now
+from app.rate_limit import limiter
 
 router = APIRouter(prefix="/api/v1/wiki", tags=["Wiki"])
 
@@ -24,15 +25,12 @@ router = APIRouter(prefix="/api/v1/wiki", tags=["Wiki"])
 
 def _verify_share_access(space: WikiSpace, password: str | None) -> None:
     """校验公开空间的到期时间和提取密码，不通过则抛出 HTTPException"""
-    from datetime import datetime, timezone
     if space.share_expires_at:
-        now_dt = now()
         expires = space.share_expires_at
-        # 确保两个时间都是时区感知的
-        if expires.tzinfo is None:
-            expires = expires.replace(tzinfo=timezone.utc)
-        # 直接比较两个时区感知的时间
-        if now_dt > expires:
+        # 统一转为 naive 北京时间比较，避免 naive/aware 混用 TypeError
+        if expires.tzinfo is not None:
+            expires = expires.astimezone(BEIJING_TZ).replace(tzinfo=None)
+        if now() > expires:
             raise HTTPException(status_code=status.HTTP_410_GONE, detail="该共享链接已到期失效")
     if space.share_password:
         if not password or not verify_password(password.strip(), space.share_password):
@@ -851,7 +849,8 @@ class SharePasswordVerify(BaseModel):
     password: str
 
 @router.post("/public/spaces/{space_id}/verify-password")
-def verify_public_space_password(space_id: int, data: SharePasswordVerify, db: Session = Depends(get_session)):
+@limiter.limit("5/minute")
+def verify_public_space_password(space_id: int, data: SharePasswordVerify, request: Request, db: Session = Depends(get_session)):
     """校验公开空间的提取密码并判断是否失效"""
     space = db.get(WikiSpace, space_id)
     if not space or not space.is_public:

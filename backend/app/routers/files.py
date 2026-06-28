@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 from sqlmodel import Session
 from app.database import get_session
 from app.models.user import User
-from app.auth import get_current_user, has_permission
+from app.auth import get_current_user
 from app.routers.logs import write_log
 from app.config import settings
 
@@ -99,7 +99,8 @@ async def serve_file(
     已上传文件访问（需认证）。
     仅允许访问自己上传的文件，管理员可访问所有文件。
     """
-    if str(current_user.id) != user_id and not current_user.is_admin and not has_permission(current_user, "user:read", db):
+    # Issue #7: 文件访问权限仅限本人；user:read 覆盖范围过宽，改为仅 is_admin 可跨用户访问
+    if str(current_user.id) != user_id and not current_user.is_admin:
         raise HTTPException(status_code=403, detail="无权访问该文件")
 
     safe_filename = os.path.basename(filename)
@@ -111,7 +112,8 @@ async def serve_file(
     ext = file_path.suffix.lower()
     media_types = {
         '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
-        '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
+        '.gif': 'image/gif', '.webp': 'image/webp',
+        # SVG 不内联渲染，防止存储型 XSS（见 Issue #6）
         '.ico': 'image/x-icon', '.bmp': 'image/bmp',
         '.pdf': 'application/pdf',
         '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg',
@@ -119,4 +121,10 @@ async def serve_file(
     }
     media_type = media_types.get(ext, 'application/octet-stream')
 
-    return FileResponse(str(file_path), media_type=media_type)
+    # SVG 强制附件下载，防止浏览器内联执行其中的脚本
+    headers = {}
+    if ext == '.svg':
+        headers['Content-Disposition'] = f'attachment; filename="{safe_filename}"'
+        media_type = 'application/octet-stream'
+
+    return FileResponse(str(file_path), media_type=media_type, headers=headers)

@@ -453,8 +453,7 @@ def check_share_access(target_type: str, target_id: int, current_user: User, db:
     在 check_data_access() 返回 False 后调用，作为额外放行条件。
     """
     from app.models.data_share import DataShare
-    from datetime import datetime, timezone
-    
+
     share = db.exec(
         select(DataShare).where(
             DataShare.target_type == target_type,
@@ -462,18 +461,19 @@ def check_share_access(target_type: str, target_id: int, current_user: User, db:
             DataShare.shared_to == current_user.id,
         )
     ).first()
-    
+
     if not share:
         return False
-    
-    # 检查是否过期
+
+    # 检查是否过期：统一用 naive 北京时间比较，避免 naive/aware 混用抛 TypeError
     if share.expires_at is not None:
         expires = share.expires_at
-        if expires.tzinfo is None:
-            expires = expires.replace(tzinfo=timezone.utc)
+        if expires.tzinfo is not None:
+            # 存入的是 aware 时间（旧数据），转为北京时区再去掉 tzinfo
+            expires = expires.astimezone(BEIJING_TZ).replace(tzinfo=None)
         if expires < now():
             return False
-    
+
     return True
 
 

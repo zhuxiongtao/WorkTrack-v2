@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class LeaveCreate(BaseModel):
@@ -8,7 +8,7 @@ class LeaveCreate(BaseModel):
     title: str
     start_at: datetime
     end_at: datetime
-    hours: float = 0
+    hours: float = Field(default=0, ge=0, le=8760)  # 0~8760h（一年上限），防负数绕过额度
     reason: str = ""
     attachments: Optional[str] = None
 
@@ -18,7 +18,7 @@ class LeaveUpdate(BaseModel):
     title: Optional[str] = None
     start_at: Optional[datetime] = None
     end_at: Optional[datetime] = None
-    hours: Optional[float] = None
+    hours: Optional[float] = Field(default=None, ge=0, le=8760)
     reason: Optional[str] = None
     attachments: Optional[str] = None
 

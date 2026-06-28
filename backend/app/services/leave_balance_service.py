@@ -102,7 +102,21 @@ def apply_leave(
 ) -> Optional[LeaveBalance]:
     """请假审批通过后扣减额度。返回更新后的余额，额度不足抛 ValueError。"""
     year = leave.start_at.year
-    bal = get_or_create_balance(leave.user_id, leave.leave_type, year, db)
+    # SELECT FOR UPDATE 锁行，防止并发请假重复扣减同一额度
+    bal = db.exec(
+        select(LeaveBalance).where(
+            LeaveBalance.user_id == leave.user_id,
+            LeaveBalance.leave_type == leave.leave_type,
+            LeaveBalance.year == year,
+        ).with_for_update()
+    ).first()
+    if not bal:
+        bal = LeaveBalance(
+            user_id=leave.user_id, leave_type=leave.leave_type,
+            year=year, total_hours=0, used_hours=0,
+        )
+        db.add(bal)
+        db.flush()
     remaining = bal.total_hours - bal.used_hours
     if leave.leave_type in BALANCE_CONTROLLED_TYPES and leave.hours > remaining:
         # 额度不足：拒绝扣减（理论上 submit_leave_approval 已拦截，此处为双保险）
@@ -122,30 +136,45 @@ def apply_leave(
     return bal
 
 
+def _proportional_refund(leave: LeaveRequest) -> float:
+    """计算实际应返还的额度小时数。
+
+    若提前销假（actual_end_at < end_at），按时间跨度比例返还未使用部分；
+    否则（未提前）全额返还（申请撤销或实际使用满额）。
+    """
+    actual = leave.actual_end_at
+    if actual and actual < leave.end_at:
+        total_span = (leave.end_at - leave.start_at).total_seconds()
+        if total_span > 0:
+            actual_span = max(0.0, (actual - leave.start_at).total_seconds())
+            ratio = min(1.0, actual_span / total_span)
+            return round(leave.hours * (1.0 - ratio), 2)
+    return leave.hours
+
+
 def cancel_leave(
     leave: LeaveRequest, db: Session, operator_id: Optional[int] = None,
 ) -> Optional[LeaveBalance]:
-    """销假返还额度（按实际销假时间重算或全额返还）。
-
-    简化策略：全额返还已扣减额度。如需按实际时间重算，可扩展此函数。
-    """
+    """销假返还额度（提前销假按比例返还未使用部分，否则全额返还）。"""
     year = leave.start_at.year
+    # SELECT FOR UPDATE 锁行，防止并发销假导致 used_hours 负数
     bal = db.exec(
         select(LeaveBalance).where(
             LeaveBalance.user_id == leave.user_id,
             LeaveBalance.leave_type == leave.leave_type,
             LeaveBalance.year == year,
-        )
+        ).with_for_update()
     ).first()
     if not bal:
         return None
-    bal.used_hours = round(max(0, bal.used_hours - leave.hours), 2)
+    refund_hours = _proportional_refund(leave)
+    bal.used_hours = round(max(0, bal.used_hours - refund_hours), 2)
     bal.updated_at = now()
     db.add(bal)
     db.commit()
     db.refresh(bal)
     _write_log(
-        bal, "leave_cancelled", leave.hours,
+        bal, "leave_cancelled", refund_hours,
         f"销假 #{leave.id}（{leave.title}）返还", db,
         operator_id=operator_id, related_request_id=leave.id,
     )

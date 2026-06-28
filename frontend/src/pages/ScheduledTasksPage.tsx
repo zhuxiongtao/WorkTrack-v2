@@ -144,7 +144,7 @@ export default function ScheduledTasksPage() {
             return (
               <div
                 key={task.id}
-                className={`flex items-center gap-4 px-5 py-4 rounded-xl border transition-colors ${
+                className={`flex items-center gap-3 sm:gap-4 px-3 sm:px-5 py-3 sm:py-4 rounded-xl border transition-colors ${
                   task.enabled
                     ? 'bg-bg-card border-border hover:border-accent-blue/30'
                     : 'bg-bg-card/50 border-border/50 opacity-60'

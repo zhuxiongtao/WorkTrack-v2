@@ -402,6 +402,27 @@ def get_company_logo(
         raise HTTPException(status_code=400, detail="invalid domain")
     domain = domain.lower()
 
+    # SSRF 防护：拒绝内网 IP / 私网地址 / 本机地址
+    import ipaddress, socket as _socket
+    _SSRF_BLOCK_LABELS = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
+    if domain in _SSRF_BLOCK_LABELS:
+        raise HTTPException(status_code=400, detail="invalid domain")
+    try:
+        resolved = _socket.getaddrinfo(domain, None)
+        for _family, _type, _proto, _canonname, _sockaddr in resolved:
+            ip_str = _sockaddr[0]
+            try:
+                ip = ipaddress.ip_address(ip_str)
+                if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+                    raise HTTPException(status_code=400, detail="invalid domain")
+            except ValueError:
+                pass
+    except HTTPException:
+        raise
+    except Exception:
+        # DNS 解析失败则直接返回 404（不暴露内网错误）
+        raise HTTPException(status_code=404, detail="logo not found")
+
     def _fetch():
         import time as _time
         from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED

@@ -23,7 +23,9 @@ logger = logging.getLogger("worktrack")
 router = APIRouter(prefix="/api/v1/leaves", tags=["请假申请"])
 
 LEAVE_TYPES = ["年假", "事假", "病假", "调休", "婚假", "产假", "陪产假", "丧假"]
+_LEAVE_TYPES_SET = set(LEAVE_TYPES)
 _LOCKED_STATUSES = {"审批中", "已批准"}
+_MAX_SPAN_HOURS = 8760.0  # 一年上限
 
 
 def _can_view_all(user: User, db: Session) -> bool:
@@ -91,12 +93,22 @@ def get_leave(leave_id: int, current_user: User = Depends(get_current_user), db:
     return _to_out(lv, nm)
 
 
+def _validate_leave_fields(leave_type: str, start_at, end_at, hours: float) -> None:
+    """统一校验请假字段（create / update 复用）"""
+    if leave_type not in _LEAVE_TYPES_SET:
+        raise HTTPException(400, f"无效的假期类型，可选：{', '.join(LEAVE_TYPES)}")
+    if end_at <= start_at:
+        raise HTTPException(400, "结束时间必须晚于开始时间")
+    span_hours = (end_at - start_at).total_seconds() / 3600
+    if hours > span_hours + 0.01:
+        raise HTTPException(400, f"请假时长（{hours}h）不能超过申请时间跨度（{round(span_hours,1)}h）")
+
+
 @router.post("", response_model=LeaveOut)
 def create_leave(body: LeaveCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
     if not body.title.strip():
         raise HTTPException(400, "请填写请假摘要")
-    if body.end_at <= body.start_at:
-        raise HTTPException(400, "结束时间必须晚于开始时间")
+    _validate_leave_fields(body.leave_type, body.start_at, body.end_at, body.hours)
     lv = LeaveRequest(
         user_id=current_user.id,
         leave_type=body.leave_type,
@@ -128,8 +140,7 @@ def update_leave(leave_id: int, body: LeaveUpdate, current_user: User = Depends(
     data = body.model_dump(exclude_unset=True)
     for k, v in data.items():
         setattr(lv, k, v)
-    if lv.end_at <= lv.start_at:
-        raise HTTPException(400, "结束时间必须晚于开始时间")
+    _validate_leave_fields(lv.leave_type, lv.start_at, lv.end_at, lv.hours)
     lv.updated_at = now()
     db.add(lv)
     db.commit()

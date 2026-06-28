@@ -28,6 +28,16 @@ logger = logging.getLogger("worktrack.users")
 router = APIRouter(prefix="/api/v1/users", tags=["用户管理"])
 
 
+def _guard_admin_target(target: User, actor: User) -> None:
+    """防止非 admin 操作者对 admin 账号执行敏感操作（重置密码、改状态、禁用等）。
+    is_admin 用户操作 is_admin 用户是允许的（admin 间互操）。"""
+    if target.is_admin and not actor.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="只有系统管理员才能对管理员账号执行此操作",
+        )
+
+
 def _is_dept_in_descendants(db: Session, ancestor_id: int, descendant_id: int) -> bool:
     """检查 ancestor_id 是否在 descendant_id 的祖先链中（即把 ancestor 设为 descendant 的子部门会形成循环）"""
     current_id = ancestor_id
@@ -920,6 +930,7 @@ def toggle_user_active(user_id: int, db: Session = Depends(get_session),
     # 不能禁用自己
     if user.id == actor.id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不能禁用自己的账号")
+    _guard_admin_target(user, actor)
 
     user.is_active = not user.is_active
     # 同步 status 字段
@@ -951,6 +962,7 @@ def set_user_status(user_id: int, data: UserStatusSet,
         raise HTTPException(status_code=404, detail="用户不存在")
     if user.id == _admin.id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不能修改自己的账号状态")
+    _guard_admin_target(user, _admin)
 
     if data.status not in ("active", "disabled", "resigned"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="无效的状态值")
@@ -985,6 +997,7 @@ def reset_user_password(user_id: int, data: ResetPasswordRequest,
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
+    _guard_admin_target(user, _admin)
 
     # 密码强度校验
     pwd_err = validate_password_strength(data.new_password)
@@ -996,6 +1009,25 @@ def reset_user_password(user_id: int, data: ResetPasswordRequest,
     bump_token_version(user, db)
 
     return {"message": "密码已重置，用户需要重新登录"}
+
+
+
+# ===== 解除账号锁定 =====
+@router.post("/{user_id}/unlock")
+def unlock_user(user_id: int, db: Session = Depends(get_session),
+                actor: User = Depends(require_permission("user:edit"))):
+    """管理员手动解除因连续密码错误而被锁定的账号"""
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    _guard_admin_target(user, actor)
+
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return {"message": f"账号「{user.name or user.username}」已解锁，用户可重新登录"}
 
 
 # ===== 重发欢迎邮件 =====
@@ -1010,6 +1042,7 @@ def resend_welcome_email(user_id: int, db: Session = Depends(get_session),
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
+    _guard_admin_target(user, _admin)
     if not user.email or not user.email.strip():
         raise HTTPException(status_code=400, detail="该用户未设置邮箱，无法发送欢迎邮件")
 

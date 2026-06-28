@@ -174,12 +174,35 @@ EXPORT_MODELS_V2 = [
 ]
 
 
+# JSON 备份中按模型排除的敏感字段（密码哈希不应出现在可下载的 JSON 文件中）
+# 需要完整凭据恢复请使用 SQL dump。
+_BACKUP_EXCLUDED_FIELDS: dict[str, set[str]] = {
+    "User": {"password_hash"},
+    "ModelProvider": {"api_key", "vertex_json"},
+}
+
+# SystemPreference.key 含有以下子串时，value 视为敏感，导出为 null
+_SENSITIVE_PREF_PATTERNS = (
+    "api_key", "password", "secret", "token", "smtp_pass", "pwr_reset",
+)
+
+
 def _model_to_dict(obj) -> dict:
-    """将 SQLModel 对象转换为可序列化字典"""
+    """将 SQLModel 对象转换为可序列化字典，自动排除敏感字段"""
     result = {}
+    model_name = type(obj).__name__
+    excluded = _BACKUP_EXCLUDED_FIELDS.get(model_name, set())
     fields = obj.model_fields if hasattr(obj, 'model_fields') else {}
     for col in fields:
+        if col in excluded:
+            continue
         val = getattr(obj, col, None)
+        # SystemPreference: 按 key 名称模式过滤敏感配置值（API Key / 密码 / Token）
+        if model_name == "SystemPreference" and col == "value":
+            key_val = (getattr(obj, "key", "") or "").lower()
+            if any(pat in key_val for pat in _SENSITIVE_PREF_PATTERNS):
+                result[col] = None
+                continue
         if isinstance(val, datetime):
             val = val.isoformat()
         result[col] = val
@@ -567,14 +590,15 @@ async def restore_data(
                 db.rollback()
                 logger.error("提交 %s 失败，已回滚: %s", name, e)
                 result["errors"][name] = str(e)
+                errors += imported  # 提交失败导致本批已暂存行全部丢失，计入错误
                 imported = 0
-                skipped = len(rows) - errors
+                # skipped 保持不变（已存在跳过的行不受回滚影响）
 
         result["would_import"][name] = would_import
         result["would_skip"][name] = would_skip
         result["imported"][name] = imported
         result["skipped"][name] = skipped
-        if errors > 0:
+        if errors > 0 and name not in result["errors"]:
             result["errors"][name] = errors
         result["total_would_import"] += would_import
         result["total_would_skip"] += would_skip

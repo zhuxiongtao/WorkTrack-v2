@@ -24,6 +24,7 @@ interface UserTableProps {
   onResetPassword: (user: UserData) => void
   onResendWelcome: (user: UserData) => void
   onManageRoles: (user: UserData) => void
+  onUnlock: (user: UserData) => void
   canEdit: boolean
   canDelete: boolean
   canManageRoles: boolean
@@ -34,7 +35,7 @@ interface UserTableProps {
 export function UserTable({
   users, loading, currentUserId, pagination,
   selectedIds, onSelectionChange,
-  onPageChange, onEdit, onToggleActive, onSetStatus, onDelete, onResetPassword, onResendWelcome, onManageRoles,
+  onPageChange, onEdit, onToggleActive, onSetStatus, onDelete, onResetPassword, onResendWelcome, onManageRoles, onUnlock,
   canEdit, canDelete, canManageRoles,
   getAvatarColor, formatTime,
 }: UserTableProps) {
@@ -108,6 +109,7 @@ export function UserTable({
                 onResetPassword={() => onResetPassword(u)}
                 onResendWelcome={() => onResendWelcome(u)}
                 onManageRoles={() => onManageRoles(u)}
+                onUnlock={() => onUnlock(u)}
                 canEdit={canEdit}
                 canDelete={canDelete}
                 canManageRoles={canManageRoles}

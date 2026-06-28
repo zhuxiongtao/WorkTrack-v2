@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import {
   LayoutGrid, Users, Briefcase, Calendar, FileText, ChevronRight, ChevronDown,
-  BarChart3, Search, User, X, type LucideIcon
+  BarChart3, Search, User, X, Menu, type LucideIcon
 } from 'lucide-react'
 import { IconBox } from '../components/design-system'
 import type { Tone } from '../theme/tokens'
@@ -61,6 +61,7 @@ export default function ConsolePage() {
   const [deptMembers, setDeptMembers] = useState<DeptMembersData | null>(null)
   const [loading, setLoading] = useState(true)
   const [searchText, setSearchText] = useState('')
+  const [showSidebar, setShowSidebar] = useState(false)
 
   // 加载部门树
   const loadDeptTree = useCallback(async () => {
@@ -254,12 +255,29 @@ export default function ConsolePage() {
 
   return (
     <div className="h-full flex flex-col md:flex-row bg-bg-page">
-      {/* 左侧面板：部门树 */}
-      <div className="w-64 max-md:hidden shrink-0 bg-bg-card border-r border-border flex flex-col">
+      {/* 移动端遮罩 */}
+      {showSidebar && (
+        <div
+          className="fixed inset-0 z-30 bg-black/40 md:hidden"
+          onClick={() => setShowSidebar(false)}
+        />
+      )}
+      {/* 左侧面板：部门树（桌面常驻 / 移动端抽屉） */}
+      <div className={`w-64 shrink-0 bg-bg-card border-r border-border flex flex-col transition-transform duration-200 ease-in-out
+        max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:shadow-xl
+        ${showSidebar ? 'max-md:translate-x-0' : 'max-md:-translate-x-full'}`}>
         <div className="p-4 border-b border-border">
-          <div className="flex items-center gap-2.5">
-            <IconBox icon={LayoutGrid} size="md" tone="red" variant="solid" />
-            <h2 className="text-sm font-medium text-gray-900 dark:text-white">管理总览</h2>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <IconBox icon={LayoutGrid} size="md" tone="red" variant="solid" />
+              <h2 className="text-sm font-medium text-gray-900 dark:text-white">管理总览</h2>
+            </div>
+            <button
+              onClick={() => setShowSidebar(false)}
+              className="md:hidden p-1.5 rounded-lg text-gray-500 hover:bg-bg-hover"
+            >
+              <X size={16} />
+            </button>
           </div>
         </div>
         
@@ -311,6 +329,21 @@ export default function ConsolePage() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* 顶部统计卡片 */}
         <div className="p-6 max-md:p-4 border-b border-border">
+          {/* 移动端部门筛选入口 */}
+          <div className="flex items-center gap-2 mb-4 md:hidden">
+            <button
+              onClick={() => setShowSidebar(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-hover border border-border text-xs text-gray-700 dark:text-gray-200"
+            >
+              <Menu size={13} />
+              部门筛选
+            </button>
+            {selectedDeptId && deptMembers && (
+              <span className="text-xs text-accent-blue">
+                {deptMembers.department.name} · {deptMembers.member_count}人
+              </span>
+            )}
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-md:gap-3">
             <StatCard icon={FileText}  label="本周日报" value={overview?.stats.reports_this_week || 0} tone="green" />
             <StatCard icon={Briefcase} label="活跃项目" value={overview?.stats.active_projects || 0} tone="blue" />

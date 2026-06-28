@@ -111,8 +111,31 @@ def resolve_approvers(approver_type: str, approver_value: str, submitter: User, 
 
 # ──────────────────────────── 模板匹配 ────────────────────────────
 
+# 金额字段 → 对应 unit 字段映射（存储单位可能是"万元"或"元"，触发条件阈值统一以"元"表达）
+_AMOUNT_UNIT_FIELDS: dict[str, str] = {
+    "contract_amount": "amount_unit",
+    "opportunity_amount": "opportunity_amount_unit",
+    "deal_amount": "deal_amount_unit",
+    "amount": "amount_unit",
+}
+
+
+def _normalize_amount_to_yuan(value, unit_field: str, target_obj) -> float:
+    """将金额字段按其 unit 归一化为元，便于与阈值（元）比较。"""
+    unit = getattr(target_obj, unit_field, None) or "元"
+    try:
+        v = float(value)
+        return v * 10000 if unit == "万元" else v
+    except (TypeError, ValueError):
+        return float("nan")
+
+
 def _eval_condition(cond_json: Optional[str], target_obj) -> bool:
-    """评估触发条件。空条件=无条件触发。"""
+    """评估触发条件。空条件=无条件触发。
+
+    金额字段自动按 amount_unit 归一化为元后与阈值比较，
+    避免"50 万元"录入 amount=50 被误判为"不足阈值"。
+    """
     if not cond_json:
         return True
     try:
@@ -127,6 +150,16 @@ def _eval_condition(cond_json: Optional[str], target_obj) -> bool:
     actual = getattr(target_obj, field, None) if field else None
     if actual is None:
         return False
+
+    # 金额字段：归一化为元再比较
+    unit_field = _AMOUNT_UNIT_FIELDS.get(field)
+    if unit_field:
+        actual = _normalize_amount_to_yuan(actual, unit_field, target_obj)
+        try:
+            val = float(val)
+        except (TypeError, ValueError):
+            return False
+
     try:
         if op == ">=":
             return actual >= val

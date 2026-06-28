@@ -1117,34 +1117,33 @@ function OAFormModal({ type, onClose }: { type: OAType; onClose: () => void }) {
                       <tr key={idx} className="border-t border-border/50 align-top">
                         <td className="px-1 py-1.5 text-center text-gray-400 tabular-nums">{idx + 1}</td>
                         <td className="px-1 py-1">
-                          <select
-                            value={item.expense_type}
-                            onChange={e => {
+                          <SearchableSelect
+                            size="sm"
+                            options={EXPENSE_TYPES.map(t => ({ value: t, label: t }))}
+                            value={item.expense_type || null}
+                            onChange={(v) => {
                               const next = [...form.items]
-                              // 类别变更时同步把「name」也设为类别名（避免空白，兼容后端 schema）
-                              next[idx] = { ...item, expense_type: e.target.value, name: e.target.value }
+                              const val = (v as string) ?? ''
+                              next[idx] = { ...item, expense_type: val, name: val }
                               update('items', next)
                             }}
-                            className="w-full px-1.5 py-1 rounded bg-transparent border border-border/60 text-xs outline-none focus:border-accent-blue"
-                          >
-                            {EXPENSE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                          </select>
+                            placeholder="类别..."
+                            emptyText="无匹配"
+                          />
                         </td>
                         <td className="px-1 py-1">
-                          <select
-                            value={item.department_id ?? ''}
-                            onChange={e => {
+                          <SearchableSelect
+                            size="sm"
+                            options={departments.map(d => ({ value: d.id, label: d.name }))}
+                            value={item.department_id ?? null}
+                            onChange={(v) => {
                               const next = [...form.items]
-                              next[idx] = { ...item, department_id: e.target.value ? parseInt(e.target.value) : null }
+                              next[idx] = { ...item, department_id: v as number | null }
                               update('items', next)
                             }}
-                            className="w-full px-1.5 py-1 rounded bg-transparent border border-border/60 text-xs outline-none focus:border-accent-blue"
-                          >
-                            <option value="">未指定</option>
-                            {departments.map(d => (
-                              <option key={d.id} value={d.id}>{d.name}</option>
-                            ))}
-                          </select>
+                            placeholder="部门..."
+                            emptyText="无匹配"
+                          />
                         </td>
                         <td className="px-1 py-1">
                           <input
@@ -1498,9 +1497,13 @@ function OAFormModal({ type, onClose }: { type: OAType; onClose: () => void }) {
                 <input type="number" step="0.01" value={form.budget} onChange={e => update('budget', e.target.value)} className={inputCls} />
               </Field>
               <Field label="预算单位">
-                <select value={form.budget_unit} onChange={e => update('budget_unit', e.target.value)} className={inputCls}>
-                  {AMOUNT_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                </select>
+                <SearchableSelect
+                  options={AMOUNT_UNITS.map(u => ({ value: u, label: u }))}
+                  value={form.budget_unit || null}
+                  onChange={(v) => update('budget_unit', (v as string) ?? AMOUNT_UNITS[0])}
+                  placeholder="选择单位..."
+                  emptyText="无匹配"
+                />
               </Field>
             </div>
             <Field label="出差事由">
@@ -1538,14 +1541,22 @@ function OAFormModal({ type, onClose }: { type: OAType; onClose: () => void }) {
                 <input type="number" step="0.01" value={form.total_amount} onChange={e => update('total_amount', e.target.value)} className={inputCls} />
               </Field>
               <Field label="单位">
-                <select value={form.amount_unit} onChange={e => update('amount_unit', e.target.value)} className={inputCls}>
-                  {AMOUNT_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                </select>
+                <SearchableSelect
+                  options={AMOUNT_UNITS.map(u => ({ value: u, label: u }))}
+                  value={form.amount_unit || null}
+                  onChange={(v) => update('amount_unit', (v as string) ?? AMOUNT_UNITS[0])}
+                  placeholder="选择单位..."
+                  emptyText="无匹配"
+                />
               </Field>
               <Field label="币种">
-                <select value={form.currency} onChange={e => update('currency', e.target.value)} className={inputCls}>
-                  {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <SearchableSelect
+                  options={CURRENCIES.map(c => ({ value: c, label: c }))}
+                  value={form.currency || null}
+                  onChange={(v) => update('currency', (v as string) ?? '')}
+                  placeholder="选择币种..."
+                  emptyText="无匹配"
+                />
               </Field>
             </div>
             <Field label="期望到货日期">

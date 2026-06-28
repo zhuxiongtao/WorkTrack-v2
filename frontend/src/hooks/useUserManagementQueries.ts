@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import type { UserListParams, UserCreatePayload, UserUpdatePayload, RoleCreatePayload, RoleUpdatePayload, DepartmentCreatePayload, DepartmentUpdatePayload, UserData, PaginatedResponse } from '../services/types'
-import { fetchUsers, fetchSimpleUsers, createUser, updateUser, toggleUserActive, setUserStatus, resetUserPassword, deleteUser, batchUserAction, fetchUserDirectRoles, setUserDirectRoles } from '../services/userService'
+import { fetchUsers, fetchSimpleUsers, createUser, updateUser, toggleUserActive, setUserStatus, resetUserPassword, deleteUser, batchUserAction, fetchUserDirectRoles, setUserDirectRoles, unlockUser } from '../services/userService'
 import { fetchRoles, fetchPermissions, createRole, updateRole, deleteRole } from '../services/roleService'
 import { fetchDepartmentTree, createDepartment, updateDepartment, deleteDepartment, moveDepartment, fetchDepartmentsFlat, fetchDepartmentRoles, setDepartmentRoles } from '../services/departmentService'
 
@@ -191,6 +191,20 @@ export function useBatchUserActionMutation() {
         reset_password: '已批量重置密码',
       }
       toast(`${labels[data.action] || '已完成'} ${data.affected} 个用户`, 'success')
+    },
+    onError: (err: Error) => toast(err.message, 'error'),
+  })
+}
+
+export function useUnlockUserMutation() {
+  const { fetchWithAuth } = useAuth()
+  const queryClient = useQueryClient()
+  const { toast } = useToast()
+  return useMutation({
+    mutationFn: (id: number) => unlockUser(fetchWithAuth, id),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      toast(data.message, 'success')
     },
     onError: (err: Error) => toast(err.message, 'error'),
   })

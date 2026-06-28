@@ -64,7 +64,7 @@ export default function DataExportPage() {
   const showSuccess = (msg: string) => { setSuccess(msg); setError('') }
 
   return (
-    <div className="max-w-5xl mx-auto p-6 space-y-4">
+    <div className="space-y-4">
       {/* 页头 */}
       <div className="flex items-center gap-3">
         <div className="p-2.5 rounded-xl bg-accent-blue/10 border border-accent-blue/20">
@@ -223,7 +223,7 @@ function ExcelExportTab({ fetchWithAuth, canExport, onError, onSuccess }: any) {
           <Clock size={15} className="text-gray-500 dark:text-gray-400" />
           <span className="text-sm font-medium text-gray-700 dark:text-gray-200">时间范围筛选（可选）</span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <input
             type="date"
             value={dateFrom}
@@ -319,7 +319,7 @@ function ExcelExportTab({ fetchWithAuth, canExport, onError, onSuccess }: any) {
       )}
 
       {/* 底部操作栏 */}
-      <div className="sticky bottom-0 bg-bg-card border border-border rounded-lg p-3 flex items-center justify-between gap-4">
+      <div className="sticky bottom-0 bg-bg-card border border-border rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
         <div className="text-sm text-gray-500 dark:text-gray-400">
           已选 <span className="font-semibold text-accent-blue">{selected.size}</span> 个模块，
           约 <span className="font-semibold text-gray-700 dark:text-gray-200">{totalRecords.toLocaleString()}</span> 条记录
@@ -327,7 +327,7 @@ function ExcelExportTab({ fetchWithAuth, canExport, onError, onSuccess }: any) {
         <button
           onClick={handleExport}
           disabled={selected.size === 0 || exporting}
-          className="flex items-center gap-2 px-5 py-2 rounded-lg bg-accent-blue text-white text-sm font-medium hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          className="flex items-center justify-center gap-2 px-5 py-2 rounded-lg bg-accent-blue text-white text-sm font-medium hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all w-full sm:w-auto"
         >
           {exporting ? (
             <><Loader2 className="w-4 h-4 animate-spin" /> 导出中...</>
@@ -518,7 +518,7 @@ function BackupTab({ fetchWithAuth, canExport, onError, onSuccess }: any) {
           </div>
         )}
         {summary && (
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-1.5 max-h-40 overflow-y-auto">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-1.5 max-h-40 overflow-y-auto">
             {Object.entries(summary)
               .filter(([, count]) => count > 0)
               .sort(([, a], [, b]) => b - a)
@@ -558,7 +558,7 @@ function BackupTab({ fetchWithAuth, canExport, onError, onSuccess }: any) {
                   <div className="text-xs font-medium text-gray-700 dark:text-gray-200 truncate">
                     {r.filename}
                   </div>
-                  <div className="text-[10px] text-gray-400 flex items-center gap-2">
+                  <div className="text-[10px] text-gray-400 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                     <span>{r.size_label}</span>
                     {r.record_count > 0 && <span>· {r.record_count.toLocaleString()} 条</span>}
                     <span>· {r.operator_name}</span>

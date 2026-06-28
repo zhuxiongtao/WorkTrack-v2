@@ -83,7 +83,7 @@ export default function LogViewerPage() {
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-white">任务日志</h2>
+          <h2 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white">任务日志</h2>
           <p className="text-sm text-gray-500 mt-1">系统运行、任务执行及错误信息 · 共 {total} 条</p>
         </div>
         <div className="flex items-center gap-2">
@@ -154,7 +154,7 @@ export default function LogViewerPage() {
                     {CATEGORY_LABELS[log.category] || log.category}
                   </span>
                   <span className="flex-1 min-w-0 text-xs text-gray-300 truncate">{log.message}</span>
-                  <span className="text-[11px] text-gray-600 flex-shrink-0">{formatTime(log.created_at)}</span>
+                  <span className="text-[11px] text-gray-600 flex-shrink-0 hidden sm:inline">{formatTime(log.created_at)}</span>
                   {log.details && (
                     isExpanded
                       ? <ChevronDown size={12} className="text-gray-500 flex-shrink-0" />

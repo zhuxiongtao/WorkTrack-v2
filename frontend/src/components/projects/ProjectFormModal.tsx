@@ -673,21 +673,18 @@ function FormField({ label, required, colSpan, hint, icon: Icon, children }: { l
 }
 
 function CurrencySelector({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const options = CURRENCY_OPTIONS.map(c => ({
+    value: c.code,
+    label: `${c.symbol} ${c.code} · ${c.name}`,
+  }))
   return (
-    <div className="relative">
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full px-3 py-2 pr-8 rounded-lg bg-white dark:bg-bg-input border border-gray-200 dark:border-border/60 text-sm font-semibold outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all cursor-pointer appearance-none"
-      >
-        {CURRENCY_OPTIONS.map(c => (
-          <option key={c.code} value={c.code}>
-            {c.symbol} {c.code} · {c.name}
-          </option>
-        ))}
-      </select>
-      <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-    </div>
+    <SearchableSelect
+      options={options}
+      value={value || null}
+      onChange={(v) => onChange((v as string) ?? 'CNY')}
+      placeholder="选择币种..."
+      emptyText="无匹配币种"
+    />
   )
 }
 

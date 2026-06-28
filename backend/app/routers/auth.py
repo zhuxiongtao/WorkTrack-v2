@@ -9,8 +9,8 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from app.auth import (
-    hash_password, verify_password, create_access_token, get_current_user,
-    require_permission, validate_password_strength,
+    hash_password, verify_password, create_access_token, get_current_user, get_optional_user,
+    require_permission, has_permission, validate_password_strength,
     check_account_locked, record_login_failure, record_login_success,
     bump_token_version,
 )
@@ -78,8 +78,11 @@ class TokenResponse(BaseModel):
 # ===== 注册 =====
 @router.post("/register")
 def register(req: RegisterRequest, db: Session = Depends(get_session),
-             _admin: User = Depends(require_permission("user:create"))):
-    """注册新用户（仅管理员可操作，或根据 allow_registration 配置开放）"""
+             current_user: Optional[User] = Depends(get_optional_user)):
+    """注册新用户。allow_registration=True 时开放自助注册；否则仅管理员（user:create）可操作。"""
+    if not settings.allow_registration:
+        if not current_user or not has_permission(current_user, "user:create", db):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="注册功能未开放")
     pwd_err = validate_password_strength(req.password)
     if pwd_err:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=pwd_err)
@@ -287,14 +290,16 @@ class ResetPasswordRequest(BaseModel):
 
 
 @router.post("/forgot-password")
-def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_session)):
+@limiter.limit("3/minute")
+def forgot_password(req: ForgotPasswordRequest, request: Request, db: Session = Depends(get_session)):
     """发起密码重置：根据邮箱查用户，生成 token 发邮件。
     为防止邮箱枚举攻击，无论用户是否存在均返回相同响应。"""
     from app.services import email_service
+    # 先检查邮件服务，避免因用户存在与否返回不同状态码（枚举漏洞）
+    if not email_service.is_email_configured():
+        raise HTTPException(503, "系统邮件服务未配置，请联系管理员")
     user = db.exec(select(User).where(User.email == req.email, User.is_active == True)).first()
     if user:
-        if not email_service.is_email_configured():
-            raise HTTPException(503, "系统邮件服务未配置，请联系管理员")
         token = email_service.create_password_reset_token(user.id)
         frontend_base = email_service._get_frontend_url() or (settings.cors_origins.split(",")[0] or "").strip()
         email_service.send_password_reset_email(req.email, token, frontend_base)
@@ -302,7 +307,8 @@ def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_sessio
 
 
 @router.post("/reset-password")
-def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_session)):
+@limiter.limit("10/minute")
+def reset_password(req: ResetPasswordRequest, request: Request, db: Session = Depends(get_session)):
     """使用 token 重置密码（一次性有效，1 小时过期）"""
     from app.services import email_service
     user_id = email_service.consume_password_reset_token(req.token)

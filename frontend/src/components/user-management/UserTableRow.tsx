@@ -1,4 +1,4 @@
-import { Crown, Lock, UserX, UserCheck, Shield, Mail } from 'lucide-react'
+import { Crown, Lock, LockOpen, UserX, UserCheck, Shield, Mail } from 'lucide-react'
 import type { UserData } from '../../services/types'
 
 interface UserTableRowProps {
@@ -13,6 +13,7 @@ interface UserTableRowProps {
   onResetPassword: () => void
   onResendWelcome: () => void
   onManageRoles: () => void
+  onUnlock: () => void
   canEdit: boolean
   canDelete: boolean
   canManageRoles: boolean
@@ -21,7 +22,7 @@ interface UserTableRowProps {
 }
 
 export function UserTableRow({
-  user: u, isSelf, selected, onSelectChange, onEdit, onToggleActive, onSetStatus, onDelete, onResetPassword, onResendWelcome, onManageRoles,
+  user: u, isSelf, selected, onSelectChange, onEdit, onToggleActive, onSetStatus, onDelete, onResetPassword, onResendWelcome, onManageRoles, onUnlock,
   canEdit, canDelete, canManageRoles,
   getAvatarColor, formatTime,
 }: UserTableRowProps) {
@@ -140,8 +141,8 @@ export function UserTableRow({
             </button>
           )}
           {isLocked && (
-            <span className="inline-flex items-center gap-0.5 text-[11px] px-1.5 py-0.2 rounded bg-red-50 dark:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30 font-mono font-bold whitespace-nowrap" title={`因错误密码尝试锁定至 ${formatTime(u.locked_until)}`}>
-              <Lock size={9} /> 锁定制
+            <span className="inline-flex items-center gap-0.5 text-[11px] px-1.5 py-0.5 rounded bg-red-50 dark:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30 font-bold whitespace-nowrap" title={`因密码错误被锁定至 ${formatTime(u.locked_until)}`}>
+              <Lock size={9} /> 已锁定
             </span>
           )}
         </div>
@@ -153,6 +154,15 @@ export function UserTableRow({
       {/* 操作 */}
       <td className="px-5 py-4 text-right">
         <div className="flex items-center justify-end gap-1">
+          {canEdit && isLocked && (
+            <button
+              onClick={onUnlock}
+              className="p-1.5 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-500/10 text-red-400 hover:text-amber-500 transition-colors cursor-pointer"
+              title="解除账号锁定"
+            >
+              <LockOpen size={14} />
+            </button>
+          )}
           {canManageRoles && (
             <button onClick={onManageRoles} className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-accent-blue/10 text-gray-400 hover:text-accent-blue transition-colors cursor-pointer" title="管理角色">
               <Shield size={14} />

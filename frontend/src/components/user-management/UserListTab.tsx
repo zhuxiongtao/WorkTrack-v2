@@ -12,6 +12,7 @@ import {
   useToggleUserActiveMutation,
   useSetUserStatusMutation,
   useBatchUserActionMutation,
+  useUnlockUserMutation,
 } from '../../hooks/useUserManagementQueries'
 import { UserStatsBar } from './UserStatsBar'
 import { UserFilterBar } from './UserFilterBar'
@@ -88,6 +89,7 @@ export function UserListTab({ departmentId }: UserListTabProps) {
   const toggleActiveMutation = useToggleUserActiveMutation()
   const setStatusMutation = useSetUserStatusMutation()
   const batchActionMutation = useBatchUserActionMutation()
+  const unlockMutation = useUnlockUserMutation()
 
   // 提取用户数据和分页信息
   const users = useMemo(() => {
@@ -148,6 +150,11 @@ export function UserListTab({ departmentId }: UserListTabProps) {
       showToast(e.message || '发送失败', 'error')
     }
   }, [fetchWithAuth, showConfirm, showToast])
+
+  const handleUnlock = useCallback(async (u: UserData) => {
+    if (!await showConfirm(`确定要解除「${u.name || u.username}」的账号锁定吗？\n解锁后用户可立即重新尝试登录。`)) return
+    unlockMutation.mutate(u.id)
+  }, [showConfirm, unlockMutation])
 
   const handleSetStatus = useCallback(async (u: UserData, status: string) => {
     if (u.id === currentUser?.id) { showToast('不能修改自己的账号状态', 'warning'); return }
@@ -241,6 +248,7 @@ export function UserListTab({ departmentId }: UserListTabProps) {
         onResetPassword={(u) => setResetPwdUser(u)}
         onResendWelcome={handleResendWelcome}
         onManageRoles={openRoles}
+        onUnlock={handleUnlock}
         canEdit={canEdit}
         canDelete={canDelete}
         canManageRoles={canManageRoles}
