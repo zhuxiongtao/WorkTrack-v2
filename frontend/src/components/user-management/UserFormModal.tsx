@@ -101,6 +101,15 @@ export function UserFormModal({ isOpen, editingUser, onClose }: UserFormModalPro
   const { data: departments = [] } = useDepartmentsFlatQuery()
   const saving = createMutation.isPending || updateMutation.isPending
 
+  const [jobTitles, setJobTitles] = useState<{ id: number; name: string }[]>([])
+  useEffect(() => {
+    if (!isOpen) return
+    fetch('/api/v1/job-titles', { headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` } })
+      .then(r => r.ok ? r.json() : [])
+      .then(d => setJobTitles(Array.isArray(d) ? d : []))
+      .catch(() => {})
+  }, [isOpen])
+
   // 选择部门后自动推断汇报上级
   useEffect(() => {
     if (!form.department_id || departments.length === 0) return
@@ -415,11 +424,18 @@ export function UserFormModal({ isOpen, editingUser, onClose }: UserFormModalPro
               </div>
 
               <FormField label="职位名称" icon={Briefcase} hint="可选，便于在组织架构中识别">
-                <input
-                  value={form.job_title ?? ''}
-                  onChange={e => updateFormField('job_title', e.target.value || null)}
-                  className="form-input"
-                  placeholder="e.g. 前端开发工程师"
+                <SearchableSelect
+                  options={[
+                    { value: '', label: '不指定' },
+                    ...jobTitles.map(jt => ({ value: jt.name, label: jt.name })),
+                    ...(form.job_title && !jobTitles.find(jt => jt.name === form.job_title)
+                      ? [{ value: form.job_title, label: form.job_title }]
+                      : []),
+                  ]}
+                  value={form.job_title || ''}
+                  onChange={(v) => updateFormField('job_title', (v as string) || null)}
+                  placeholder="选择职位..."
+                  emptyText="暂无职位，请先在「职位管理」中添加"
                 />
               </FormField>
 

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
   UserPlus, Loader2, Plus, Send, Trash2, Pencil, RotateCcw, X, Clock,
-  Mail, Phone, Briefcase, Building2, Calendar, User, DollarSign, Shield, Cpu,
+  Mail, Phone, Briefcase, Building2, Calendar, User, DollarSign,
 } from 'lucide-react'
 import { PageHeader, EmptyState, Modal, Field } from '../components/design-system'
 import { useAuth } from '../contexts/AuthContext'
@@ -41,6 +41,7 @@ interface HireItem {
 
 interface DepartmentOption { id: number; name: string }
 interface UserOption { id: number; username: string; name: string | null }
+interface JobTitleOption { id: number; name: string }
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
   草稿:   { label: '草稿',   cls: 'bg-gray-100 text-gray-500 border-gray-200 dark:bg-gray-500/10 dark:text-gray-400 dark:border-gray-500/20' },
@@ -61,8 +62,6 @@ const emptyForm = {
   leader_id: null as number | null,
   first_work_date: '',
   hire_date: '',
-  is_admin: false,
-  use_shared_models: false,
   salary: '',
   reason: '',
   attachments: null as string | null,
@@ -104,6 +103,7 @@ export default function HiresPage() {
 
   const [departments, setDepartments] = useState<DepartmentOption[]>([])
   const [users, setUsers] = useState<UserOption[]>([])
+  const [jobTitles, setJobTitles] = useState<JobTitleOption[]>([])
 
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -140,9 +140,19 @@ export default function HiresPage() {
     } catch { /* ignore */ }
   }, [])
 
+  const loadJobTitles = useCallback(async () => {
+    try {
+      const res = await fetch('/api/v1/job-titles', {
+        headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` },
+      })
+      if (res.ok) setJobTitles(await res.json())
+    } catch { /* ignore */ }
+  }, [])
+
   useEffect(() => { load() }, [load])
   useEffect(() => { loadDepartments() }, [loadDepartments])
   useEffect(() => { loadUsers() }, [loadUsers])
+  useEffect(() => { loadJobTitles() }, [loadJobTitles])
 
   const openCreate = () => {
     setEditingId(null); setForm({ ...emptyForm }); setShowForm(true)
@@ -159,8 +169,6 @@ export default function HiresPage() {
       leader_id: p.leader_id,
       first_work_date: p.first_work_date ? p.first_work_date.slice(0, 10) : '',
       hire_date: p.hire_date ? p.hire_date.slice(0, 10) : '',
-      is_admin: p.is_admin,
-      use_shared_models: p.use_shared_models,
       salary: p.salary || '',
       reason: p.reason,
       attachments: p.attachments,
@@ -172,6 +180,9 @@ export default function HiresPage() {
     if (!form.candidate_name.trim()) { showToast('请填写候选人姓名', 'warning'); return }
     if (!form.candidate_username.trim()) { showToast('请填写登录名', 'warning'); return }
     if (!form.candidate_email.trim()) { showToast('请填写邮箱', 'warning'); return }
+    if (!form.candidate_phone.trim()) { showToast('请填写联系电话', 'warning'); return }
+    if (!form.department_id) { showToast('请选择入职部门', 'warning'); return }
+    if (!form.first_work_date) { showToast('请填写参加工作时间', 'warning'); return }
     if (!form.hire_date) { showToast('请选择入职日期', 'warning'); return }
     if (!form.reason.trim()) { showToast('请填写入职事由', 'warning'); return }
     setSaving(true)
@@ -180,14 +191,14 @@ export default function HiresPage() {
         candidate_name: form.candidate_name.trim(),
         candidate_username: form.candidate_username.trim(),
         candidate_email: form.candidate_email.trim(),
-        candidate_phone: form.candidate_phone.trim() || null,
+        candidate_phone: form.candidate_phone.trim(),
         job_title: form.job_title.trim() || null,
         department_id: form.department_id,
         leader_id: form.leader_id,
-        first_work_date: form.first_work_date || null,
+        first_work_date: form.first_work_date,
         hire_date: form.hire_date,
-        is_admin: form.is_admin,
-        use_shared_models: form.use_shared_models,
+        is_admin: false,
+        use_shared_models: true,
         salary: form.salary.trim() || null,
         reason: form.reason.trim(),
         attachments: form.attachments,
@@ -373,8 +384,6 @@ export default function HiresPage() {
               <Info icon={Calendar} label="入职日期" value={fmtDate(detail.hire_date)} />
               <Info icon={Calendar} label="参加工作日期" value={detail.first_work_date ? `${fmtDate(detail.first_work_date)}（用于年假工龄）` : '—'} />
               <Info icon={DollarSign} label="薪资" value={detail.salary || '—'} />
-              <Info icon={Shield} label="管理员" value={detail.is_admin ? '是' : '否'} />
-              <Info icon={Cpu} label="共享模型" value={detail.use_shared_models ? '是' : '否'} />
               <Info icon={User} label="发起人" value={detail.created_user_name || detail.user_name || '—'} />
               {detail.onboarded_at && <Info icon={Calendar} label="入职完成" value={fmtDateTime(detail.onboarded_at)} />}
               <Info icon={Clock} label="创建时间" value={fmtDateTime(detail.created_at)} />
@@ -459,16 +468,25 @@ export default function HiresPage() {
               <Field label="邮箱" required>
                 <input type="email" value={form.candidate_email} onChange={e => setForm({ ...form, candidate_email: e.target.value })} maxLength={100} placeholder="如「zhangsan@example.com」" className={inputCls} />
               </Field>
-              <Field label="电话" hint="可选">
+              <Field label="电话" required>
                 <input value={form.candidate_phone} onChange={e => setForm({ ...form, candidate_phone: e.target.value })} maxLength={20} placeholder="如「13800000000」" className={inputCls} />
               </Field>
               <Field label="职位" hint="可选">
-                <input value={form.job_title} onChange={e => setForm({ ...form, job_title: e.target.value })} maxLength={100} placeholder="如「前端工程师」" className={inputCls} />
+                <SearchableSelect
+                  options={[
+                    { value: '', label: '不指定' },
+                    ...jobTitles.map(jt => ({ value: jt.name, label: jt.name })),
+                  ]}
+                  value={form.job_title || ''}
+                  onChange={(v) => setForm({ ...form, job_title: (v as string) || '' })}
+                  placeholder="选择职位..."
+                  emptyText="暂无职位，请先在用户管理中配置"
+                />
               </Field>
               <Field label="薪资" hint="可选">
                 <input value={form.salary} onChange={e => setForm({ ...form, salary: e.target.value })} maxLength={50} placeholder="如「15K/月」" className={inputCls} />
               </Field>
-              <Field label="入职部门">
+              <Field label="入职部门" required>
                 <SearchableSelect
                   options={departments.map(d => ({ value: d.id, label: d.name }))}
                   value={form.department_id}
@@ -489,17 +507,8 @@ export default function HiresPage() {
               <Field label="入职日期" required hint="本公司入职日期">
                 <input type="date" value={form.hire_date} onChange={e => setForm({ ...form, hire_date: e.target.value })} className={inputCls} />
               </Field>
-              <Field label="参加工作日期" hint="首次参加工作，用于法定年假工龄计算">
+              <Field label="参加工作时间" required hint="首次参加工作，用于法定年假工龄计算">
                 <input type="date" value={form.first_work_date} onChange={e => setForm({ ...form, first_work_date: e.target.value })} className={inputCls} />
-              </Field>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="管理员权限">
-                <Toggle checked={form.is_admin} onChange={(v) => setForm({ ...form, is_admin: v })} />
-              </Field>
-              <Field label="使用共享模型">
-                <Toggle checked={form.use_shared_models} onChange={(v) => setForm({ ...form, use_shared_models: v })} />
               </Field>
             </div>
 
@@ -551,18 +560,3 @@ function Info({ icon: Icon, label, value }: { icon: LucideIcon; label: string; v
   )
 }
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-        checked ? 'bg-accent-blue' : 'bg-gray-300 dark:bg-gray-600'
-      }`}
-    >
-      <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-        checked ? 'translate-x-4' : 'translate-x-0.5'
-      }`} />
-    </button>
-  )
-}

@@ -312,7 +312,8 @@ now_dt = now()
 | `v2.8.0` | 数据管理模块重构：新增 BackupRecord 模型 + 迁移（b1a2c3k4u5p6）记录备份历史；新增 excel_export_service 服务（23 业务模块 / 271 字段 / 8 子表 / 4 业务域中文字段映射 + 导出引擎）；重构 data_export 路由 10 个 API（Excel 模块导出 / JSON 全量备份 / SQL dump / 历史下载 / dry-run 恢复）；重写 DataExportPage 三 Tab 布局（模块导出 / 全量备份 / 数据恢复）；备份文件持久化到 /app/data/backups/（worktrack_data volume）；导入策略仅 skip/insert_only + dry-run 预检查，避免数据覆盖；权限收敛仅 data:export/data:import（管理员可见，boss 无权限）；修复 BackupRecord 未显式声明 __tablename__ 导致 ORM 表名不匹配 |
 | `v2.8.1` | OA 请假额度管控增强：所有法定假期（年假/调休/婚假/产假/陪产假/丧假）统一额度校验，超额直接阻断提交并告知原因；额度计算扣除"审批中"占用量，防止多个申请叠加超额；前端表单实时显示剩余/审批中/可用天数提示（双主题样式）；年假懒初始化（/my 接口按法定工龄自动发放）；HiresPage 字段标签修正（参加工作日期 vs 到岗日期）；固定 JWT_SECRET_KEY 到 .env 避免 reload 后 token 失效；全站 13 处 scope/tab 切换按钮白底白字修复（统一 bg-accent-blue/15 text-accent-blue）；DashboardPage 全面样式合规（去渐变/多色 tone，统一双主题中性色） |
 | `v2.8.2` | 安全加固 17 项（请假余额 SELECT FOR UPDATE 防并发、比例退款、忘记密码限流+邮件配置前置、注册权限动态判断、Wiki 密码限流、数据导入错误计数修复）；管理员解锁被锁定账号（POST /users/{id}/unlock + 用户管理页解锁按钮）；后台页面全面响应式（运维监控/数据管理/日志/定时任务/控制台移动端抽屉侧边栏）；OACenterPage 全部原生 select 替换为 SearchableSelect；ProjectFormModal 样式合规 |
-| `v2.8.3` (latest) | 协作分享功能修复：ShareDialog/MeetingsPage 所有裸 fetch() 改为 fetchWithAuth（之前因缺 Auth header 导致分享请求 401 静默失败）；新增 /api/v1/shares/sent 后端接口；DataShareOut 增加 shared_by_name 字段；SharedWithMePage 重构为双向切换（我发出的/收到的），支持撤销发出的分享、展示结构化内容摘要；MeetingsPage 分享成功后同步写入 data_share 使"我发出的"可见 |
+| `v2.8.3` | 协作分享功能修复：ShareDialog/MeetingsPage 所有裸 fetch() 改为 fetchWithAuth（之前因缺 Auth header 导致分享请求 401 静默失败）；新增 /api/v1/shares/sent 后端接口；DataShareOut 增加 shared_by_name 字段；SharedWithMePage 重构为双向切换（我发出的/收到的），支持撤销发出的分享、展示结构化内容摘要；MeetingsPage 分享成功后同步写入 data_share 使"我发出的"可见 |
+| `v2.9.0` (latest) | 职位管理模块上线：新增 job_title 表 + Alembic 迁移 + CRUD 路由；用户管理新增「职位管理」Tab；UserFormModal 与 HiresPage 职位字段改为 SearchableSelect 下拉；审批流管理加分类导航（5 大类、13 业务类型）；HiresPage 清理（去掉 is_admin/use_shared_models 开关、电话/部门/参加工作时间改必填）；修复 localStorage auth_token key 错误导致职位列表无法加载；GET /api/v1/job-titles 权限从 user:read 改为登录即可访问 |
 
 ### 版本号规范
 

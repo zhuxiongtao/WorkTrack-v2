@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   GitBranch, Plus, Edit3, Trash2, Loader2, Power, PowerOff,
-  ChevronUp, ChevronDown, X, User, Shield, Users, Building2,
+  ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
+  X, User, Shield, Users, Building2,
   FileText, Wallet, Stamp, Calculator, Briefcase, Layers,
-  CheckCircle2, AlertCircle,
+  CheckCircle2, AlertCircle, CalendarDays, Clock, Plane,
+  ShoppingCart, Receipt, TrendingUp, UserPlus,
 } from 'lucide-react'
 import { Modal, ModalFooter } from '../components/design-system'
 import SearchableSelect from '../components/SearchableSelect'
@@ -33,20 +35,70 @@ interface ApprovalFlow {
 interface Role { id: number; code: string; name: string }
 interface UserBrief { id: number; name: string; username: string; department_name?: string | null }
 
-/* ──── 业务类型映射 ──── */
+/* ──── 业务类型映射（全量 13 种） ──── */
 const BUSINESS_TYPES = [
-  { value: 'contract',          label: '合同审批',       icon: FileText,    color: '#4B5563' },
-  { value: 'payment',           label: '付款申请审批',   icon: Wallet,      color: '#4B5563' },
-  { value: 'seal',              label: '盖章申请审批',   icon: Stamp,       color: '#4B5563' },
-  { value: 'reconcile_summary', label: '财务月结复核',   icon: Calculator,  color: '#4B5563' },
-  { value: 'supplier',          label: '供应商入驻审批', icon: Layers,      color: '#4B5563' },
-  { value: 'channel',           label: '通道价格变更审批', icon: Briefcase, color: '#4B5563' },
-  { value: 'project',           label: '项目立项审批',   icon: Briefcase,   color: '#4B5563' },
+  // 财务合同
+  { value: 'contract',          label: '合同审批',      icon: FileText    },
+  { value: 'payment',           label: '付款申请',      icon: Wallet      },
+  { value: 'reconcile_summary', label: '财务月结复核',  icon: Calculator  },
+  // 行政 OA
+  { value: 'leave',             label: '请假申请',      icon: CalendarDays },
+  { value: 'overtime',          label: '加班申请',      icon: Clock       },
+  { value: 'business_trip',     label: '出差申请',      icon: Plane       },
+  { value: 'seal',              label: '盖章申请',      icon: Stamp       },
+  // 采购供应链
+  { value: 'purchase',          label: '采购申请',      icon: ShoppingCart },
+  { value: 'expense',           label: '报销申请',      icon: Receipt     },
+  { value: 'supplier',          label: '供应商入驻',    icon: Layers      },
+  // 业务项目
+  { value: 'project',           label: '项目立项',      icon: Briefcase   },
+  { value: 'channel',           label: '通道价格变更',  icon: TrendingUp  },
+  // 人事
+  { value: 'hire',              label: '入职申请',      icon: UserPlus    },
 ]
 
 const BIZ_TYPE_MAP: Record<string, typeof BUSINESS_TYPES[number]> = Object.fromEntries(
   BUSINESS_TYPES.map(t => [t.value, t])
 )
+
+/* ──── 大类分组定义 ──── */
+const CATEGORIES = [
+  {
+    key: 'finance',
+    label: '财务 & 合同',
+    icon: Wallet,
+    desc: '合同审批、付款申请、财务月结复核',
+    types: ['contract', 'payment', 'reconcile_summary'],
+  },
+  {
+    key: 'oa',
+    label: '行政 & OA',
+    icon: CalendarDays,
+    desc: '请假、加班、出差、盖章申请',
+    types: ['leave', 'overtime', 'business_trip', 'seal'],
+  },
+  {
+    key: 'procurement',
+    label: '采购 & 供应链',
+    icon: ShoppingCart,
+    desc: '采购申请、报销、供应商入驻',
+    types: ['purchase', 'expense', 'supplier'],
+  },
+  {
+    key: 'business',
+    label: '业务 & 项目',
+    icon: Briefcase,
+    desc: '项目立项、通道价格变更',
+    types: ['project', 'channel'],
+  },
+  {
+    key: 'hr',
+    label: '人事',
+    icon: UserPlus,
+    desc: '员工入职申请',
+    types: ['hire'],
+  },
+]
 
 const APPROVER_TYPES = [
   { value: 'role',          label: '按角色',     icon: Shield,      desc: '持有该角色的全部用户（任一审批通过即可）' },
@@ -65,6 +117,7 @@ export default function ApprovalFlowsPage() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<ApprovalFlow | null>(null)
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -101,35 +154,69 @@ export default function ApprovalFlowsPage() {
     } catch (e) { toast(String(e), 'error') }
   }
 
-  // 按业务类型分组
-  const grouped = BUSINESS_TYPES
-    .filter(bt => flows.some(f => f.business_type === bt.value))
-    .map(bt => ({
-      ...bt,
-      flows: flows.filter(f => f.business_type === bt.value),
-    }))
-  // 未匹配的业务类型
-  const otherTypes = flows.filter(f => !BIZ_TYPE_MAP[f.business_type])
-  if (otherTypes.length > 0) {
-    grouped.push({
-      value: '__other__',
-      label: '其他',
-      icon: GitBranch,
-      color: '#6B7280',
-      flows: otherTypes,
-    })
+  const currentCat = CATEGORIES.find(c => c.key === selectedCategory) ?? null
+
+  // 当前大类下的审批流，按业务类型子分组
+  const currentFlows = currentCat
+    ? flows.filter(f => currentCat.types.includes(f.business_type))
+    : []
+  const currentGrouped = currentCat
+    ? BUSINESS_TYPES
+        .filter(bt => currentCat.types.includes(bt.value) && currentFlows.some(f => f.business_type === bt.value))
+        .map(bt => ({ ...bt, flows: currentFlows.filter(f => f.business_type === bt.value) }))
+    : []
+
+  // 大类卡片统计
+  const allCategoryTypes = CATEGORIES.flatMap(c => c.types)
+  const categoryStats = CATEGORIES.map(cat => {
+    const catFlows = flows.filter(f => cat.types.includes(f.business_type))
+    return { ...cat, total: catFlows.length, active: catFlows.filter(f => f.is_active).length }
+  })
+  const uncategorized = flows.filter(f => !allCategoryTypes.includes(f.business_type))
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20 text-gray-500 dark:text-gray-400">
+        <Loader2 size={20} className="animate-spin mr-2" />加载中…
+      </div>
+    )
   }
 
   return (
     <div>
       {/* 页面标题 */}
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <GitBranch size={20} className="text-gray-700 dark:text-gray-300" />
-            审批流配置
-          </h1>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">为不同业务场景配置多级审批节点，支持按角色、指定用户、直属上级、部门负责人等方式</p>
+        <div className="flex items-center gap-3">
+          {selectedCategory && (
+            <button
+              onClick={() => setSelectedCategory(null)}
+              className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-white hover:bg-bg-hover transition-colors"
+            >
+              <ChevronLeft size={18} />
+            </button>
+          )}
+          <div>
+            <h1 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <GitBranch size={20} className="text-gray-700 dark:text-gray-300" />
+              {selectedCategory ? (
+                <>
+                  <button
+                    onClick={() => setSelectedCategory(null)}
+                    className="text-sm font-normal text-gray-400 dark:text-gray-600 hover:text-gray-600 dark:hover:text-gray-400 transition-colors"
+                  >
+                    审批流配置
+                  </button>
+                  <span className="text-gray-300 dark:text-gray-700">/</span>
+                  <span>{currentCat?.label}</span>
+                </>
+              ) : '审批流配置'}
+            </h1>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              {selectedCategory
+                ? currentCat?.desc
+                : '按业务分类配置多级审批节点，支持按角色、指定用户、直属上级、部门负责人等方式'}
+            </p>
+          </div>
         </div>
         <button
           onClick={() => { setEditing(null); setShowForm(true) }}
@@ -139,27 +226,88 @@ export default function ApprovalFlowsPage() {
         </button>
       </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center py-20 text-gray-500 dark:text-gray-400">
-          <Loader2 size={20} className="animate-spin mr-2" />加载中…
+      {!selectedCategory ? (
+        /* ── 大类卡片视图 ── */
+        <div>
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+            {categoryStats.map(cat => (
+              <button
+                key={cat.key}
+                onClick={() => setSelectedCategory(cat.key)}
+                className="text-left rounded-xl border border-border bg-bg-card p-5 hover:border-accent-blue/30 hover:bg-bg-hover/40 transition-all group"
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-bg-hover flex items-center justify-center shrink-0 group-hover:bg-accent-blue/10 transition-colors">
+                    <cat.icon size={20} className="text-gray-600 dark:text-gray-400 group-hover:text-accent-blue transition-colors" />
+                  </div>
+                  <ChevronRight size={16} className="text-gray-300 dark:text-gray-600 group-hover:text-accent-blue transition-colors mt-1 shrink-0" />
+                </div>
+                <div className="text-sm font-semibold text-gray-900 dark:text-white mb-1">{cat.label}</div>
+                <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-3 leading-relaxed">{cat.desc}</div>
+                {cat.total > 0 ? (
+                  <div className="flex items-center gap-2 text-[11px]">
+                    <span className="text-emerald-600 dark:text-emerald-400 font-medium">{cat.active} 启用</span>
+                    {cat.total > cat.active && (
+                      <span className="text-gray-400 dark:text-gray-600">· {cat.total - cat.active} 停用</span>
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-[11px] text-gray-400 dark:text-gray-600">暂无审批流</span>
+                )}
+              </button>
+            ))}
+
+            {/* 未分类兜底卡片 */}
+            {uncategorized.length > 0 && (
+              <button
+                onClick={() => setSelectedCategory('__other__')}
+                className="text-left rounded-xl border border-border bg-bg-card p-5 hover:border-accent-blue/30 hover:bg-bg-hover/40 transition-all group"
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-bg-hover flex items-center justify-center shrink-0 group-hover:bg-accent-blue/10 transition-colors">
+                    <GitBranch size={20} className="text-gray-600 dark:text-gray-400 group-hover:text-accent-blue transition-colors" />
+                  </div>
+                  <ChevronRight size={16} className="text-gray-300 dark:text-gray-600 group-hover:text-accent-blue transition-colors mt-1 shrink-0" />
+                </div>
+                <div className="text-sm font-semibold text-gray-900 dark:text-white mb-1">其他</div>
+                <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-3 leading-relaxed">未归类的审批流</div>
+                <div className="text-[11px] text-gray-400 dark:text-gray-600">{uncategorized.length} 条</div>
+              </button>
+            )}
+          </div>
         </div>
-      ) : flows.length === 0 ? (
+      ) : selectedCategory === '__other__' ? (
+        /* ── 其他（未分类）视图 ── */
+        <div className="space-y-3">
+          {uncategorized.map(flow => (
+            <FlowCard
+              key={flow.id}
+              flow={flow}
+              roles={roles}
+              users={users}
+              onEdit={() => { setEditing(flow); setShowForm(true) }}
+              onToggle={() => handleToggle(flow)}
+              onDelete={() => handleDelete(flow)}
+            />
+          ))}
+        </div>
+      ) : currentFlows.length === 0 ? (
+        /* ── 分类为空 ── */
         <div className="text-center py-20">
           <GitBranch size={40} className="mx-auto text-gray-300 dark:text-gray-700 mb-3" />
-          <p className="text-sm text-gray-500 dark:text-gray-400">还没有审批流配置</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">该分类下还没有审批流配置</p>
           <p className="text-xs text-gray-400 dark:text-gray-600 mt-1">点击右上角「新建审批流」开始配置</p>
         </div>
       ) : (
+        /* ── 分类详情：按业务类型子分组 ── */
         <div className="space-y-8">
-          {grouped.map(group => (
+          {currentGrouped.map(group => (
             <div key={group.value}>
-              {/* 分组标题 */}
               <div className="flex items-center gap-2 mb-3">
                 <group.icon size={16} className="text-gray-600 dark:text-gray-400" />
                 <span className="text-sm font-semibold text-gray-900 dark:text-white">{group.label}</span>
                 <span className="text-[11px] text-gray-400 dark:text-gray-600">({group.flows.length})</span>
               </div>
-
               <div className="space-y-3">
                 {group.flows.map(flow => (
                   <FlowCard
@@ -183,6 +331,7 @@ export default function ApprovalFlowsPage() {
           flow={editing}
           roles={roles}
           users={users}
+          defaultBusinessType={currentCat?.types[0]}
           onClose={() => setShowForm(false)}
           onSaved={() => { setShowForm(false); loadData() }}
         />
@@ -218,9 +367,7 @@ function FlowCard({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               {bizType && (
-                <span
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-gray-600 dark:text-gray-400 bg-bg-hover"
-                >
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-gray-600 dark:text-gray-400 bg-bg-hover">
                   <bizType.icon size={11} />
                   {bizType.label}
                 </span>
@@ -331,20 +478,21 @@ interface NodeForm {
 }
 
 function FlowFormModal({
-  flow, roles, users, onClose, onSaved,
+  flow, roles, users, onClose, onSaved, defaultBusinessType,
 }: {
   flow: ApprovalFlow | null
   roles: Role[]
   users: UserBrief[]
   onClose: () => void
   onSaved: () => void
+  defaultBusinessType?: string
 }) {
   const { toast } = useToast()
   const [saving, setSaving] = useState(false)
 
   const [code, setCode] = useState(flow?.code ?? '')
   const [name, setName] = useState(flow?.name ?? '')
-  const [businessType, setBusinessType] = useState(flow?.business_type ?? 'contract')
+  const [businessType, setBusinessType] = useState(flow?.business_type ?? defaultBusinessType ?? 'contract')
   const [description, setDescription] = useState(flow?.description ?? '')
   const [isActive, setIsActive] = useState(flow?.is_active ?? true)
   const [hasCond, setHasCond] = useState(!!flow?.trigger_condition)
