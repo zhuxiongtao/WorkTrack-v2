@@ -7,6 +7,7 @@
 - 备份历史：记录每次备份元信息，支持重新下载
 - 数据恢复：上传 JSON，支持 dry-run 预检查 + skip/insert_only 策略
 """
+
 import json
 import os
 import io
@@ -37,12 +38,28 @@ from app.models.meeting_collab import MeetingPermission, MeetingComment
 from app.models.daily_report import DailyReport
 from app.models.weekly_summary import WeeklySummary
 from app.models.wiki import (
-    WikiSpace, WikiPage, WikiPermission, WikiPageVersion,
-    UserGroup, UserGroupMember,
+    WikiSpace,
+    WikiPage,
+    WikiPermission,
+    WikiPageVersion,
+    UserGroup,
+    UserGroupMember,
 )
-from app.models.rbac import Permission, Role, RolePermission, UserRole, DepartmentRole, GroupRole
+from app.models.rbac import (
+    Permission,
+    Role,
+    RolePermission,
+    UserRole,
+    DepartmentRole,
+    GroupRole,
+)
 from app.models.scheduled_task import ScheduledTask
-from app.models.model_provider import ModelProvider, ProviderModel, TaskModelConfig, ModelParamPreset
+from app.models.model_provider import (
+    ModelProvider,
+    ProviderModel,
+    TaskModelConfig,
+    ModelParamPreset,
+)
 from app.models.field_option import FieldOption
 from app.models.system_preference import SystemPreference
 from app.models.ai_prompt import AIPrompt
@@ -51,14 +68,23 @@ from app.models.chat import ChatConversation, ChatMessage
 from app.models.data_share import DataShare, DataShareComment
 from app.models.news_cache import NewsCache
 from app.models.model_catalog import ModelCatalog
-from app.models.model_change import ModelChangeEvent, ModelChangeStage, ModelChangeCustomerTask
+from app.models.model_change import (
+    ModelChangeEvent,
+    ModelChangeStage,
+    ModelChangeCustomerTask,
+)
 from app.models.model_usage_log import ModelUsageLog
 from app.models.feedback import Feedback
 from app.models.payment import PaymentRequest
 from app.models.seal import SealRequest
 from app.models.supplier import Supplier
 from app.models.channel import Channel
-from app.models.reconcile import ReconcileSales, ReconcileSupply, ReconcileSummary, ReconcileDiff
+from app.models.reconcile import (
+    ReconcileSales,
+    ReconcileSupply,
+    ReconcileSummary,
+    ReconcileDiff,
+)
 from app.models.approval import ApprovalFlow, ApprovalInstance, ApprovalRecord
 from app.models.legal_entity import LegalEntity
 from app.models.employee_loan import EmployeeLoan
@@ -77,7 +103,10 @@ from app.models.backup_record import BackupRecord
 from app.schemas.backup_record import BackupRecordOut
 from app.utils.time import utc_now
 from app.services.excel_export_service import (
-    EXCEL_MODULES, DOMAIN_LABELS, get_modules_summary, export_excel,
+    EXCEL_MODULES,
+    DOMAIN_LABELS,
+    get_modules_summary,
+    export_excel,
 )
 
 logger = logging.getLogger("worktrack")
@@ -183,7 +212,12 @@ _BACKUP_EXCLUDED_FIELDS: dict[str, set[str]] = {
 
 # SystemPreference.key 含有以下子串时，value 视为敏感，导出为 null
 _SENSITIVE_PREF_PATTERNS = (
-    "api_key", "password", "secret", "token", "smtp_pass", "pwr_reset",
+    "api_key",
+    "password",
+    "secret",
+    "token",
+    "smtp_pass",
+    "pwr_reset",
 )
 
 
@@ -192,7 +226,7 @@ def _model_to_dict(obj) -> dict:
     result = {}
     model_name = type(obj).__name__
     excluded = _BACKUP_EXCLUDED_FIELDS.get(model_name, set())
-    fields = obj.model_fields if hasattr(obj, 'model_fields') else {}
+    fields = obj.model_fields if hasattr(obj, "model_fields") else {}
     for col in fields:
         if col in excluded:
             continue
@@ -230,6 +264,7 @@ def _format_size(size_bytes: int) -> str:
 # ══════════════════════════════════════════════════════════════
 # Excel 模块导出
 # ══════════════════════════════════════════════════════════════
+
 
 @router.get("/excel/modules")
 def list_excel_modules(
@@ -306,6 +341,7 @@ def export_excel_modules(
 # JSON 全量备份
 # ══════════════════════════════════════════════════════════════
 
+
 @router.get("/backup/json")
 def backup_json(
     current_user: User = Depends(require_permission("data:export")),
@@ -332,7 +368,9 @@ def backup_json(
             data["data"][f"_errors_{name}"] = str(e)
 
     data["record_count"] = total_records
-    json_bytes = json.dumps(data, ensure_ascii=False, indent=2, default=str).encode("utf-8")
+    json_bytes = json.dumps(data, ensure_ascii=False, indent=2, default=str).encode(
+        "utf-8"
+    )
 
     # 持久化到备份目录
     timestamp = utc_now().strftime("%Y%m%d_%H%M%S")
@@ -367,6 +405,7 @@ def backup_json(
 # SQL dump 备份
 # ══════════════════════════════════════════════════════════════
 
+
 @router.get("/backup/sql")
 def backup_sql(
     current_user: User = Depends(require_permission("data:export")),
@@ -377,18 +416,43 @@ def backup_sql(
     filename = f"backup_sql_{timestamp}.dump"
     file_path = _get_backup_dir() / filename
 
-    # 从 database_url 解析连接参数
-    db_url = settings.database_url
-    # pg_dump 直接使用 DATABASE_URL
+    # 从 database_url 解析连接参数（避免将完整 URL 传入命令行导致凭据泄露/注入）
+    from urllib.parse import urlparse
+
+    parsed = urlparse(settings.database_url)
+    pg_host = parsed.hostname or "localhost"
+    pg_port = str(parsed.port or 5432)
+    pg_user = parsed.username or "worktrack"
+    pg_password = parsed.password or ""
+    pg_dbname = parsed.path.lstrip("/") or "worktrack"
+
+    # pg_dump 使用分离的连接参数，密码通过 PGPASSWORD 环境变量传递（不暴露在命令行/进程列表中）
+    env = os.environ.copy()
+    if pg_password:
+        env["PGPASSWORD"] = pg_password
     try:
         result = subprocess.run(
-            ["pg_dump", "--no-owner", "--no-privileges", "--format=custom",
-             f"--file={file_path}", db_url],
-            capture_output=True, text=True, timeout=300,
+            [
+                "pg_dump",
+                "--no-owner",
+                "--no-privileges",
+                "--format=custom",
+                f"--host={pg_host}",
+                f"--port={pg_port}",
+                f"--username={pg_user}",
+                f"--file={file_path}",
+                pg_dbname,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            env=env,
         )
         if result.returncode != 0:
             logger.error("pg_dump 失败: %s", result.stderr)
-            raise HTTPException(status_code=500, detail=f"SQL 备份失败: {result.stderr}")
+            raise HTTPException(
+                status_code=500, detail=f"SQL 备份失败: {result.stderr}"
+            )
     except FileNotFoundError:
         raise HTTPException(status_code=500, detail="服务器未安装 pg_dump 工具")
     except subprocess.TimeoutExpired:
@@ -439,6 +503,7 @@ def backup_sql(
 # 备份历史
 # ══════════════════════════════════════════════════════════════
 
+
 @router.get("/backup/history", response_model=list[BackupRecordOut])
 def backup_history(
     current_user: User = Depends(require_permission("data:export")),
@@ -459,22 +524,24 @@ def backup_history(
         if r.file_exists != exists:
             r.file_exists = exists
             db.add(r)
-        result.append(BackupRecordOut(
-            id=r.id,
-            backup_type=r.backup_type,
-            filename=r.filename,
-            file_path=r.file_path,
-            size_bytes=r.size_bytes,
-            size_label=_format_size(r.size_bytes),
-            model_count=r.model_count,
-            record_count=r.record_count,
-            modules=r.modules,
-            operator_id=r.operator_id,
-            operator_name=r.operator_name,
-            note=r.note,
-            file_exists=exists,
-            created_at=r.created_at,
-        ))
+        result.append(
+            BackupRecordOut(
+                id=r.id,
+                backup_type=r.backup_type,
+                filename=r.filename,
+                file_path=r.file_path,
+                size_bytes=r.size_bytes,
+                size_label=_format_size(r.size_bytes),
+                model_count=r.model_count,
+                record_count=r.record_count,
+                modules=r.modules,
+                operator_id=r.operator_id,
+                operator_name=r.operator_name,
+                note=r.note,
+                file_exists=exists,
+                created_at=r.created_at,
+            )
+        )
     db.commit()
     return result
 
@@ -510,6 +577,7 @@ def download_backup(
 # ══════════════════════════════════════════════════════════════
 # 数据恢复
 # ══════════════════════════════════════════════════════════════
+
 
 @router.post("/restore")
 async def restore_data(
@@ -576,7 +644,9 @@ async def restore_data(
                     continue
                 would_import += 1
                 if not dry_run:
-                    obj = model(**{k: v for k, v in row_data.items() if k in model.model_fields})
+                    obj = model(
+                        **{k: v for k, v in row_data.items() if k in model.model_fields}
+                    )
                     db.add(obj)
                     imported += 1
             except Exception as e:
@@ -612,6 +682,7 @@ async def restore_data(
 # 导出摘要（兼容旧接口）
 # ══════════════════════════════════════════════════════════════
 
+
 @router.get("/export/summary")
 def export_summary(
     current_user: User = Depends(require_permission("data:export")),
@@ -632,6 +703,7 @@ def export_summary(
 # 兼容旧接口（/export, /import）—— 转发到新接口
 # ──────────────────────────────────────────────────────────────
 
+
 @router.get("/export")
 def export_data_legacy(
     current_user: User = Depends(require_permission("data:export")),
@@ -648,5 +720,6 @@ async def import_data_legacy(
     db: Session = Depends(get_session),
 ):
     """[兼容] 从 JSON 文件导入数据（转发到 V2 恢复，skip 策略）"""
-    return await restore_data(file=file, strategy="skip", dry_run=False,
-                              current_user=current_user, db=db)
+    return await restore_data(
+        file=file, strategy="skip", dry_run=False, current_user=current_user, db=db
+    )

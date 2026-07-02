@@ -7,6 +7,7 @@
 
 也被 routers/leave_balances.py 暴露给 HR 管理员手动调整。
 """
+
 import logging
 from typing import Optional
 from datetime import datetime, date
@@ -29,12 +30,16 @@ def _tenure_years(first_work_date: Optional[date], as_of_year: int) -> int:
     if not first_work_date:
         return 0
     ref = date(as_of_year, 12, 31)
-    return ref.year - first_work_date.year - (
-        (ref.month, ref.day) < (first_work_date.month, first_work_date.day)
+    return (
+        ref.year
+        - first_work_date.year
+        - ((ref.month, ref.day) < (first_work_date.month, first_work_date.day))
     )
 
 
-def statutory_annual_leave_days(first_work_date: Optional[date], as_of_year: int) -> int:
+def statutory_annual_leave_days(
+    first_work_date: Optional[date], as_of_year: int
+) -> int:
     """按《职工带薪年休假条例》计算法定年假天数。
 
     依据「累计工作时间（社会工龄）」：
@@ -56,7 +61,10 @@ def statutory_annual_leave_days(first_work_date: Optional[date], as_of_year: int
 
 
 def get_or_create_balance(
-    user_id: int, leave_type: str, year: int, db: Session,
+    user_id: int,
+    leave_type: str,
+    year: int,
+    db: Session,
     total_hours: float = 0,
 ) -> LeaveBalance:
     """获取或创建某用户某年度某类假期的额度账户"""
@@ -69,8 +77,11 @@ def get_or_create_balance(
     ).first()
     if not bal:
         bal = LeaveBalance(
-            user_id=user_id, leave_type=leave_type, year=year,
-            total_hours=total_hours, used_hours=0,
+            user_id=user_id,
+            leave_type=leave_type,
+            year=year,
+            total_hours=total_hours,
+            used_hours=0,
         )
         db.add(bal)
         db.commit()
@@ -79,17 +90,27 @@ def get_or_create_balance(
 
 
 def _write_log(
-    balance: LeaveBalance, change_type: str, change_hours: float,
-    reason: str, db: Session,
-    operator_id: Optional[int] = None, related_request_id: Optional[int] = None,
+    balance: LeaveBalance,
+    change_type: str,
+    change_hours: float,
+    reason: str,
+    db: Session,
+    operator_id: Optional[int] = None,
+    related_request_id: Optional[int] = None,
 ) -> None:
-    db.add(LeaveBalanceLog(
-        balance_id=balance.id, user_id=balance.user_id,
-        leave_type=balance.leave_type, year=balance.year,
-        change_type=change_type, change_hours=change_hours,
-        reason=reason, operator_id=operator_id,
-        related_request_id=related_request_id,
-    ))
+    db.add(
+        LeaveBalanceLog(
+            balance_id=balance.id,
+            user_id=balance.user_id,
+            leave_type=balance.leave_type,
+            year=balance.year,
+            change_type=change_type,
+            change_hours=change_hours,
+            reason=reason,
+            operator_id=operator_id,
+            related_request_id=related_request_id,
+        )
+    )
     db.commit()
 
 
@@ -98,22 +119,29 @@ BALANCE_CONTROLLED_TYPES = ("年假", "调休", "婚假", "产假", "陪产假",
 
 
 def apply_leave(
-    leave: LeaveRequest, db: Session, operator_id: Optional[int] = None,
+    leave: LeaveRequest,
+    db: Session,
+    operator_id: Optional[int] = None,
 ) -> Optional[LeaveBalance]:
     """请假审批通过后扣减额度。返回更新后的余额，额度不足抛 ValueError。"""
     year = leave.start_at.year
     # SELECT FOR UPDATE 锁行，防止并发请假重复扣减同一额度
     bal = db.exec(
-        select(LeaveBalance).where(
+        select(LeaveBalance)
+        .where(
             LeaveBalance.user_id == leave.user_id,
             LeaveBalance.leave_type == leave.leave_type,
             LeaveBalance.year == year,
-        ).with_for_update()
+        )
+        .with_for_update()
     ).first()
     if not bal:
         bal = LeaveBalance(
-            user_id=leave.user_id, leave_type=leave.leave_type,
-            year=year, total_hours=0, used_hours=0,
+            user_id=leave.user_id,
+            leave_type=leave.leave_type,
+            year=year,
+            total_hours=0,
+            used_hours=0,
         )
         db.add(bal)
         db.flush()
@@ -129,9 +157,13 @@ def apply_leave(
     db.commit()
     db.refresh(bal)
     _write_log(
-        bal, "leave_used", -leave.hours,
-        f"请假 #{leave.id}（{leave.title}）扣减", db,
-        operator_id=operator_id, related_request_id=leave.id,
+        bal,
+        "leave_used",
+        -leave.hours,
+        f"请假 #{leave.id}（{leave.title}）扣减",
+        db,
+        operator_id=operator_id,
+        related_request_id=leave.id,
     )
     return bal
 
@@ -153,17 +185,21 @@ def _proportional_refund(leave: LeaveRequest) -> float:
 
 
 def cancel_leave(
-    leave: LeaveRequest, db: Session, operator_id: Optional[int] = None,
+    leave: LeaveRequest,
+    db: Session,
+    operator_id: Optional[int] = None,
 ) -> Optional[LeaveBalance]:
     """销假返还额度（提前销假按比例返还未使用部分，否则全额返还）。"""
     year = leave.start_at.year
     # SELECT FOR UPDATE 锁行，防止并发销假导致 used_hours 负数
     bal = db.exec(
-        select(LeaveBalance).where(
+        select(LeaveBalance)
+        .where(
             LeaveBalance.user_id == leave.user_id,
             LeaveBalance.leave_type == leave.leave_type,
             LeaveBalance.year == year,
-        ).with_for_update()
+        )
+        .with_for_update()
     ).first()
     if not bal:
         return None
@@ -174,59 +210,138 @@ def cancel_leave(
     db.commit()
     db.refresh(bal)
     _write_log(
-        bal, "leave_cancelled", refund_hours,
-        f"销假 #{leave.id}（{leave.title}）返还", db,
-        operator_id=operator_id, related_request_id=leave.id,
+        bal,
+        "leave_cancelled",
+        refund_hours,
+        f"销假 #{leave.id}（{leave.title}）返还",
+        db,
+        operator_id=operator_id,
+        related_request_id=leave.id,
     )
     return bal
 
 
 def grant_overtime_compensate(
-    overtime: OvertimeRequest, db: Session,
+    overtime: OvertimeRequest,
+    db: Session,
 ) -> Optional[LeaveBalance]:
     """加班审批通过后，若补偿方式为调休，则授予对应调休额度。"""
     if overtime.compensate_type != "调休":
         return None
     year = overtime.start_at.year
-    bal = get_or_create_balance(overtime.user_id, "调休", year, db)
+    # SELECT FOR UPDATE 锁行，防止并发加班授予导致总额计算错误
+    bal = db.exec(
+        select(LeaveBalance)
+        .where(
+            LeaveBalance.user_id == overtime.user_id,
+            LeaveBalance.leave_type == "调休",
+            LeaveBalance.year == year,
+        )
+        .with_for_update()
+    ).first()
+    if not bal:
+        bal = LeaveBalance(
+            user_id=overtime.user_id,
+            leave_type="调休",
+            year=year,
+            total_hours=0,
+            used_hours=0,
+        )
+        db.add(bal)
+        db.flush()
     bal.total_hours = round(bal.total_hours + overtime.hours, 2)
     bal.updated_at = now()
     db.add(bal)
     db.commit()
     db.refresh(bal)
     _write_log(
-        bal, "grant", overtime.hours,
-        f"加班 #{overtime.id}（{overtime.title}）授予调休额度", db,
-        operator_id=overtime.user_id, related_request_id=overtime.id,
+        bal,
+        "grant",
+        overtime.hours,
+        f"加班 #{overtime.id}（{overtime.title}）授予调休额度",
+        db,
+        operator_id=overtime.user_id,
+        related_request_id=overtime.id,
     )
     return bal
 
 
 def adjust_balance(
-    user_id: int, leave_type: str, year: int,
-    change_hours: float, reason: str, operator_id: int, db: Session,
+    user_id: int,
+    leave_type: str,
+    year: int,
+    change_hours: float,
+    reason: str,
+    operator_id: int,
+    db: Session,
 ) -> LeaveBalance:
-    """HR 管理员手动调整额度（正数增加总额度，负数减少）。"""
-    bal = get_or_create_balance(user_id, leave_type, year, db)
+    """HR 管理员手动调整额度（正数增加总额度，负数减少）。使用行级锁防并发。"""
+    # SELECT FOR UPDATE 锁行
+    bal = db.exec(
+        select(LeaveBalance)
+        .where(
+            LeaveBalance.user_id == user_id,
+            LeaveBalance.leave_type == leave_type,
+            LeaveBalance.year == year,
+        )
+        .with_for_update()
+    ).first()
+    if not bal:
+        bal = LeaveBalance(
+            user_id=user_id,
+            leave_type=leave_type,
+            year=year,
+            total_hours=0,
+            used_hours=0,
+        )
+        db.add(bal)
+        db.flush()
     bal.total_hours = round(max(0, bal.total_hours + change_hours), 2)
     bal.updated_at = now()
     db.add(bal)
     db.commit()
     db.refresh(bal)
     _write_log(
-        bal, "adjust", change_hours,
-        reason or "管理员调整", db,
+        bal,
+        "adjust",
+        change_hours,
+        reason or "管理员调整",
+        db,
         operator_id=operator_id,
     )
     return bal
 
 
 def set_balance_total(
-    user_id: int, leave_type: str, year: int,
-    total_hours: float, reason: str, operator_id: int, db: Session,
+    user_id: int,
+    leave_type: str,
+    year: int,
+    total_hours: float,
+    reason: str,
+    operator_id: int,
+    db: Session,
 ) -> LeaveBalance:
-    """将额度「总额」直接设为目标值（用于按工龄批量发放年假），记录变动差额。"""
-    bal = get_or_create_balance(user_id, leave_type, year, db)
+    """将额度「总额」直接设为目标值（用于按工龄批量发放年假），记录变动差额。使用行级锁防并发。"""
+    # SELECT FOR UPDATE 锁行
+    bal = db.exec(
+        select(LeaveBalance)
+        .where(
+            LeaveBalance.user_id == user_id,
+            LeaveBalance.leave_type == leave_type,
+            LeaveBalance.year == year,
+        )
+        .with_for_update()
+    ).first()
+    if not bal:
+        bal = LeaveBalance(
+            user_id=user_id,
+            leave_type=leave_type,
+            year=year,
+            total_hours=0,
+            used_hours=0,
+        )
+        db.add(bal)
+        db.flush()
     new_total = round(max(0, total_hours), 2)
     delta = round(new_total - bal.total_hours, 2)
     bal.total_hours = new_total
@@ -236,8 +351,11 @@ def set_balance_total(
     db.refresh(bal)
     if delta != 0:
         _write_log(
-            bal, "adjust", delta,
-            reason or "按工龄发放年假", db,
+            bal,
+            "adjust",
+            delta,
+            reason or "按工龄发放年假",
+            db,
             operator_id=operator_id,
         )
     return bal

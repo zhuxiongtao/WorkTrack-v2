@@ -2,7 +2,7 @@ import {
   Briefcase, Calendar, Clock, BookOpen,
   FileText, Users, UsersRound, LayoutDashboard,
   Share2, BarChart3, Home, Layers, Calculator, CheckSquare, RefreshCw, MessageSquarePlus,
-  Wallet, Stamp, CalendarDays, type LucideIcon,
+  Wallet, Stamp, CalendarDays, ClipboardList, type LucideIcon,
 } from 'lucide-react'
 
 export interface MenuItem {
@@ -55,6 +55,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
       { to: '/contracts',     label: '合同管理',   icon: FileText,   gradientFrom: '#06B6D4', gradientTo: '#14B8A6', permission: 'contract:read' },
       { to: '/payments',      label: '付款申请',   icon: Wallet,     gradientFrom: '#10B981', gradientTo: '#059669', permission: 'payment:view_all' },
       { to: '/seals',         label: '盖章申请',   icon: Stamp,      gradientFrom: '#EF4444', gradientTo: '#F97316', permission: 'seal:view_all' },
+      { to: '/quotes',        label: '报价工具',   icon: ClipboardList, gradientFrom: '#0EA5E9', gradientTo: '#38BDF8', permission: 'quote:view' },
     ],
   },
   {

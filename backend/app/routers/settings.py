@@ -3,13 +3,23 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select, or_, func
 from pydantic import BaseModel
 from app.database import get_session
-from app.models.model_provider import ModelProvider, TaskModelConfig, ProviderModel, ModelParamPreset
+from app.models.model_provider import (
+    ModelProvider,
+    TaskModelConfig,
+    ProviderModel,
+    ModelParamPreset,
+)
 from app.models.field_option import FieldOption
 from app.models.system_preference import SystemPreference
 from app.models.ai_prompt import AIPrompt
 from app.models.user import User
 from app.auth import get_current_user, require_permission, has_permission
-from app.services.ai_service import _extract_message_text, _get_active_provider, _get_client, _record_usage_silent
+from app.services.ai_service import (
+    _extract_message_text,
+    _get_active_provider,
+    _get_client,
+    _record_usage_silent,
+)
 from app.config import settings as app_settings
 
 import os
@@ -40,7 +50,9 @@ def _get_visible_providers_query(db: Session, user: User | None):
     return select(ModelProvider).where(or_(*conditions))
 
 
-def _check_provider_access(provider: ModelProvider, user: User | None, db: Session | None = None) -> bool:
+def _check_provider_access(
+    provider: ModelProvider, user: User | None, db: Session | None = None
+) -> bool:
     """检查用户是否有权限访问某个供应商（RBAC + 旧字段兼容）"""
     if user is None:
         return False
@@ -65,8 +77,8 @@ class ProviderCreate(BaseModel):
     project_id: Optional[str] = None  # Vertex AI: GCP 项目 ID
     location: Optional[str] = None  # Vertex AI: GCP 区域
     gcp_label_team: Optional[str] = None  # GCP 账单标签：team
-    gcp_label_app: Optional[str] = None   # GCP 账单标签：app
-    gcp_label_env: Optional[str] = None   # GCP 账单标签：environment
+    gcp_label_app: Optional[str] = None  # GCP 账单标签：app
+    gcp_label_env: Optional[str] = None  # GCP 账单标签：environment
 
 
 class ProviderUpdate(BaseModel):
@@ -78,26 +90,36 @@ class ProviderUpdate(BaseModel):
     project_id: Optional[str] = None  # Vertex AI: GCP 项目 ID
     location: Optional[str] = None  # Vertex AI: GCP 区域
     gcp_label_team: Optional[str] = None  # GCP 账单标签：team
-    gcp_label_app: Optional[str] = None   # GCP 账单标签：app
-    gcp_label_env: Optional[str] = None   # GCP 账单标签：environment
+    gcp_label_app: Optional[str] = None  # GCP 账单标签：app
+    gcp_label_env: Optional[str] = None  # GCP 账单标签：environment
 
 
 # ===== 模型供应商 CRUD =====
 @router.get("/providers")
-def list_providers(db: Session = Depends(get_session),
-                   current_user: User = Depends(get_current_user)):
+def list_providers(
+    db: Session = Depends(get_session), current_user: User = Depends(get_current_user)
+):
     query = _get_visible_providers_query(db, current_user)
     providers = db.exec(query.order_by(ModelProvider.created_at.desc())).all()
     for p in providers:
         if p.api_key:
-            p.api_key = p.api_key[:4] + "****" + p.api_key[-4:] if len(p.api_key) > 8 else "****"
+            p.api_key = (
+                p.api_key[:4] + "****" + p.api_key[-4:]
+                if len(p.api_key) > 8
+                else "****"
+            )
     return providers
 
 
 @router.post("/providers", status_code=201)
-def create_provider(data: ProviderCreate, db: Session = Depends(get_session),
-                    current_user: User = Depends(get_current_user)):
-    if not has_permission(current_user, "ai:manage_own", db) and not has_permission(current_user, "ai:manage_shared", db):
+def create_provider(
+    data: ProviderCreate,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    if not has_permission(current_user, "ai:manage_own", db) and not has_permission(
+        current_user, "ai:manage_shared", db
+    ):
         raise HTTPException(status_code=403, detail="无权限创建模型供应商")
     provider = ModelProvider(**data.model_dump())
     # 非管理员（无 manage_shared）→ 强制归属自己
@@ -107,20 +129,31 @@ def create_provider(data: ProviderCreate, db: Session = Depends(get_session),
     db.commit()
     db.refresh(provider)
     if provider.api_key:
-        provider.api_key = provider.api_key[:4] + "****" + provider.api_key[-4:] if len(provider.api_key) > 8 else "****"
+        provider.api_key = (
+            provider.api_key[:4] + "****" + provider.api_key[-4:]
+            if len(provider.api_key) > 8
+            else "****"
+        )
     return provider
 
 
 @router.put("/providers/{provider_id}")
-def update_provider(provider_id: int, data: ProviderUpdate, db: Session = Depends(get_session),
-                    current_user: User = Depends(get_current_user)):
+def update_provider(
+    provider_id: int,
+    data: ProviderUpdate,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     provider = db.get(ModelProvider, provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="供应商不存在")
     if not _check_provider_access(provider, current_user, db):
         raise HTTPException(status_code=403, detail="无权限修改此供应商")
     # 非 ai:manage_shared 只能修改自己的供应商
-    if not has_permission(current_user, "ai:manage_shared", db) and provider.user_id != current_user.id:
+    if (
+        not has_permission(current_user, "ai:manage_shared", db)
+        and provider.user_id != current_user.id
+    ):
         raise HTTPException(status_code=403, detail="只能修改自己的供应商")
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
@@ -129,19 +162,29 @@ def update_provider(provider_id: int, data: ProviderUpdate, db: Session = Depend
     db.commit()
     db.refresh(provider)
     if provider.api_key:
-        provider.api_key = provider.api_key[:4] + "****" + provider.api_key[-4:] if len(provider.api_key) > 8 else "****"
+        provider.api_key = (
+            provider.api_key[:4] + "****" + provider.api_key[-4:]
+            if len(provider.api_key) > 8
+            else "****"
+        )
     return provider
 
 
 @router.delete("/providers/{provider_id}", status_code=204)
-def delete_provider(provider_id: int, db: Session = Depends(get_session),
-                    current_user: User = Depends(get_current_user)):
+def delete_provider(
+    provider_id: int,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     provider = db.get(ModelProvider, provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="供应商不存在")
     if not _check_provider_access(provider, current_user, db):
         raise HTTPException(status_code=403, detail="无权限删除此供应商")
-    if not has_permission(current_user, "ai:manage_shared", db) and provider.user_id != current_user.id:
+    if (
+        not has_permission(current_user, "ai:manage_shared", db)
+        and provider.user_id != current_user.id
+    ):
         raise HTTPException(status_code=403, detail="只能删除自己的供应商")
     # 先清理引用该供应商的 TaskModelConfig
     task_cfgs = db.exec(
@@ -258,23 +301,50 @@ def _serialize_model(m: ProviderModel) -> dict:
 def _guess_model_type(name: str) -> str:
     """根据模型名称智能推断类型（支持多模态模型族识别）"""
     low = name.lower()
-    if any(k in low for k in ["asr", "speech", "transcribe", "whisper",
-                               "transcriber", "parakeet", "sensevoice"]):
+    if any(
+        k in low
+        for k in [
+            "asr",
+            "speech",
+            "transcribe",
+            "whisper",
+            "transcriber",
+            "parakeet",
+            "sensevoice",
+        ]
+    ):
         return "speech_to_text"
     if any(k in low for k in ["embed", "bge-", "bce-"]):
         return "embedding"
     if any(k in low for k in ["search", "tavily", "serp", "crawl"]):
         return "web_search"
-    if any(k in low for k in [
-        "vision", "vl-", "image", "ocr", "video", "kolors", "wan-",
-        # Known multimodal model families (natively support vision)
-        "gemini-2.5", "gemini-2.0", "gemini-1.5",
-        "gpt-4o", "gpt-4-turbo", "gpt-4-vision",
-        "claude-3", "claude-4",
-        "qwen-vl", "qwen2-vl",
-        "glm-4v", "internvl", "minicpm-v",
-        "mimo-v2-omni",
-    ]):
+    if any(
+        k in low
+        for k in [
+            "vision",
+            "vl-",
+            "image",
+            "ocr",
+            "video",
+            "kolors",
+            "wan-",
+            # Known multimodal model families (natively support vision)
+            "gemini-2.5",
+            "gemini-2.0",
+            "gemini-1.5",
+            "gpt-4o",
+            "gpt-4-turbo",
+            "gpt-4-vision",
+            "claude-3",
+            "claude-4",
+            "qwen-vl",
+            "qwen2-vl",
+            "glm-4v",
+            "internvl",
+            "minicpm-v",
+            "mimo-v2-omni",
+        ]
+    ):
         return "vision"
     return "chat"
 
@@ -283,20 +353,45 @@ def _guess_model_type(name: str) -> str:
 # 一个模型可以是多模态（如 Gemini 3 flash 同时是 chat + vision）
 # 这个 list 决定它能绑定到哪些 task_type
 MULTIMODAL_VISION_KEYWORDS = [
-    "vision", "vl-", "image", "ocr", "video", "kolors", "wan-",
-    "gemini",            # 全系 Gemini 1.0/1.5/2.0/2.5/3.0 都支持 vision
-    "gpt-4o", "gpt-4-turbo", "gpt-4-vision",
-    "claude-3", "claude-4",
-    "qwen-vl", "qwen2-vl", "qwen2.5-vl", "qvq",
-    "glm-4v", "glm-4.1v", "glm-4.5v",
+    "vision",
+    "vl-",
+    "image",
+    "ocr",
+    "video",
+    "kolors",
+    "wan-",
+    "gemini",  # 全系 Gemini 1.0/1.5/2.0/2.5/3.0 都支持 vision
+    "gpt-4o",
+    "gpt-4-turbo",
+    "gpt-4-vision",
+    "claude-3",
+    "claude-4",
+    "qwen-vl",
+    "qwen2-vl",
+    "qwen2.5-vl",
+    "qvq",
+    "glm-4v",
+    "glm-4.1v",
+    "glm-4.5v",
     "internvl",
     "minicpm-v",
     "mimo-v2-omni",
-    "doubao-1.5-vision", "doubao-vision",
-    "step-1v", "step-1o",
-    "yi-vision", "yi-vl",
+    "doubao-1.5-vision",
+    "doubao-vision",
+    "step-1v",
+    "step-1o",
+    "yi-vision",
+    "yi-vl",
 ]
-SPEECH_KEYWORDS = ["asr", "speech", "transcribe", "whisper", "transcriber", "parakeet", "sensevoice"]
+SPEECH_KEYWORDS = [
+    "asr",
+    "speech",
+    "transcribe",
+    "whisper",
+    "transcriber",
+    "parakeet",
+    "sensevoice",
+]
 EMBEDDING_KEYWORDS = ["embed", "bge-", "bce-", "m3e-", "bge-m3"]
 SEARCH_KEYWORDS = ["search", "tavily", "serp", "crawl"]
 
@@ -344,8 +439,11 @@ def backward_compat_task_types(model_type: str, model_name: str) -> list[str]:
 
 
 @router.get("/providers/{provider_id}/models")
-def list_provider_models(provider_id: int, db: Session = Depends(get_session),
-                         current_user: User = Depends(get_current_user)):
+def list_provider_models(
+    provider_id: int,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     """获取供应商下已配置的模型列表（含默认参数）"""
     provider = db.get(ModelProvider, provider_id)
     if not provider:
@@ -353,21 +451,30 @@ def list_provider_models(provider_id: int, db: Session = Depends(get_session),
     if not _check_provider_access(provider, current_user, db):
         raise HTTPException(status_code=403, detail="无权限访问此供应商")
     models = db.exec(
-        select(ProviderModel).where(ProviderModel.provider_id == provider_id).order_by(ProviderModel.created_at)
+        select(ProviderModel)
+        .where(ProviderModel.provider_id == provider_id)
+        .order_by(ProviderModel.created_at)
     ).all()
     return [_serialize_model(m) for m in models]
 
 
 @router.post("/providers/{provider_id}/models", status_code=201)
-def add_provider_model(provider_id: int, data: ModelAdd, db: Session = Depends(get_session),
-                       current_user: User = Depends(get_current_user)):
+def add_provider_model(
+    provider_id: int,
+    data: ModelAdd,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     """给供应商添加一个模型（可携带默认参数）"""
     provider = db.get(ModelProvider, provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="供应商不存在")
     if not _check_provider_access(provider, current_user, db):
         raise HTTPException(status_code=403, detail="无权限操作此供应商")
-    if not has_permission(current_user, "ai:manage_shared", db) and provider.user_id != current_user.id:
+    if (
+        not has_permission(current_user, "ai:manage_shared", db)
+        and provider.user_id != current_user.id
+    ):
         raise HTTPException(status_code=403, detail="只能管理自己的供应商模型")
     existing = db.exec(
         select(ProviderModel).where(
@@ -377,7 +484,11 @@ def add_provider_model(provider_id: int, data: ModelAdd, db: Session = Depends(g
     ).first()
     if existing:
         raise HTTPException(status_code=409, detail="该模型已存在")
-    mtype = data.model_type if data.model_type != "chat" else _guess_model_type(data.model_name)
+    mtype = (
+        data.model_type
+        if data.model_type != "chat"
+        else _guess_model_type(data.model_name)
+    )
     # P1 多模态：决定 supported_task_types
     # 优先级：用户显式传 > model_name 推断
     if data.supported_task_types:
@@ -390,8 +501,11 @@ def add_provider_model(provider_id: int, data: ModelAdd, db: Session = Depends(g
             supported.append("vision")
     # 自动按模型名推断能力（如果用户没显式设）
     from app.services.param_resolver import detect_capabilities_from_name
+
     detected = detect_capabilities_from_name(data.model_name)
-    payload = data.model_dump(exclude={"model_name", "model_type", "supported_task_types"})
+    payload = data.model_dump(
+        exclude={"model_name", "model_type", "supported_task_types"}
+    )
     # 合并 detected（用户显式 None 优先，detected 只在用户未填时填入）
     for k, v in detected.items():
         if payload.get(k) is None and v is not None:
@@ -405,7 +519,9 @@ def add_provider_model(provider_id: int, data: ModelAdd, db: Session = Depends(g
         provider_id=provider_id,
         model_name=data.model_name,
         model_type=mtype,
-        supported_task_types=json.dumps(supported, ensure_ascii=False) if supported else None,
+        supported_task_types=json.dumps(supported, ensure_ascii=False)
+        if supported
+        else None,
         **payload,
     )
     db.add(model)
@@ -415,15 +531,22 @@ def add_provider_model(provider_id: int, data: ModelAdd, db: Session = Depends(g
 
 
 @router.delete("/providers/{provider_id}/models/{model_id}", status_code=204)
-def remove_provider_model(provider_id: int, model_id: int, db: Session = Depends(get_session),
-                          current_user: User = Depends(get_current_user)):
+def remove_provider_model(
+    provider_id: int,
+    model_id: int,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     """删除供应商下的一个模型"""
     provider = db.get(ModelProvider, provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="供应商不存在")
     if not _check_provider_access(provider, current_user, db):
         raise HTTPException(status_code=403, detail="无权限操作此供应商")
-    if not has_permission(current_user, "ai:manage_shared", db) and provider.user_id != current_user.id:
+    if (
+        not has_permission(current_user, "ai:manage_shared", db)
+        and provider.user_id != current_user.id
+    ):
         raise HTTPException(status_code=403, detail="只能管理自己的供应商模型")
     model = db.get(ProviderModel, model_id)
     if not model or model.provider_id != provider_id:
@@ -471,22 +594,39 @@ class ModelUpdate(BaseModel):
 
 
 @router.put("/providers/{provider_id}/models/{model_id}")
-def update_provider_model(provider_id: int, model_id: int, data: ModelUpdate, db: Session = Depends(get_session),
-                          current_user: User = Depends(get_current_user)):
+def update_provider_model(
+    provider_id: int,
+    model_id: int,
+    data: ModelUpdate,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     """更新模型的类型/名称/默认参数"""
     provider = db.get(ModelProvider, provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="供应商不存在")
     if not _check_provider_access(provider, current_user, db):
         raise HTTPException(status_code=403, detail="无权限操作此供应商")
-    if not has_permission(current_user, "ai:manage_shared", db) and provider.user_id != current_user.id:
+    if (
+        not has_permission(current_user, "ai:manage_shared", db)
+        and provider.user_id != current_user.id
+    ):
         raise HTTPException(status_code=403, detail="只能管理自己的供应商模型")
     model = db.get(ProviderModel, model_id)
     if not model or model.provider_id != provider_id:
         raise HTTPException(status_code=404, detail="模型不存在")
     if data.model_type is not None:
-        if data.model_type not in ("chat", "embedding", "speech_to_text", "vision", "web_search"):
-            raise HTTPException(status_code=400, detail="无效的模型类型，可选: chat, embedding, speech_to_text, vision, web_search")
+        if data.model_type not in (
+            "chat",
+            "embedding",
+            "speech_to_text",
+            "vision",
+            "web_search",
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="无效的模型类型，可选: chat, embedding, speech_to_text, vision, web_search",
+            )
         model.model_type = data.model_type
     if data.model_name is not None:
         dup = db.exec(
@@ -499,10 +639,16 @@ def update_provider_model(provider_id: int, model_id: int, data: ModelUpdate, db
         if dup:
             raise HTTPException(status_code=409, detail="该模型名已存在")
         model.model_name = data.model_name
-    update_payload = data.model_dump(exclude={"model_type", "model_name"}, exclude_unset=True)
+    update_payload = data.model_dump(
+        exclude={"model_type", "model_name"}, exclude_unset=True
+    )
     # 多模态：list → JSON 字符串
-    if "supported_task_types" in update_payload and isinstance(update_payload["supported_task_types"], list):
-        update_payload["supported_task_types"] = json.dumps(update_payload["supported_task_types"], ensure_ascii=False)
+    if "supported_task_types" in update_payload and isinstance(
+        update_payload["supported_task_types"], list
+    ):
+        update_payload["supported_task_types"] = json.dumps(
+            update_payload["supported_task_types"], ensure_ascii=False
+        )
     for key, value in update_payload.items():
         setattr(model, key, value)
     db.add(model)
@@ -512,7 +658,12 @@ def update_provider_model(provider_id: int, model_id: int, data: ModelUpdate, db
 
 
 @router.post("/providers/{provider_id}/models/{model_id}/test")
-def test_provider_model(provider_id: int, model_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def test_provider_model(
+    provider_id: int,
+    model_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
     """测试单个模型连通性（按 model_type 调用相应 API）"""
     provider = db.get(ModelProvider, provider_id)
     if not provider:
@@ -524,11 +675,13 @@ def test_provider_model(provider_id: int, model_id: int, current_user: User = De
         raise HTTPException(status_code=404, detail="模型不存在")
     try:
         from app.services.ai_service import _get_client, _is_vertex_ai
+
         client = _get_client(provider.base_url, provider.api_key, provider)
         mtype = model.model_type or "chat"
         if mtype == "speech_to_text":
             # 用一段静默音频测 ASR 模型（不需要实际音频内容）
             import base64, io, wave, struct
+
             wav_buf = io.BytesIO()
             with wave.open(wav_buf, "wb") as wf:
                 wf.setnchannels(1)
@@ -542,21 +695,39 @@ def test_provider_model(provider_id: int, model_id: int, current_user: User = De
                 resp = client.audio.transcriptions.create(
                     model=model.model_name, file=("test.wav", wav_buf, "audio/wav")
                 )
-                return {"success": True, "message": f"ASR 模型 {model.model_name} 可用", "reply": getattr(resp, "text", str(resp))[:50]}
+                return {
+                    "success": True,
+                    "message": f"ASR 模型 {model.model_name} 可用",
+                    "reply": getattr(resp, "text", str(resp))[:50],
+                }
             except Exception as e:
                 err = str(e)[:300]
                 # 部分 ASR 端点用 multipart/form-data 而非 JSON
                 if "503" in err or "not_found" in err.lower() or "不支持" in err:
-                    return {"success": False, "message": f"模型 {model.model_name} ASR 调用失败: {err}"}
-                return {"success": True, "message": f"ASR 端点已连通（忽略静默输入报错: {str(e)[:80]}）"}
+                    return {
+                        "success": False,
+                        "message": f"模型 {model.model_name} ASR 调用失败: {err}",
+                    }
+                return {
+                    "success": True,
+                    "message": f"ASR 端点已连通（忽略静默输入报错: {str(e)[:80]}）",
+                }
         elif mtype == "embedding":
             # Vertex AI 原生不支持 OpenAI 兼容的 embeddings API
             if _is_vertex_ai(provider):
-                return {"success": True, "message": f"Embedding {model.model_name} 就绪（Vertex AI 原生路径）", "reply": "ok"}
+                return {
+                    "success": True,
+                    "message": f"Embedding {model.model_name} 就绪（Vertex AI 原生路径）",
+                    "reply": "ok",
+                }
             try:
                 resp = client.embeddings.create(model=model.model_name, input=["test"])
                 dim = len(resp.data[0].embedding) if resp.data else 0
-                return {"success": True, "message": f"Embedding {model.model_name} 可用，维度={dim}", "reply": f"dim={dim}"}
+                return {
+                    "success": True,
+                    "message": f"Embedding {model.model_name} 可用，维度={dim}",
+                    "reply": f"dim={dim}",
+                }
             except Exception as e:
                 return {"success": False, "message": str(e)[:200]}
         else:
@@ -575,7 +746,11 @@ def test_provider_model(provider_id: int, model_id: int, current_user: User = De
 
 
 @router.post("/providers/{provider_id}/test")
-def test_provider(provider_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def test_provider(
+    provider_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
     """测试模型供应商连接"""
     provider = db.get(ModelProvider, provider_id)
     if not provider:
@@ -583,19 +758,22 @@ def test_provider(provider_id: int, current_user: User = Depends(get_current_use
     result = {"success": False, "message": "", "models_found": 0}
     try:
         from app.services.ai_service import _get_client, _is_vertex_ai
+
         # 判断是否为Gemini（Google AI Studio）
         def _is_gemini(p: ModelProvider) -> bool:
             return "generativelanguage.googleapis.com" in (p.base_url or "")
+
         # 判断是否为Anthropic（Claude）
         def _is_anthropic(p: ModelProvider) -> bool:
             return "api.anthropic.com" in (p.base_url or "")
-        
+
         client = _get_client(provider.base_url, provider.api_key, provider)
         # 先测试模型列表
         try:
             if _is_vertex_ai(provider):
                 from google import genai
                 from app.services.ai_service import _get_vertex_credentials
+
                 credentials = _get_vertex_credentials(provider)
                 gclient = genai.Client(
                     vertexai=True,
@@ -604,13 +782,18 @@ def test_provider(provider_id: int, current_user: User = Depends(get_current_use
                     credentials=credentials,
                 )
                 models_data = list(gclient.models.list())
-                model_ids = [m.name for m in models_data if "publishers/" in (getattr(m, 'name', ''))]
+                model_ids = [
+                    m.name
+                    for m in models_data
+                    if "publishers/" in (getattr(m, "name", ""))
+                ]
                 result["models_found"] = len(model_ids)
                 result["sample_models"] = model_ids[:8]
             elif _is_gemini(provider):
                 # Gemini使用原生SDK获取模型列表
                 from google import genai
                 import logging
+
                 logger = logging.getLogger("worktrack")
                 try:
                     logger.info("正在测试Gemini连接...")
@@ -620,20 +803,26 @@ def test_provider(provider_id: int, current_user: User = Depends(get_current_use
                         models_data = gclient.models.list()
                         model_ids = []
                         for m in models_data:
-                            model_id = getattr(m, 'name', '') or getattr(m, 'id', '')
+                            model_id = getattr(m, "name", "") or getattr(m, "id", "")
                             if model_id:
-                                if model_id.startswith('models/'):
+                                if model_id.startswith("models/"):
                                     model_id = model_id[7:]
                                 model_ids.append(model_id)
                         result["models_found"] = len(model_ids)
                         result["sample_models"] = model_ids[:10]
                         logger.info(f"成功获取到{len(model_ids)}个Gemini模型")
                     except Exception as api_err:
-                        logger.error(f"Gemini models.list()调用失败: {str(api_err)}", exc_info=True)
+                        logger.error(
+                            f"Gemini models.list()调用失败: {str(api_err)}",
+                            exc_info=True,
+                        )
                         # 如果获取失败，使用预设模型
                         sample_gemini_models = [
-                            "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", 
-                            "gemini-1.5-pro", "gemini-1.5-flash"
+                            "gemini-2.5-flash",
+                            "gemini-2.5-pro",
+                            "gemini-2.0-flash",
+                            "gemini-1.5-pro",
+                            "gemini-1.5-flash",
                         ]
                         result["models_found"] = 10
                         result["sample_models"] = sample_gemini_models
@@ -642,8 +831,10 @@ def test_provider(provider_id: int, current_user: User = Depends(get_current_use
             elif _is_anthropic(provider):
                 # Anthropic直接用预设模型
                 sample_anthropic_models = [
-                    "claude-3-7-sonnet-20250219", "claude-3-5-sonnet-20241022", 
-                    "claude-3-5-haiku-20241022", "claude-3-opus-20240229"
+                    "claude-3-7-sonnet-20250219",
+                    "claude-3-5-sonnet-20241022",
+                    "claude-3-5-haiku-20241022",
+                    "claude-3-opus-20240229",
                 ]
                 result["models_found"] = 6
                 result["sample_models"] = sample_anthropic_models
@@ -656,10 +847,12 @@ def test_provider(provider_id: int, current_user: User = Depends(get_current_use
             pass
         # 再测试对话 — 从 ProviderModel 获取候选模型，逐个尝试
         provider_models = db.exec(
-            select(ProviderModel).where(ProviderModel.provider_id == provider_id).order_by(ProviderModel.created_at)
+            select(ProviderModel)
+            .where(ProviderModel.provider_id == provider_id)
+            .order_by(ProviderModel.created_at)
         ).all()
         candidates = [m.model_name for m in provider_models]
-        
+
         # 根据供应商类型智能选择默认测试模型
         if not candidates:
             if _is_gemini(provider):
@@ -680,9 +873,31 @@ def test_provider(provider_id: int, current_user: User = Depends(get_current_use
                 candidates.append("abab6.5s-chat")
             else:
                 candidates.append("gpt-3.5-turbo")
-        
-        priority_kw = ["chat", "instruct", "deepseek", "qwen", "gpt", "claude", "llama", "glm", "yi-", "moonshot", "mimo", "gemini"]
-        non_chat_kw = ["embed", "bge-", "stable-diffusion", "sd-", "tts-", "whisper", "dall-e"]
+
+        priority_kw = [
+            "chat",
+            "instruct",
+            "deepseek",
+            "qwen",
+            "gpt",
+            "claude",
+            "llama",
+            "glm",
+            "yi-",
+            "moonshot",
+            "mimo",
+            "gemini",
+        ]
+        non_chat_kw = [
+            "embed",
+            "bge-",
+            "stable-diffusion",
+            "sd-",
+            "tts-",
+            "whisper",
+            "dall-e",
+        ]
+
         def model_priority(m: str) -> int:
             low = m.lower()
             for kw in non_chat_kw:
@@ -692,6 +907,7 @@ def test_provider(provider_id: int, current_user: User = Depends(get_current_use
                 if kw in low:
                     return i
             return 50
+
         candidates.sort(key=model_priority)
         # 尝试前 5 个
         last_error = ""
@@ -705,7 +921,9 @@ def test_provider(provider_id: int, current_user: User = Depends(get_current_use
                 result["success"] = True
                 result["message"] = f"连接成功，模型 {model} 可用"
                 result["test_model"] = model
-                result["reply"] = _extract_message_text(response.choices[0].message)[:50]
+                result["reply"] = _extract_message_text(response.choices[0].message)[
+                    :50
+                ]
                 break
             except Exception as e:
                 last_error = str(e)[:100]
@@ -717,28 +935,37 @@ def test_provider(provider_id: int, current_user: User = Depends(get_current_use
 
 
 @router.post("/providers/{provider_id}/fetch-models")
-def fetch_provider_models(provider_id: int, db: Session = Depends(get_session),
-                          current_user: User = Depends(get_current_user)):
+def fetch_provider_models(
+    provider_id: int,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     """从供应商API拉取可用模型列表"""
     provider = db.get(ModelProvider, provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="供应商不存在")
     if not _check_provider_access(provider, current_user, db):
         raise HTTPException(status_code=403, detail="无权限拉取模型列表")
-    if not has_permission(current_user, "ai:manage_shared", db) and provider.user_id != current_user.id:
+    if (
+        not has_permission(current_user, "ai:manage_shared", db)
+        and provider.user_id != current_user.id
+    ):
         raise HTTPException(status_code=403, detail="只能管理自己的供应商")
 
     try:
         from app.services.ai_service import _is_vertex_ai, _get_vertex_credentials
+
         # 判断是否为Gemini（Google AI Studio）
         def _is_gemini(p: ModelProvider) -> bool:
             return "generativelanguage.googleapis.com" in (p.base_url or "")
+
         # 判断是否为Anthropic（Claude）
         def _is_anthropic(p: ModelProvider) -> bool:
             return "api.anthropic.com" in (p.base_url or "")
-        
+
         if _is_vertex_ai(provider):
             from google import genai
+
             credentials = _get_vertex_credentials(provider)
             client = genai.Client(
                 vertexai=True,
@@ -752,7 +979,11 @@ def fetch_provider_models(provider_id: int, db: Session = Depends(get_session),
             try:
                 models_data = client.models.list()
                 for m in models_data:
-                    model_id = getattr(m, 'name', '') or getattr(m, 'id', '') or getattr(m, 'model_id', '')
+                    model_id = (
+                        getattr(m, "name", "")
+                        or getattr(m, "id", "")
+                        or getattr(m, "model_id", "")
+                    )
                     if model_id:
                         if "/" in model_id:
                             short_name = model_id.split("/")[-1]
@@ -760,11 +991,14 @@ def fetch_provider_models(provider_id: int, db: Session = Depends(get_session),
                             short_name = model_id
                         if short_name and short_name not in seen:
                             seen.add(short_name)
-                            owned_by = getattr(m, 'owned_by', '') or 'google'
+                            owned_by = getattr(m, "owned_by", "") or "google"
                             models.append({"id": short_name, "owned_by": owned_by})
             except Exception as api_err:
                 import logging
-                logging.getLogger("worktrack").warning("Vertex AI模型列表API调用失败: %s，使用兜底模型列表", api_err)
+
+                logging.getLogger("worktrack").warning(
+                    "Vertex AI模型列表API调用失败: %s，使用兜底模型列表", api_err
+                )
             # 如果 API 拉取失败或为空，使用常见模型列表作为兜底
             if not models:
                 models = [
@@ -783,38 +1017,43 @@ def fetch_provider_models(provider_id: int, db: Session = Depends(get_session),
         elif _is_gemini(provider):
             # Gemini（Google AI Studio）使用原生SDK获取模型列表
             from google import genai
+
             models = []
             seen = set()
             try:
                 import logging
+
                 logger = logging.getLogger("worktrack")
                 logger.info("正在初始化Gemini客户端...")
                 gclient = genai.Client(api_key=provider.api_key)
                 logger.info("Gemini客户端初始化成功，正在获取模型列表...")
-                
+
                 # 尝试获取模型列表
                 try:
                     models_data = gclient.models.list()
                     logger.info("Gemini models.list()调用成功，开始处理返回结果...")
-                    
+
                     # 处理模型数据
                     for m in models_data:
                         # 获取模型ID
-                        model_id = getattr(m, 'name', '') or getattr(m, 'id', '')
+                        model_id = getattr(m, "name", "") or getattr(m, "id", "")
                         if not model_id:
                             continue
                         # 清理模型名
-                        if model_id.startswith('models/'):
+                        if model_id.startswith("models/"):
                             model_id = model_id[7:]
                         if model_id and model_id not in seen:
                             seen.add(model_id)
                             models.append({"id": model_id, "owned_by": "google"})
                     logger.info(f"成功获取到{len(models)}个Gemini模型")
                 except Exception as api_err:
-                    logger.error(f"Gemini models.list()调用失败: {str(api_err)}", exc_info=True)
+                    logger.error(
+                        f"Gemini models.list()调用失败: {str(api_err)}", exc_info=True
+                    )
                     raise
             except Exception as e:
                 import logging
+
                 logger = logging.getLogger("worktrack")
                 logger.error(f"Gemini模型列表获取失败: {str(e)}", exc_info=True)
             # 如果API获取失败或为空，使用兜底列表
@@ -843,23 +1082,29 @@ def fetch_provider_models(provider_id: int, db: Session = Depends(get_session),
             ]
         else:
             from openai import OpenAI
+
             base_url = provider.base_url
             api_key = provider.api_key
             client = OpenAI(base_url=base_url, api_key=api_key, timeout=15)
             resp = client.models.list()
-            models = [{"id": m.id, "owned_by": getattr(m, "owned_by", "")} for m in resp.data]
+            models = [
+                {"id": m.id, "owned_by": getattr(m, "owned_by", "")} for m in resp.data
+            ]
         import json
+
         provider.supported_models_json = json.dumps(models, ensure_ascii=False)
         db.add(provider)
         db.commit()
         return {"success": True, "count": len(models), "models": models}
     except Exception as e:
         import logging
+
         logging.getLogger("worktrack").error("拉取模型列表失败: %s", e, exc_info=True)
         return {"success": False, "message": str(e)[:200]}
 
 
 # ===== 任务-模型配置 =====
+
 
 class TaskModelUpdate(BaseModel):
     task_type: str
@@ -903,8 +1148,9 @@ def _serialize_task_config(c: TaskModelConfig) -> dict:
 
 
 @router.get("/task-models")
-def get_task_models(db: Session = Depends(get_session),
-                    current_user: User = Depends(get_current_user)):
+def get_task_models(
+    db: Session = Depends(get_session), current_user: User = Depends(get_current_user)
+):
     """获取任务模型配置：用户私有 +（有权限时）共享，自动清理无效配置"""
     can_manage = has_permission(current_user, "ai:manage_shared", db)
     use_shared = can_manage or has_permission(current_user, "ai:use", db)
@@ -918,15 +1164,15 @@ def get_task_models(db: Session = Depends(get_session),
     if not conditions:
         return {}
 
-    configs = db.exec(
-        select(TaskModelConfig).where(or_(*conditions))
-    ).all()
+    configs = db.exec(select(TaskModelConfig).where(or_(*conditions))).all()
 
     # 批量预加载 provider 和 model，避免 N+1
     provider_ids = {c.provider_id for c in configs if c.provider_id}
     providers: dict[int, ModelProvider] = {}
     if provider_ids:
-        for p in db.exec(select(ModelProvider).where(ModelProvider.id.in_(provider_ids))).all():
+        for p in db.exec(
+            select(ModelProvider).where(ModelProvider.id.in_(provider_ids))
+        ).all():
             providers[p.id] = p
 
     valid_models: set[tuple[int, str]] = set()
@@ -956,7 +1202,9 @@ def get_task_models(db: Session = Depends(get_session),
             result[c.task_type] = cfg
     # 清理无效配置（批量删除）
     if stale_ids:
-        stale_configs = db.exec(select(TaskModelConfig).where(TaskModelConfig.id.in_(stale_ids))).all()
+        stale_configs = db.exec(
+            select(TaskModelConfig).where(TaskModelConfig.id.in_(stale_ids))
+        ).all()
         for stale in stale_configs:
             db.delete(stale)
         db.commit()
@@ -964,8 +1212,11 @@ def get_task_models(db: Session = Depends(get_session),
 
 
 @router.put("/task-models")
-def update_task_model(data: TaskModelUpdate, db: Session = Depends(get_session),
-                      current_user: User = Depends(get_current_user)):
+def update_task_model(
+    data: TaskModelUpdate,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     """更新任务模型配置：管理员更新共享的，普通用户更新自己的"""
     can_manage_shared = has_permission(current_user, "ai:manage_shared", db)
     uid = None if can_manage_shared else current_user.id
@@ -1017,6 +1268,7 @@ def update_task_model(data: TaskModelUpdate, db: Session = Depends(get_session),
 
 # ===== 参数预设 CRUD =====
 
+
 class PresetCreate(BaseModel):
     name: str
     description: str = ""
@@ -1058,24 +1310,30 @@ def _serialize_preset(p: ModelParamPreset) -> dict:
 
 
 @router.get("/model-presets")
-def list_presets(db: Session = Depends(get_session),
-                 current_user: User = Depends(get_current_user)):
+def list_presets(
+    db: Session = Depends(get_session), current_user: User = Depends(get_current_user)
+):
     """列出所有可见预设：平台预设（is_system=True）+ 当前用户的个人预设"""
     presets = db.exec(
-        select(ModelParamPreset).where(
+        select(ModelParamPreset)
+        .where(
             or_(
                 ModelParamPreset.is_system == True,
                 ModelParamPreset.user_id == current_user.id,
                 ModelParamPreset.user_id == None,  # NULL=平台预设
             )
-        ).order_by(ModelParamPreset.is_system.desc(), ModelParamPreset.id)
+        )
+        .order_by(ModelParamPreset.is_system.desc(), ModelParamPreset.id)
     ).all()
     return [_serialize_preset(p) for p in presets]
 
 
 @router.post("/model-presets", status_code=201)
-def create_preset(data: PresetCreate, db: Session = Depends(get_session),
-                  current_user: User = Depends(get_current_user)):
+def create_preset(
+    data: PresetCreate,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     """创建个人预设（user_id 强制为当前用户）"""
     if not data.name.strip():
         raise HTTPException(status_code=400, detail="预设名称不能为空")
@@ -1091,8 +1349,12 @@ def create_preset(data: PresetCreate, db: Session = Depends(get_session),
 
 
 @router.put("/model-presets/{preset_id}")
-def update_preset(preset_id: int, data: PresetUpdate, db: Session = Depends(get_session),
-                  current_user: User = Depends(get_current_user)):
+def update_preset(
+    preset_id: int,
+    data: PresetUpdate,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     """更新个人预设（系统预设不可改）"""
     preset = db.get(ModelParamPreset, preset_id)
     if not preset:
@@ -1105,6 +1367,7 @@ def update_preset(preset_id: int, data: PresetUpdate, db: Session = Depends(get_
     for key, value in payload.items():
         setattr(preset, key, value)
     from datetime import datetime, timezone
+
     preset.updated_at = now()
     db.add(preset)
     db.commit()
@@ -1113,8 +1376,11 @@ def update_preset(preset_id: int, data: PresetUpdate, db: Session = Depends(get_
 
 
 @router.delete("/model-presets/{preset_id}", status_code=204)
-def delete_preset(preset_id: int, db: Session = Depends(get_session),
-                  current_user: User = Depends(get_current_user)):
+def delete_preset(
+    preset_id: int,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     """删除个人预设（系统预设不可删）"""
     preset = db.get(ModelParamPreset, preset_id)
     if not preset:
@@ -1125,6 +1391,7 @@ def delete_preset(preset_id: int, db: Session = Depends(get_session),
         raise HTTPException(status_code=403, detail="只能删除自己的预设")
     # 清理引用该 preset 的 TaskModelConfig
     from sqlmodel import update as sql_update
+
     db.exec(
         sql_update(TaskModelConfig)
         .where(TaskModelConfig.preset_id == preset_id)
@@ -1135,6 +1402,7 @@ def delete_preset(preset_id: int, db: Session = Depends(get_session),
 
 
 # ===== 字段选项管理 =====
+
 
 class FieldOptionCreate(BaseModel):
     category: str
@@ -1148,7 +1416,11 @@ class FieldOptionBatchUpdate(BaseModel):
 
 
 @router.get("/field-options")
-def list_field_options(category: Optional[str] = None, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def list_field_options(
+    category: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
     """获取字段选项，可按分类筛选"""
     query = select(FieldOption).order_by(FieldOption.sort_order, FieldOption.id)
     if category:
@@ -1157,8 +1429,11 @@ def list_field_options(category: Optional[str] = None, current_user: User = Depe
 
 
 @router.post("/field-options", status_code=201)
-def create_field_option(data: FieldOptionCreate, db: Session = Depends(get_session),
-                        _admin: User = Depends(require_permission("settings:edit"))):
+def create_field_option(
+    data: FieldOptionCreate,
+    db: Session = Depends(get_session),
+    _admin: User = Depends(require_permission("settings:edit")),
+):
     opt = FieldOption(**data.model_dump())
     db.add(opt)
     db.commit()
@@ -1167,8 +1442,12 @@ def create_field_option(data: FieldOptionCreate, db: Session = Depends(get_sessi
 
 
 @router.put("/field-options/{option_id}")
-def update_field_option(option_id: int, data: FieldOptionCreate, db: Session = Depends(get_session),
-                        _admin: User = Depends(require_permission("settings:edit"))):
+def update_field_option(
+    option_id: int,
+    data: FieldOptionCreate,
+    db: Session = Depends(get_session),
+    _admin: User = Depends(require_permission("settings:edit")),
+):
     opt = db.get(FieldOption, option_id)
     if not opt:
         raise HTTPException(status_code=404, detail="选项不存在")
@@ -1182,8 +1461,11 @@ def update_field_option(option_id: int, data: FieldOptionCreate, db: Session = D
 
 
 @router.delete("/field-options/{option_id}", status_code=204)
-def delete_field_option(option_id: int, db: Session = Depends(get_session),
-                        _admin: User = Depends(require_permission("settings:edit"))):
+def delete_field_option(
+    option_id: int,
+    db: Session = Depends(get_session),
+    _admin: User = Depends(require_permission("settings:edit")),
+):
     opt = db.get(FieldOption, option_id)
     if not opt:
         raise HTTPException(status_code=404, detail="选项不存在")
@@ -1192,11 +1474,16 @@ def delete_field_option(option_id: int, db: Session = Depends(get_session),
 
 
 @router.post("/field-options/batch")
-def batch_update_field_options(data: FieldOptionBatchUpdate, db: Session = Depends(get_session),
-                               _admin: User = Depends(require_permission("settings:edit"))):
+def batch_update_field_options(
+    data: FieldOptionBatchUpdate,
+    db: Session = Depends(get_session),
+    _admin: User = Depends(require_permission("settings:edit")),
+):
     """批量更新某个分类的全部选项"""
     # 删除旧的
-    old = db.exec(select(FieldOption).where(FieldOption.category == data.category)).all()
+    old = db.exec(
+        select(FieldOption).where(FieldOption.category == data.category)
+    ).all()
     for o in old:
         db.delete(o)
     # 添加新的
@@ -1207,7 +1494,9 @@ def batch_update_field_options(data: FieldOptionBatchUpdate, db: Session = Depen
 
 
 @router.get("/field-options/categories")
-def list_field_categories(current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+def list_field_categories(
+    current_user: User = Depends(get_current_user), db: Session = Depends(get_session)
+):
     """获取所有选项分类"""
     opts = db.exec(select(FieldOption)).all()
     categories = list(set(o.category for o in opts))
@@ -1216,12 +1505,18 @@ def list_field_categories(current_user: User = Depends(get_current_user), db: Se
 
 # ===== 系统偏好设置 =====
 
+
 @router.get("/preferences")
-def get_preferences(db: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
+def get_preferences(
+    db: Session = Depends(get_session), current_user: User = Depends(get_current_user)
+):
     """获取当前用户的偏好设置（用户设置优先，全局设置为默认）"""
     all_prefs = db.exec(
         select(SystemPreference).where(
-            or_(SystemPreference.user_id == current_user.id, SystemPreference.user_id == None)
+            or_(
+                SystemPreference.user_id == current_user.id,
+                SystemPreference.user_id == None,
+            )
         )
     ).all()
     # 用户级设置优先于全局设置
@@ -1239,7 +1534,11 @@ class PreferenceUpdate(BaseModel):
 
 
 @router.put("/preferences")
-def update_preference(data: PreferenceUpdate, db: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
+def update_preference(
+    data: PreferenceUpdate,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     """更新当前用户的单个偏好设置"""
     pref = db.exec(
         select(SystemPreference).where(
@@ -1259,12 +1558,15 @@ def update_preference(data: PreferenceUpdate, db: Session = Depends(get_session)
 
 # ===== Tavily 联网搜索配置 =====
 
+
 class TavilyConfigUpdate(BaseModel):
     api_key: str
 
 
 @router.get("/tavily-config")
-def get_tavily_config(db: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
+def get_tavily_config(
+    db: Session = Depends(get_session), current_user: User = Depends(get_current_user)
+):
     """获取当前用户的 Tavily API Key（脱敏返回）"""
     pref = db.exec(
         select(SystemPreference).where(
@@ -1278,8 +1580,11 @@ def get_tavily_config(db: Session = Depends(get_session), current_user: User = D
 
 
 @router.put("/tavily-config")
-def update_tavily_config(data: TavilyConfigUpdate, db: Session = Depends(get_session),
-                         current_user: User = Depends(get_current_user)):
+def update_tavily_config(
+    data: TavilyConfigUpdate,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     """更新当前用户的 Tavily API Key；提交脱敏占位值时忽略"""
     if not data.api_key or "****" in data.api_key:
         return {"message": "Tavily API Key 未变更"}
@@ -1292,7 +1597,11 @@ def update_tavily_config(data: TavilyConfigUpdate, db: Session = Depends(get_ses
     if pref:
         pref.value = data.api_key
     else:
-        db.add(SystemPreference(key="tavily_api_key", value=data.api_key, user_id=current_user.id))
+        db.add(
+            SystemPreference(
+                key="tavily_api_key", value=data.api_key, user_id=current_user.id
+            )
+        )
     db.commit()
     return {"message": "Tavily API Key 已保存"}
 
@@ -1339,7 +1648,22 @@ DEFAULT_PROMPTS = {
         "desc": "AI 分析销售项目状态时使用的提示词",
         "system_prompt": "你是销售项目管理助手。严格在100字以内输出：①当前最大卡点或风险（一句话点明）②最关键的下一步行动（一条可执行建议）。不列小标题，不重复已知信息，不写套话。",
         "user_prompt_template": "请分析以下项目：\n\n【基本信息】\n项目名称: {name}\n当前状态: {status}\n涉及产品: {product}\n项目场景: {scenario}\n销售负责人: {sales_person}\n商机金额: {amount}\n\n【客户信息】\n客户名称: {customer_name}\n客户行业: {customer_industry}\n客户规模: {customer_scale}\n核心产品: {customer_products}\n客户简介: {customer_profile}\n\n【跟进记录】\n{progress}\n\n【关联会议】\n{meetings}\n\n请在100字内给出：核心卡点/风险 + 最关键的下一步行动。",
-        "variables": ["{name}", "{status}", "{product}", "{scenario}", "{sales_person}", "{amount}", "{deadline}", "{customer_name}", "{customer_industry}", "{customer_scale}", "{customer_products}", "{customer_profile}", "{progress}", "{meetings}"],
+        "variables": [
+            "{name}",
+            "{status}",
+            "{product}",
+            "{scenario}",
+            "{sales_person}",
+            "{amount}",
+            "{deadline}",
+            "{customer_name}",
+            "{customer_industry}",
+            "{customer_scale}",
+            "{customer_products}",
+            "{customer_profile}",
+            "{progress}",
+            "{meetings}",
+        ],
     },
     "insight_week": {
         "task_type": "insight_week",
@@ -1347,7 +1671,13 @@ DEFAULT_PROMPTS = {
         "desc": "数据看板中本周 AI 综合洞察使用的提示词",
         "system_prompt": "你是 WorkTrack 数据分析助手。根据本周工作数据，从项目进展、日报完成、会议效率、客户动态等维度给出综合洞察。\n要求：\n1. 给出本周最值得关注的 3 个洞察点\n2. 每条以「•」开头，不超过 40 字\n3. 侧重趋势发现和行动建议\n4. 直接输出 3 行，不加序号或其他内容",
         "user_prompt_template": "请分析本周（{range}）工作数据：\n\n项目: {projects_summary}\n客户: {customers_summary}\n会议: {meetings_summary}\n日报: {reports_summary}",
-        "variables": ["{range}", "{projects_summary}", "{customers_summary}", "{meetings_summary}", "{reports_summary}"],
+        "variables": [
+            "{range}",
+            "{projects_summary}",
+            "{customers_summary}",
+            "{meetings_summary}",
+            "{reports_summary}",
+        ],
     },
     "insight_month": {
         "task_type": "insight_month",
@@ -1355,7 +1685,14 @@ DEFAULT_PROMPTS = {
         "desc": "数据看板中本月 AI 综合洞察使用的提示词",
         "system_prompt": "你是 WorkTrack 数据分析助手。根据本月工作数据，分析月度趋势变化、工作效率和团队协作情况，给出综合洞察。\n要求：\n1. 给出本月最值得关注的 3 个洞察点\n2. 每条以「•」开头，不超过 40 字\n3. 侧重月度趋势和结构性问题\n4. 直接输出 3 行，不加序号或其他内容",
         "user_prompt_template": "请分析本月（{range}）工作数据：\n\n项目: {projects_summary}\n客户: {customers_summary}\n会议: {meetings_summary}\n日报: {reports_summary}\n周报: {weeklies_summary}",
-        "variables": ["{range}", "{projects_summary}", "{customers_summary}", "{meetings_summary}", "{reports_summary}", "{weeklies_summary}"],
+        "variables": [
+            "{range}",
+            "{projects_summary}",
+            "{customers_summary}",
+            "{meetings_summary}",
+            "{reports_summary}",
+            "{weeklies_summary}",
+        ],
     },
     "insight_quarter": {
         "task_type": "insight_quarter",
@@ -1363,7 +1700,14 @@ DEFAULT_PROMPTS = {
         "desc": "数据看板中本季度 AI 综合洞察使用的提示词",
         "system_prompt": "你是 WorkTrack 数据分析助手。根据本季度工作数据，进行战略性综合分析，识别季度趋势、瓶颈和优化方向。\n要求：\n1. 给出本季度最关键的 3 个战略洞察\n2. 每条以「•」开头，不超过 40 字\n3. 侧重战略层面和长期改进方向\n4. 直接输出 3 行，不加序号或其他内容",
         "user_prompt_template": "请分析本季度（{range}）工作数据：\n\n项目: {projects_summary}\n客户: {customers_summary}\n会议: {meetings_summary}\n日报: {reports_summary}\n周报: {weeklies_summary}",
-        "variables": ["{range}", "{projects_summary}", "{customers_summary}", "{meetings_summary}", "{reports_summary}", "{weeklies_summary}"],
+        "variables": [
+            "{range}",
+            "{projects_summary}",
+            "{customers_summary}",
+            "{meetings_summary}",
+            "{reports_summary}",
+            "{weeklies_summary}",
+        ],
     },
     # ===== 以下仅供 AI 服务内部使用，不在设置页暴露 =====
     "chat": {
@@ -1447,6 +1791,7 @@ def _resolve_ai_prompt(db: Session, user_id: int, task_type: str) -> dict:
     给业务侧（ai_service、ai_agent）调用；只读，不影响原 get_ai_prompts 接口。
     """
     from app.models.ai_prompt import AIPrompt
+
     default = DEFAULT_PROMPTS.get(task_type)
     if not default:
         return {}
@@ -1457,16 +1802,22 @@ def _resolve_ai_prompt(db: Session, user_id: int, task_type: str) -> dict:
         select(AIPrompt).where(AIPrompt.user_id == 0, AIPrompt.task_type == task_type)
     ).first()
     if gp:
-        if gp.system_prompt: system_prompt = gp.system_prompt
-        if gp.user_prompt_template: user_template = gp.user_prompt_template
+        if gp.system_prompt:
+            system_prompt = gp.system_prompt
+        if gp.user_prompt_template:
+            user_template = gp.user_prompt_template
     # 第3层：用户
     if user_id:
         up = db.exec(
-            select(AIPrompt).where(AIPrompt.user_id == user_id, AIPrompt.task_type == task_type)
+            select(AIPrompt).where(
+                AIPrompt.user_id == user_id, AIPrompt.task_type == task_type
+            )
         ).first()
         if up:
-            if up.system_prompt: system_prompt = up.system_prompt
-            if up.user_prompt_template: user_template = up.user_prompt_template
+            if up.system_prompt:
+                system_prompt = up.system_prompt
+            if up.user_prompt_template:
+                user_template = up.user_prompt_template
     return {
         "task_type": task_type,
         "label": default["label"],
@@ -1477,8 +1828,9 @@ def _resolve_ai_prompt(db: Session, user_id: int, task_type: str) -> dict:
 
 
 @router.get("/ai-prompts")
-def get_ai_prompts(db: Session = Depends(get_session),
-                   current_user: User = Depends(get_current_user)):
+def get_ai_prompts(
+    db: Session = Depends(get_session), current_user: User = Depends(get_current_user)
+):
     """获取当前用户的 AI 提示词配置（三层合并：用户自定义 > 全局 > 代码默认）"""
     global_prompts = {
         p.task_type: p
@@ -1486,7 +1838,9 @@ def get_ai_prompts(db: Session = Depends(get_session),
     }
     user_prompts = {
         p.task_type: p
-        for p in db.exec(select(AIPrompt).where(AIPrompt.user_id == current_user.id)).all()
+        for p in db.exec(
+            select(AIPrompt).where(AIPrompt.user_id == current_user.id)
+        ).all()
     }
     result = {}
     for key, default in DEFAULT_PROMPTS.items():
@@ -1520,7 +1874,9 @@ def get_ai_prompts(db: Session = Depends(get_session),
         # 保存全局值供前端展示"恢复为全局默认"
         if key in global_prompts:
             entry["global_system_prompt"] = global_prompts[key].system_prompt
-            entry["global_user_prompt_template"] = global_prompts[key].user_prompt_template
+            entry["global_user_prompt_template"] = global_prompts[
+                key
+            ].user_prompt_template
         result[key] = entry
     return result
 
@@ -1531,8 +1887,12 @@ class AIPromptUpdate(BaseModel):
 
 
 @router.put("/ai-prompts/{task_type}")
-def update_ai_prompt(task_type: str, data: AIPromptUpdate, db: Session = Depends(get_session),
-                     current_user: User = Depends(get_current_user)):
+def update_ai_prompt(
+    task_type: str,
+    data: AIPromptUpdate,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     """更新当前用户的某个 AI 提示词配置"""
     if task_type not in DEFAULT_PROMPTS:
         raise HTTPException(status_code=404, detail=f"未知任务类型: {task_type}")
@@ -1553,8 +1913,12 @@ def update_ai_prompt(task_type: str, data: AIPromptUpdate, db: Session = Depends
         prompt = AIPrompt(
             user_id=current_user.id,
             task_type=task_type,
-            system_prompt=data.system_prompt if data.system_prompt is not None else default["system_prompt"],
-            user_prompt_template=data.user_prompt_template if data.user_prompt_template is not None else default["user_prompt_template"],
+            system_prompt=data.system_prompt
+            if data.system_prompt is not None
+            else default["system_prompt"],
+            user_prompt_template=data.user_prompt_template
+            if data.user_prompt_template is not None
+            else default["user_prompt_template"],
         )
         db.add(prompt)
     db.commit()
@@ -1562,8 +1926,12 @@ def update_ai_prompt(task_type: str, data: AIPromptUpdate, db: Session = Depends
 
 
 @router.put("/ai-prompts/global/{task_type}")
-def update_global_ai_prompt(task_type: str, data: AIPromptUpdate, db: Session = Depends(get_session),
-                             current_user: User = Depends(require_permission("settings:edit"))):
+def update_global_ai_prompt(
+    task_type: str,
+    data: AIPromptUpdate,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(require_permission("settings:edit")),
+):
     """管理员：更新全局默认 AI 提示词（user_id=0，新用户默认继承）"""
     if task_type not in DEFAULT_PROMPTS:
         raise HTTPException(status_code=404, detail=f"未知任务类型: {task_type}")
@@ -1584,8 +1952,12 @@ def update_global_ai_prompt(task_type: str, data: AIPromptUpdate, db: Session = 
         prompt = AIPrompt(
             user_id=0,
             task_type=task_type,
-            system_prompt=data.system_prompt if data.system_prompt is not None else default["system_prompt"],
-            user_prompt_template=data.user_prompt_template if data.user_prompt_template is not None else default["user_prompt_template"],
+            system_prompt=data.system_prompt
+            if data.system_prompt is not None
+            else default["system_prompt"],
+            user_prompt_template=data.user_prompt_template
+            if data.user_prompt_template is not None
+            else default["user_prompt_template"],
         )
         db.add(prompt)
     db.commit()
@@ -1593,8 +1965,11 @@ def update_global_ai_prompt(task_type: str, data: AIPromptUpdate, db: Session = 
 
 
 @router.delete("/ai-prompts/global/{task_type}")
-def reset_global_ai_prompt(task_type: str, db: Session = Depends(get_session),
-                           current_user: User = Depends(require_permission("settings:edit"))):
+def reset_global_ai_prompt(
+    task_type: str,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(require_permission("settings:edit")),
+):
     """管理员：恢复全局提示词为代码默认值"""
     existing = db.exec(
         select(AIPrompt).where(
@@ -1614,8 +1989,11 @@ class AIPromptGenerateRequest(BaseModel):
 
 
 @router.post("/ai-prompts/generate")
-def generate_ai_prompt(data: AIPromptGenerateRequest, db: Session = Depends(get_session),
-                       current_user: User = Depends(get_current_user)):
+def generate_ai_prompt(
+    data: AIPromptGenerateRequest,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     """AI 根据用户需求描述，生成规范的系统提示词和用户消息模板"""
     if data.task_type not in DEFAULT_PROMPTS:
         raise HTTPException(status_code=404, detail=f"未知任务类型: {data.task_type}")
@@ -1644,7 +2022,9 @@ def generate_ai_prompt(data: AIPromptGenerateRequest, db: Session = Depends(get_
     )
 
     try:
-        base_url, api_key, model, provider = _get_active_provider(db, "chat", current_user.id)
+        base_url, api_key, model, provider = _get_active_provider(
+            db, "chat", current_user.id
+        )
         client = _get_client(base_url, api_key, provider)
         response = client.chat.completions.create(
             model=model,
@@ -1655,11 +2035,19 @@ def generate_ai_prompt(data: AIPromptGenerateRequest, db: Session = Depends(get_
             temperature=0.5,
             max_tokens=800,
         )
-        _record_usage_silent(db, response, current_user.id, getattr(provider, 'id', None), model, "system")
+        _record_usage_silent(
+            db,
+            response,
+            current_user.id,
+            getattr(provider, "id", None),
+            model,
+            "system",
+        )
         text = _extract_message_text(response.choices[0].message)
         # 尝试解析 JSON
         import re as _re
-        match = _re.search(r'\{[\s\S]*\}', text)
+
+        match = _re.search(r"\{[\s\S]*\}", text)
         if match:
             result = json.loads(match.group())
             return {
@@ -1675,8 +2063,11 @@ def generate_ai_prompt(data: AIPromptGenerateRequest, db: Session = Depends(get_
 
 
 @router.delete("/ai-prompts/{task_type}")
-def reset_ai_prompt(task_type: str, db: Session = Depends(get_session),
-                    current_user: User = Depends(get_current_user)):
+def reset_ai_prompt(
+    task_type: str,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     """恢复当前用户的某个 AI 提示词为默认值"""
     existing = db.exec(
         select(AIPrompt).where(
@@ -1712,13 +2103,20 @@ def system_info(db: Session = Depends(get_session)):
 
     # 供应商统计
     configured_count = db.exec(select(func.count(ModelProvider.id))).one() or 0
-    active_count = db.exec(
-        select(func.count(ModelProvider.id)).where(ModelProvider.is_active == True, ModelProvider.api_key != "")
-    ).one() or 0
+    active_count = (
+        db.exec(
+            select(func.count(ModelProvider.id)).where(
+                ModelProvider.is_active == True, ModelProvider.api_key != ""
+            )
+        ).one()
+        or 0
+    )
 
     # 用户数
     total_users = db.exec(select(func.count(User.id))).one() or 0
-    admin_count = db.exec(select(func.count(User.id)).where(User.is_admin == True)).one() or 0
+    admin_count = (
+        db.exec(select(func.count(User.id)).where(User.is_admin == True)).one() or 0
+    )
 
     # 运行时间
     uptime_seconds = int(time.time() - _SERVER_START_TIME)
@@ -1769,7 +2167,7 @@ from fastapi.responses import FileResponse, Response
 
 BRAND_DIR = app_settings.effective_brand_dir
 os.makedirs(BRAND_DIR, exist_ok=True)
-ALLOWED_IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico'}
+ALLOWED_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico"}
 
 # apple-touch-icon 正方形版本文件名（与 logo 同目录）
 _TOUCH_ICON_NAME = "apple-touch-icon-192.png"
@@ -1786,6 +2184,7 @@ def _svg_to_png(source_filepath: str, out_path: str) -> bool:
     成功返回 True，失败返回 False。
     """
     import logging
+
     _logger = logging.getLogger("worktrack")
     try:
         with open(source_filepath, "rb") as f:
@@ -1798,6 +2197,7 @@ def _svg_to_png(source_filepath: str, out_path: str) -> bool:
     # 1) resvg：自带原生库，无需系统依赖
     try:
         from resvg import render, usvg
+
         opts = usvg.Options.default()
         # 加载系统字体（SVG 中可能引用字体）
         try:
@@ -1812,6 +2212,7 @@ def _svg_to_png(source_filepath: str, out_path: str) -> bool:
                 f.write(png_bytes)
             # 验证输出非空（resvg 有时会输出全透明 PNG）
             from PIL import Image as _VImg
+
             vimg = _VImg.open(out_path)
             if vimg.mode == "RGBA":
                 _, _, _, alpha = vimg.split()
@@ -1830,6 +2231,7 @@ def _svg_to_png(source_filepath: str, out_path: str) -> bool:
     # 2) cairosvg
     try:
         import cairosvg
+
         cairosvg.svg2png(url=source_filepath, write_to=out_path)
         _logger.info("SVG→PNG via cairosvg: %s", out_path)
         return True
@@ -1840,6 +2242,7 @@ def _svg_to_png(source_filepath: str, out_path: str) -> bool:
     try:
         from svglib.svglib import svg2rlg
         from reportlab.graphics import renderPM
+
         drawing = svg2rlg(source_filepath)
         if drawing:
             renderPM.drawToFile(drawing, out_path, fmt="PNG")
@@ -1851,7 +2254,9 @@ def _svg_to_png(source_filepath: str, out_path: str) -> bool:
     return False
 
 
-def _generate_square_touch_icon(source_filepath: str, site_title: str = "WorkTrack") -> None:
+def _generate_square_touch_icon(
+    source_filepath: str, site_title: str = "WorkTrack"
+) -> None:
     """将源 logo 处理为正方形 192x192 PNG，作为 iOS apple-touch-icon。
 
     处理逻辑：
@@ -1861,6 +2266,7 @@ def _generate_square_touch_icon(source_filepath: str, site_title: str = "WorkTra
     - 输出 RGB 模式（iOS 不支持透明 PNG 做主屏图标）
     """
     import logging
+
     _logger = logging.getLogger("worktrack")
     ext = os.path.splitext(source_filepath)[1].lower()
     out_path = os.path.join(BRAND_DIR, _TOUCH_ICON_NAME)
@@ -1873,7 +2279,9 @@ def _generate_square_touch_icon(source_filepath: str, site_title: str = "WorkTra
         if ext == ".svg":
             tmp_png = os.path.join(BRAND_DIR, "_tmp_svg_render.png")
             if not _svg_to_png(source_filepath, tmp_png):
-                _logger.warning("SVG 转 PNG 失败，生成首字母占位图作为 apple-touch-icon")
+                _logger.warning(
+                    "SVG 转 PNG 失败，生成首字母占位图作为 apple-touch-icon"
+                )
                 _generate_placeholder_icon(out_path, site_title, bg_color)
                 return
             source_filepath = tmp_png
@@ -1911,7 +2319,11 @@ def _generate_square_touch_icon(source_filepath: str, site_title: str = "WorkTra
             except OSError:
                 pass
     except Exception:
-        _logger.warning("apple-touch-icon 生成失败: %s，使用占位图兜底", source_filepath, exc_info=True)
+        _logger.warning(
+            "apple-touch-icon 生成失败: %s，使用占位图兜底",
+            source_filepath,
+            exc_info=True,
+        )
         try:
             _generate_placeholder_icon(out_path, site_title, bg_color)
         except Exception:
@@ -1921,6 +2333,7 @@ def _generate_square_touch_icon(source_filepath: str, site_title: str = "WorkTra
 def _generate_placeholder_icon(out_path: str, site_title: str, bg_color: tuple) -> None:
     """生成带站点首字母的占位图标（SVG 转换失败时的兜底方案）"""
     from PIL import Image, ImageDraw, ImageFont
+
     canvas = Image.new("RGB", (192, 192), bg_color)
     draw = ImageDraw.Draw(canvas)
     # 取站点标题首字符
@@ -1982,8 +2395,11 @@ def get_branding(db: Session = Depends(get_session)):
 
 
 @router.put("/branding")
-def update_branding(data: BrandConfigUpdate, db: Session = Depends(get_session),
-                    _admin: User = Depends(require_permission("settings:edit"))):
+def update_branding(
+    data: BrandConfigUpdate,
+    db: Session = Depends(get_session),
+    _admin: User = Depends(require_permission("settings:edit")),
+):
     """更新品牌配置（仅管理员）"""
     for key, value in [
         ("brand_site_title", data.site_title),
@@ -2001,17 +2417,27 @@ def update_branding(data: BrandConfigUpdate, db: Session = Depends(get_session),
         else:
             db.add(SystemPreference(key=key, value=value, user_id=None))
     db.commit()
-    return {"message": "品牌配置已保存", "site_title": data.site_title, "logo_url": data.logo_url, "frontend_url": data.frontend_url}
+    return {
+        "message": "品牌配置已保存",
+        "site_title": data.site_title,
+        "logo_url": data.logo_url,
+        "frontend_url": data.frontend_url,
+    }
 
 
 @router.post("/branding/upload-logo")
-async def upload_brand_logo(file: UploadFile = File(...),
-                             _admin: User = Depends(require_permission("settings:edit")),
-                             db: Session = Depends(get_session)):
+async def upload_brand_logo(
+    file: UploadFile = File(...),
+    _admin: User = Depends(require_permission("settings:edit")),
+    db: Session = Depends(get_session),
+):
     """上传品牌 Logo（管理员）"""
     ext = os.path.splitext(file.filename or ".png")[1].lower()
     if ext not in ALLOWED_IMAGE_EXTS:
-        raise HTTPException(status_code=400, detail=f"不支持的文件格式，仅支持: {', '.join(ALLOWED_IMAGE_EXTS)}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的文件格式，仅支持: {', '.join(ALLOWED_IMAGE_EXTS)}",
+        )
     content = await file.read()
     if len(content) > 2 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="文件大小不能超过 2MB")
@@ -2055,7 +2481,13 @@ async def upload_brand_logo(file: UploadFile = File(...),
 @router.get("/branding/logo-file/{filename}")
 def serve_brand_logo(filename: str):
     """获取品牌 Logo 文件"""
+    # 防路径穿越：禁止包含目录分隔符和上级引用
+    if ".." in filename or "/" in filename or "\\" in filename:
+        raise HTTPException(status_code=400, detail="非法文件名")
     filepath = os.path.join(BRAND_DIR, filename)
+    # 二次校验：确保解析后的绝对路径仍在 BRAND_DIR 内
+    if not os.path.abspath(filepath).startswith(os.path.abspath(BRAND_DIR)):
+        raise HTTPException(status_code=400, detail="非法文件路径")
     if not os.path.isfile(filepath):
         raise HTTPException(status_code=404, detail="文件不存在")
     return FileResponse(filepath)
@@ -2095,7 +2527,17 @@ def serve_apple_touch_icon(db: Session = Depends(get_session)):
                 return FileResponse(touch_icon_path, media_type="image/png")
             # 生成失败（理论上不会走到，占位图会兜底），返回原图
             ext = os.path.splitext(potential_name)[1].lower()
-            media = "image/png" if ext in (".png",) else "image/jpeg" if ext in (".jpg", ".jpeg") else "image/webp" if ext == ".webp" else "image/svg+xml" if ext == ".svg" else "image/png"
+            media = (
+                "image/png"
+                if ext in (".png",)
+                else "image/jpeg"
+                if ext in (".jpg", ".jpeg")
+                else "image/webp"
+                if ext == ".webp"
+                else "image/svg+xml"
+                if ext == ".svg"
+                else "image/png"
+            )
             return FileResponse(filepath, media_type=media)
         # 文件名不匹配，尝试查找 BRAND_DIR 中所有 logo_ 文件
         for fname in sorted(os.listdir(BRAND_DIR), reverse=True):
@@ -2112,7 +2554,10 @@ def serve_apple_touch_icon(db: Session = Depends(get_session)):
 
     # 4) 最终回退：返回 1x1 透明 PNG（理论上不会走到）
     import base64
-    blank_png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
+
+    blank_png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    )
     return Response(content=blank_png, media_type="image/png")
 
 
@@ -2134,7 +2579,9 @@ def serve_manifest(db: Session = Depends(get_session)):
     site_title = title_pref.value if title_pref else "WorkTrack"
     # 有自定义 Logo 时用动态 apple-touch-icon 端点（正方形 PNG），否则回退静态图标
     has_logo = bool(logo_pref and logo_pref.value and logo_pref.value.strip())
-    icon_url = "/api/v1/settings/branding/apple-touch-icon" if has_logo else "/pwa-192x192.png"
+    icon_url = (
+        "/api/v1/settings/branding/apple-touch-icon" if has_logo else "/pwa-192x192.png"
+    )
     return {
         "name": site_title,
         "short_name": site_title,
@@ -2145,11 +2592,36 @@ def serve_manifest(db: Session = Depends(get_session)):
         "background_color": "#101720",
         "theme_color": "#101720",
         "icons": [
-            {"src": icon_url, "sizes": "64x64", "type": "image/png", "purpose": "any maskable"},
-            {"src": icon_url, "sizes": "128x128", "type": "image/png", "purpose": "any maskable"},
-            {"src": icon_url, "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
-            {"src": icon_url, "sizes": "256x256", "type": "image/png", "purpose": "any maskable"},
-            {"src": icon_url, "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+            {
+                "src": icon_url,
+                "sizes": "64x64",
+                "type": "image/png",
+                "purpose": "any maskable",
+            },
+            {
+                "src": icon_url,
+                "sizes": "128x128",
+                "type": "image/png",
+                "purpose": "any maskable",
+            },
+            {
+                "src": icon_url,
+                "sizes": "192x192",
+                "type": "image/png",
+                "purpose": "any maskable",
+            },
+            {
+                "src": icon_url,
+                "sizes": "256x256",
+                "type": "image/png",
+                "purpose": "any maskable",
+            },
+            {
+                "src": icon_url,
+                "sizes": "512x512",
+                "type": "image/png",
+                "purpose": "any maskable",
+            },
         ],
     }
 
@@ -2172,8 +2644,10 @@ class MCPConfigUpdate(BaseModel):
 
 
 @router.get("/mcp-config")
-def get_mcp_config(db: Session = Depends(get_session),
-                   _user: User = Depends(require_permission("settings:read"))):
+def get_mcp_config(
+    db: Session = Depends(get_session),
+    _user: User = Depends(require_permission("settings:read")),
+):
     """获取 MCP 配置（需登录；完整 Key 仅对已认证用户返回，用于拷贝到外部工具）"""
     key_pref = db.exec(
         select(SystemPreference).where(
@@ -2196,7 +2670,9 @@ def get_mcp_config(db: Session = Depends(get_session),
     raw_key = key_pref.value if key_pref else ""
     return {
         "api_key": raw_key,
-        "api_key_masked": (raw_key[:12] + "..." + raw_key[-4:]) if len(raw_key) > 16 else raw_key,
+        "api_key_masked": (raw_key[:12] + "..." + raw_key[-4:])
+        if len(raw_key) > 16
+        else raw_key,
         "enabled": enabled_pref.value == "true" if enabled_pref else False,
         "server_url": "/mcp",
         "public_url": url_pref.value if url_pref else "",
@@ -2205,11 +2681,16 @@ def get_mcp_config(db: Session = Depends(get_session),
 
 
 @router.put("/mcp-config")
-def update_mcp_config(data: MCPConfigUpdate, db: Session = Depends(get_session),
-                      _admin: User = Depends(require_permission("settings:edit"))):
+def update_mcp_config(
+    data: MCPConfigUpdate,
+    db: Session = Depends(get_session),
+    _admin: User = Depends(require_permission("settings:edit")),
+):
     """启用/禁用 MCP 服务 + 设置公开访问地址"""
-    for key, value in [("mcp_enabled", "true" if data.enabled else "false"),
-                       ("mcp_public_url", data.public_url)]:
+    for key, value in [
+        ("mcp_enabled", "true" if data.enabled else "false"),
+        ("mcp_public_url", data.public_url),
+    ]:
         if key == "mcp_public_url" and value is None:
             continue
         pref = db.exec(
@@ -2223,13 +2704,18 @@ def update_mcp_config(data: MCPConfigUpdate, db: Session = Depends(get_session),
         else:
             db.add(SystemPreference(key=key, value=value, user_id=None))
     db.commit()
-    return {"enabled": data.enabled, "public_url": data.public_url,
-            "message": "MCP 服务已" + ("启用" if data.enabled else "停用")}
+    return {
+        "enabled": data.enabled,
+        "public_url": data.public_url,
+        "message": "MCP 服务已" + ("启用" if data.enabled else "停用"),
+    }
 
 
 @router.post("/mcp-config/generate-key")
-def generate_mcp_key(db: Session = Depends(get_session),
-                     _admin: User = Depends(require_permission("settings:edit"))):
+def generate_mcp_key(
+    db: Session = Depends(get_session),
+    _admin: User = Depends(require_permission("settings:edit")),
+):
     """生成新的 MCP API Key（旧 Key 立即失效）"""
     new_key = _generate_mcp_key()
     pref = db.exec(
@@ -2248,7 +2734,17 @@ def generate_mcp_key(db: Session = Depends(get_session),
 
 # ──────────────────────────── 邮件服务配置 ────────────────────────────
 
-EMAIL_CONFIG_KEYS = ["enabled", "host", "port", "username", "password", "from_name", "use_tls", "use_ssl", "provider"]
+EMAIL_CONFIG_KEYS = [
+    "enabled",
+    "host",
+    "port",
+    "username",
+    "password",
+    "from_name",
+    "use_tls",
+    "use_ssl",
+    "provider",
+]
 
 
 class EmailConfigUpdate(BaseModel):
@@ -2281,7 +2777,7 @@ def get_email_config(
             SystemPreference.key.startswith("email."),
         )
     ).all()
-    cfg: dict = {r.key[len("email."):]: r.value for r in rows}
+    cfg: dict = {r.key[len("email.") :]: r.value for r in rows}
     result = {
         "enabled": cfg.get("enabled") == "true",
         "host": cfg.get("host", ""),
@@ -2294,6 +2790,7 @@ def get_email_config(
         "provider": cfg.get("provider", "smtp"),
     }
     from app.services.email_service import PROVIDER_PRESETS
+
     result["presets"] = PROVIDER_PRESETS
     return result
 
@@ -2348,6 +2845,7 @@ def test_email_config(
     if not data.to or "@" not in data.to:
         raise HTTPException(400, "请填写有效的收件邮箱")
     from app.services.email_service import test_send
+
     result = test_send(data.to)
     if not result["ok"]:
         raise HTTPException(400, result["message"])
@@ -2364,10 +2862,12 @@ class InvoiceCompanyInfo(BaseModel):
 
 
 @router.get("/invoice-company")
-def get_invoice_company(db: Session = Depends(get_session),
-                        _user: User = Depends(get_current_user)):
+def get_invoice_company(
+    db: Session = Depends(get_session), _user: User = Depends(get_current_user)
+):
     """读取公司基础信息（仅供「系统设置」使用，全员可读以在前端显示当前默认值）"""
     from app.models.legal_entity import LegalEntity
+
     # 优先取「当前 default」的 legal_entity
     default = db.exec(
         select(LegalEntity).where(LegalEntity.is_default == True)  # noqa: E712
@@ -2425,6 +2925,7 @@ def update_invoice_company(
     tax_id = (data.tax_id or "").strip()
 
     from app.models.legal_entity import LegalEntity
+
     # 1) 同步系统偏好（用于 init_db 种子读取）
     _set_global_pref(db, "invoice_company_name", name)
     _set_global_pref(db, "invoice_company_short_name", short)
@@ -2439,10 +2940,21 @@ def update_invoice_company(
         default.tax_id = tax_id
     else:
         # 没有任何 default → 新建
-        db.add(LegalEntity(
-            name=name, short_name=short, tax_id=tax_id,
-            balance=0, is_default=True, is_active=True, sort_order=0,
-        ))
+        db.add(
+            LegalEntity(
+                name=name,
+                short_name=short,
+                tax_id=tax_id,
+                balance=0,
+                is_default=True,
+                is_active=True,
+                sort_order=0,
+            )
+        )
     db.commit()
-    return {"name": name, "short_name": short, "tax_id": tax_id,
-            "message": "公司基础信息已保存"}
+    return {
+        "name": name,
+        "short_name": short,
+        "tax_id": tax_id,
+        "message": "公司基础信息已保存",
+    }

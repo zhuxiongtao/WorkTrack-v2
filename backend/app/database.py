@@ -268,6 +268,9 @@ PERMISSION_DEFS = [
     # 上游管理（供应商 / 通道）
     ("upstream:read", "查看上游", "upstream", "read"),
     ("upstream:edit", "管理上游", "upstream", "edit"),
+    # 报价单
+    ("quote:view",   "查看报价工具",    "quote", "view"),
+    ("quote:create", "导出报价单(PDF)", "quote", "create"),
     # 财务对账
     ("reconcile:read", "查看对账", "reconcile", "read"),
     ("reconcile:edit", "编辑对账", "reconcile", "edit"),
@@ -365,6 +368,7 @@ ROLE_DEFS = {
             "wiki:read", "wiki:create", "wiki:edit",
             "upstream:read",
             "reconcile:read",
+            "quote:view", "quote:create",
             "settings:read",
             "dashboard:read",
             "task:read", "task:create",
@@ -389,6 +393,8 @@ ROLE_DEFS = {
             "customer:read", "customer:create", "customer:edit",
             "contract:read", "contract:create", "contract:edit", "contract:parse", "contract:archive",
             "report:read", "report:create", "report:submit",
+            "upstream:read",
+            "quote:view", "quote:create",
             "ai:use",
             "wiki:read",
             "dashboard:read",
@@ -437,6 +443,7 @@ ROLE_DEFS = {
             "project:read",
             "report:read", "report:submit",
             "upstream:read", "upstream:edit",
+            "quote:view", "quote:create",
             "ai:use",
             "dashboard:read",
             "share:create", "share:read", "share:comment",
@@ -497,6 +504,7 @@ ROLE_DEFS = {
             "upstream:read",
             "reconcile:read",
             "model:read",
+            "quote:view", "quote:create",
             "ai:use",
             "wiki:read",
             "settings:read",

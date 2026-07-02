@@ -22,6 +22,10 @@ class ModelCatalogOut(BaseModel):
     output_price: Optional[float] = None
     cache_read_price: Optional[float] = None
     cache_write_price: Optional[float] = None
+    price_currency: str = "USD"
+    price_unit: str = "美元/百万tokens"
+    price_tiers: Optional[str] = None
+    suppliers_list: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -41,6 +45,9 @@ class ModelCatalogUpdate(BaseModel):
     output_price: Optional[float] = None
     cache_read_price: Optional[float] = None
     cache_write_price: Optional[float] = None
+    price_currency: Optional[str] = None
+    price_unit: Optional[str] = None
+    suppliers_list: Optional[str] = None
 
 
 class ModelCatalogListItem(BaseModel):
@@ -55,6 +62,10 @@ class ModelCatalogListItem(BaseModel):
     output_price: Optional[float] = None
     cache_read_price: Optional[float] = None
     cache_write_price: Optional[float] = None
+    price_currency: str = "USD"
+    price_unit: str = "美元/百万tokens"
+    price_tiers: Optional[str] = None
+    suppliers_list: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -6,34 +6,36 @@ from pydantic import BaseModel, ConfigDict
 
 class ChannelCreate(BaseModel):
     supplier_id: int
-    model_type: str = ""
     name: str
     code: str = ""
-    kind: str = "官网通道"
+    api_protocol: str = "openai_compat"
     status: str = "合作中"
-    cost_price: float = 0.0
-    price_unit: str = "per_1k_token"
-    discount_rate: float = 1.0
-    suggested_markup: float = 0.2
-    contract_start: Optional[str] = None
-    contract_end: Optional[str] = None
+    cost_discount: Optional[float] = None
+    markup: Optional[float] = None
+    cost_source: str = "manual"
+    scope_type: str = "all"
+    model_family: Optional[str] = None
+    model_id: Optional[int] = None
     sla_json: Optional[str] = None
+    access_url: Optional[str] = None
+    usage_url: Optional[str] = None
     remarks: Optional[str] = None
 
 
 class ChannelUpdate(BaseModel):
-    model_type: Optional[str] = None
     name: Optional[str] = None
     code: Optional[str] = None
-    kind: Optional[str] = None
+    api_protocol: Optional[str] = None
     status: Optional[str] = None
-    cost_price: Optional[float] = None
-    price_unit: Optional[str] = None
-    discount_rate: Optional[float] = None
-    suggested_markup: Optional[float] = None
-    contract_start: Optional[str] = None
-    contract_end: Optional[str] = None
+    cost_discount: Optional[float] = None
+    markup: Optional[float] = None
+    cost_source: Optional[str] = None
+    scope_type: Optional[str] = None
+    model_family: Optional[str] = None
+    model_id: Optional[int] = None
     sla_json: Optional[str] = None
+    access_url: Optional[str] = None
+    usage_url: Optional[str] = None
     remarks: Optional[str] = None
 
 
@@ -42,18 +44,20 @@ class ChannelOut(BaseModel):
 
     id: int
     supplier_id: int
-    model_type: str
     name: str
     code: str
-    kind: str
+    api_protocol: str
     status: str
-    cost_price: float
-    price_unit: str
-    discount_rate: float
-    suggested_markup: float
-    contract_start: Optional[str] = None
-    contract_end: Optional[str] = None
+    computed_status: str
+    cost_discount: Optional[float] = None
+    markup: Optional[float] = None
+    cost_source: str
+    scope_type: str
+    model_family: Optional[str] = None
+    model_id: Optional[int] = None
     sla_json: Optional[str] = None
+    access_url: Optional[str] = None
+    usage_url: Optional[str] = None
     inventory_total: int
     inventory_available: int
     active_projects: int
@@ -64,19 +68,20 @@ class ChannelOut(BaseModel):
 
 
 class ChannelSummary(BaseModel):
-    """通道汇总（按模型族 / 通道类型）"""
+    """通道汇总（含供应商名称）"""
     model_config = ConfigDict(from_attributes=True)
 
     channel_id: int
     supplier_id: int
     supplier_name: str
-    model_type: str
     name: str
-    kind: str
+    api_protocol: str
     status: str
-    cost_price: float
-    price_unit: str
-    discount_rate: float
+    computed_status: str
+    cost_discount: Optional[float]
+    markup: Optional[float]
+    scope_type: str
+    model_family: Optional[str]
     inventory_available: int
     active_projects: int
     monthly_cost: float

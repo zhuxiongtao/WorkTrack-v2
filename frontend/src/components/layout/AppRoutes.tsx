@@ -30,6 +30,8 @@ import PurchasesPage from '../../pages/PurchasesPage'
 import AssetsPage from '../../pages/AssetsPage'
 import HiresPage from '../../pages/HiresPage'
 import OACenterPage from '../../pages/OACenterPage'
+import QuotePage from '../../pages/QuotePage'
+import PublicQuotePage from '../../pages/PublicQuotePage'
 
 interface AppRoutesProps {
   homePage: string
@@ -54,6 +56,8 @@ function AppRoutes({ homePage }: AppRoutesProps) {
       <Route path="/channels"      element={<Navigate to="/upstream" replace />} />
       <Route path="/reconcile"     element={hasPermission('reconcile:read') ? <ReconcilePage />    : <Navigate to={homePage} replace />} />
       <Route path="/model-changes" element={hasPermission('model:read') ? <ModelChangePage /> : <Navigate to={homePage} replace />} />
+      <Route path="/quotes"        element={hasPermission('quote:view')   ? <QuotePage />     : <Navigate to={homePage} replace />} />
+      <Route path="/quote/:token"  element={<PublicQuotePage />} />
       <Route path="/customers"     element={hasPermission('customer:read')  ? <CustomersPage />    : <Navigate to={homePage} replace />} />
       <Route path="/contracts"     element={hasPermission('contract:read')  ? <ContractsPage />    : <Navigate to={homePage} replace />} />
       <Route path="/wiki"          element={hasPermission('wiki:read')      ? <WikiPage />         : <Navigate to={homePage} replace />} />

@@ -38,6 +38,7 @@ from app.models import (  # noqa: F401
     BackupRecord,
     HireRequest,
 )
+from app.models.quote_record import QuoteRecord  # noqa: F401
 
 target_metadata = SQLModel.metadata
 

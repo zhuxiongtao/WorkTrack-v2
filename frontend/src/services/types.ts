@@ -191,13 +191,14 @@ export const MODULE_LABELS: Record<string, string> = {
   purchase_supplier: '采购供应商',
   hire: '员工入职',
   approval: '审批流配置',
+  quote: '报价单',
 }
 
 export const PERM_GROUPS = [
   'user', 'project', 'customer', 'contract', 'upstream', 'reconcile',
   'report', 'meeting', 'ai', 'wiki', 'settings', 'model',
   'dashboard', 'task', 'log', 'monitor', 'data',
-  'management', 'share', 'feedback', 'payment', 'seal',
+  'management', 'share', 'feedback', 'payment', 'seal', 'quote',
   // OA 办公模块
   'leave', 'overtime', 'expense', 'trip', 'purchase', 'asset', 'purchase_supplier',
   'hire', 'approval',

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Plus, X, Save, Trash2, Loader2, Key, Globe, Cpu, Settings2, ListChecks, Sparkles, Brain, Eye, EyeOff, Mic, Search, ChevronDown, Home, RotateCcw, Edit3, User, Package, MapPin, Activity, Cloud, Palette, Upload, Copy, Terminal, Zap, Pencil, Sliders, Layers, Megaphone, RefreshCw, CheckCircle2, Power, Mail, Send, Briefcase, Building2, Users, Calendar, Receipt } from 'lucide-react'
+import { Plus, X, Save, Trash2, Loader2, Key, Globe, Cpu, Settings2, ListChecks, Sparkles, Brain, Eye, EyeOff, Mic, Search, ChevronDown, Home, RotateCcw, Edit3, User, Package, MapPin, Activity, Cloud, Palette, Upload, Copy, Terminal, Zap, Pencil, Sliders, Layers, Megaphone, RefreshCw, CheckCircle2, Power, Mail, Send, Briefcase, Building2, Users, Calendar, Receipt, Phone, ClipboardList } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useSearchParams } from 'react-router-dom'
@@ -2883,6 +2883,97 @@ export default function SettingsPage() {
       )}
         </div>
       </div>
+    </div>
+  )
+}
+
+/* ════════════════════════════════════════════
+   报价配置：公司/平台抬头信息
+════════════════════════════════════════════ */
+function QuoteSettingsSection({
+  showToast,
+}: { showToast: (m: string, t?: 'success' | 'error' | 'info' | 'warning') => void }) {
+  const { fetchWithAuth } = useAuth()
+  const [form, setForm] = useState({
+    company_name: '', company_phone: '', company_email: '',
+    company_website: '', company_address: '', platform_name: '', platform_intro: '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    fetchWithAuth('/api/v1/quotes/company-info')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => d && setForm({
+        company_name: d.company_name || '',
+        company_phone: d.company_phone || '',
+        company_email: d.company_email || '',
+        company_website: d.company_website || '',
+        company_address: d.company_address || '',
+        platform_name: d.platform_name || '',
+        platform_intro: d.platform_intro || '',
+      }))
+  }, [fetchWithAuth])
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      const r = await fetchWithAuth('/api/v1/quotes/company-info', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
+      })
+      if (!r.ok) throw new Error()
+      showToast('报价配置已保存', 'success')
+    } catch {
+      showToast('保存失败', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const inp = 'w-full px-3 py-2 rounded-lg bg-white dark:bg-bg-input border border-border text-sm outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all text-gray-900 dark:text-white'
+
+  return (
+    <div className="rounded-xl bg-bg-card border border-border p-5">
+      <div className="flex items-center gap-2 mb-1">
+        <ClipboardList size={18} className="text-accent-blue" />
+        <h3 className="text-base font-semibold text-gray-900 dark:text-white">报价配置</h3>
+      </div>
+      <p className="text-xs text-gray-500 mb-5">配置报价单抬头信息（公司名称、联系方式、平台介绍等），将自动显示在所有导出的报价单上。</p>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+        <div>
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 flex items-center gap-1"><Building2 size={11} />公司名称</label>
+          <input value={form.company_name} onChange={e => setForm(p => ({...p, company_name: e.target.value}))} placeholder="如：某科技有限公司" className={inp} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 flex items-center gap-1"><Globe size={11} />平台名称</label>
+          <input value={form.platform_name} onChange={e => setForm(p => ({...p, platform_name: e.target.value}))} placeholder="如：AI 接入平台" className={inp} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 flex items-center gap-1"><Phone size={11} />联系电话</label>
+          <input value={form.company_phone} onChange={e => setForm(p => ({...p, company_phone: e.target.value}))} placeholder="如：400-xxx-xxxx" className={inp} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 flex items-center gap-1"><Mail size={11} />联系邮箱</label>
+          <input value={form.company_email} onChange={e => setForm(p => ({...p, company_email: e.target.value}))} placeholder="sales@company.com" className={inp} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 flex items-center gap-1"><Globe size={11} />官网地址</label>
+          <input value={form.company_website} onChange={e => setForm(p => ({...p, company_website: e.target.value}))} placeholder="https://company.com" className={inp} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 flex items-center gap-1"><MapPin size={11} />公司地址</label>
+          <input value={form.company_address} onChange={e => setForm(p => ({...p, company_address: e.target.value}))} placeholder="省市区街道" className={inp} />
+        </div>
+      </div>
+      <div className="mb-5">
+        <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">平台简介（显示在报价单抬头下方）</label>
+        <textarea value={form.platform_intro} onChange={e => setForm(p => ({...p, platform_intro: e.target.value}))} rows={3} placeholder="一段介绍平台特色和优势的文字…" className={`${inp} resize-none`} />
+      </div>
+
+      <button onClick={save} disabled={saving} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-blue text-white text-sm font-medium shadow-sm hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 disabled:opacity-60 transition-all">
+        {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+        {saving ? '保存中…' : '保存配置'}
+      </button>
     </div>
   )
 }

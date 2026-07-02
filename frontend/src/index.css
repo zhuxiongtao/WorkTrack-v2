@@ -508,3 +508,51 @@ body {
   0%   { transform: translateX(0); }
   100% { transform: translateX(-50%); }
 }
+
+/* ===== 打印样式（报价单导出） ===== */
+@media print {
+  /* 隐藏所有非打印 UI */
+  .no-print,
+  nav, aside, header,
+  [class*="sidebar"],
+  [class*="Sidebar"],
+  [data-radix-popper-content-wrapper] {
+    display: none !important;
+  }
+
+  /* 重置页面背景和边距 */
+  body, html {
+    background: white !important;
+    color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* 让打印区域铺满整个页面 */
+  #quote-print-area {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 12mm 16mm !important;
+    box-shadow: none !important;
+    border: none !important;
+    transform: none !important;
+  }
+
+  /* 确保预览容器中的缩放不影响打印 */
+  #quote-print-area * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    color-adjust: exact;
+  }
+
+  /* 分页控制 */
+  table { page-break-inside: auto; }
+  tr { page-break-inside: avoid; }
+
+  @page {
+    size: A4;
+    margin: 0;
+  }
+}

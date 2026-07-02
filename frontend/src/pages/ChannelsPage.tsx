@@ -67,6 +67,7 @@ interface ModelCatalogItem {
   output_price: number | null
   cache_read_price: number | null
   cache_write_price: number | null
+  price_currency: string | null
 }
 
 const KINDS = ['官网通道', '号池', '逆向', '官方聚合', '其他']
@@ -97,9 +98,11 @@ function matchProvider(modelType: string): string | null {
   return null
 }
 
-function fmtUSD(v: number | null | undefined) {
+const CURRENCY_SYMBOL: Record<string, string> = { CNY: '¥', RMB: '¥', USD: '$' }
+function fmtUSD(v: number | null | undefined, currency?: string | null) {
   if (v == null) return '—'
-  return `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`
+  const symbol = currency ? (CURRENCY_SYMBOL[currency.toUpperCase()] ?? `${currency} `) : '$'
+  return `${symbol}${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`
 }
 
 function parseSla(json: string | null) {
@@ -576,12 +579,12 @@ function ChannelDetailPanel({
                 <div className="flex gap-3 text-[11px] tabular-nums shrink-0">
                   {p.input_price != null && (
                     <span className="text-emerald-600 dark:text-emerald-400">
-                      输入 {fmtUSD(p.input_price * channel.discount_rate)}/1M
+                      输入 {fmtUSD(p.input_price * channel.discount_rate, p.price_currency)}/1M
                     </span>
                   )}
                   {p.output_price != null && (
                     <span className="text-orange-600 dark:text-orange-400">
-                      输出 {fmtUSD(p.output_price * channel.discount_rate)}/1M
+                      输出 {fmtUSD(p.output_price * channel.discount_rate, p.price_currency)}/1M
                     </span>
                   )}
                 </div>
@@ -786,14 +789,14 @@ function PriceRefTab({ prices, channels, loading }: {
                             <div className="font-semibold text-white">{m.name}</div>
                             {m.version_id && <div className="text-[11px] text-gray-600 font-mono">{m.version_id}</div>}
                           </td>
-                          <td className="px-4 py-2.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400 font-semibold">{fmtUSD(m.input_price)}</td>
-                          <td className="px-4 py-2.5 text-right tabular-nums text-orange-600 dark:text-orange-400 font-semibold">{fmtUSD(m.output_price)}</td>
-                          <td className="px-4 py-2.5 text-right tabular-nums text-blue-600 dark:text-blue-400">{m.cache_read_price != null ? fmtUSD(m.cache_read_price) : '—'}</td>
-                          <td className="px-4 py-2.5 text-right tabular-nums text-violet-600 dark:text-violet-400">{m.cache_write_price != null ? fmtUSD(m.cache_write_price) : '—'}</td>
+                          <td className="px-4 py-2.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400 font-semibold">{fmtUSD(m.input_price, m.price_currency)}</td>
+                          <td className="px-4 py-2.5 text-right tabular-nums text-orange-600 dark:text-orange-400 font-semibold">{fmtUSD(m.output_price, m.price_currency)}</td>
+                          <td className="px-4 py-2.5 text-right tabular-nums text-blue-600 dark:text-blue-400">{m.cache_read_price != null ? fmtUSD(m.cache_read_price, m.price_currency) : '—'}</td>
+                          <td className="px-4 py-2.5 text-right tabular-nums text-violet-600 dark:text-violet-400">{m.cache_write_price != null ? fmtUSD(m.cache_write_price, m.price_currency) : '—'}</td>
                           {linkedChannels.map(c => (
                             <td key={c.id} className="px-4 py-2.5 text-right tabular-nums">
-                              {m.input_price != null && <div className="text-emerald-300/80 text-[11px]">↑ {fmtUSD(m.input_price * c.discount_rate)}</div>}
-                              {m.output_price != null && <div className="text-orange-300/80 text-[11px]">↓ {fmtUSD(m.output_price * c.discount_rate)}</div>}
+                              {m.input_price != null && <div className="text-emerald-300/80 text-[11px]">↑ {fmtUSD(m.input_price * c.discount_rate, m.price_currency)}</div>}
+                              {m.output_price != null && <div className="text-orange-300/80 text-[11px]">↓ {fmtUSD(m.output_price * c.discount_rate, m.price_currency)}</div>}
                             </td>
                           ))}
                         </tr>

@@ -3,7 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select, col, func
 from app.database import get_session
-from app.models.channel import Channel
+from app.models.channel import Channel, compute_channel_status
 from app.models.supplier import Supplier
 from app.models.reconcile import ReconcileSupply
 from app.schemas.channel import ChannelCreate, ChannelUpdate, ChannelOut, ChannelSummary
@@ -12,26 +12,50 @@ from app.auth import require_permission
 router = APIRouter(prefix="/api/v1/channels", tags=["通道管理"])
 
 
+def _supplier_map(db: Session, supplier_ids: list[int]) -> dict[int, Supplier]:
+    if not supplier_ids:
+        return {}
+    rows = db.exec(select(Supplier).where(col(Supplier.id).in_(supplier_ids))).all()
+    return {s.id: s for s in rows}
+
+
+def _to_out(c: Channel, sup: Optional[Supplier]) -> ChannelOut:
+    cs = compute_channel_status(
+        c.status,
+        sup.contract_start if sup else None,
+        sup.contract_end if sup else None,
+    )
+    return ChannelOut(
+        id=c.id, supplier_id=c.supplier_id, name=c.name, code=c.code,
+        api_protocol=c.api_protocol, status=c.status, computed_status=cs,
+        cost_discount=c.cost_discount, markup=c.markup, cost_source=c.cost_source,
+        scope_type=c.scope_type, model_family=c.model_family, model_id=c.model_id,
+        sla_json=c.sla_json,
+        access_url=c.access_url, usage_url=c.usage_url,
+        inventory_total=c.inventory_total, inventory_available=c.inventory_available,
+        active_projects=c.active_projects, monthly_cost=c.monthly_cost,
+        remarks=c.remarks, created_at=c.created_at, updated_at=c.updated_at,
+    )
+
+
 @router.get("", response_model=list[ChannelOut])
 def list_channels(
     supplier_id: Optional[int] = None,
-    model_type: Optional[str] = None,
-    kind: Optional[str] = None,
+    scope_type: Optional[str] = None,
     status: Optional[str] = None,
     db: Session = Depends(get_session),
     current_user=Depends(require_permission("upstream:read")),
 ):
-    """获取通道列表"""
     query = select(Channel).order_by(Channel.supplier_id, col(Channel.id))
     if supplier_id:
         query = query.where(Channel.supplier_id == supplier_id)
-    if model_type:
-        query = query.where(Channel.model_type == model_type)
-    if kind:
-        query = query.where(Channel.kind == kind)
+    if scope_type:
+        query = query.where(Channel.scope_type == scope_type)
     if status:
         query = query.where(Channel.status == status)
-    return db.exec(query).all()
+    channels = db.exec(query).all()
+    smap = _supplier_map(db, list({c.supplier_id for c in channels}))
+    return [_to_out(c, smap.get(c.supplier_id)) for c in channels]
 
 
 @router.get("/summary/all", response_model=list[ChannelSummary])
@@ -39,25 +63,25 @@ def get_channels_summary(
     db: Session = Depends(get_session),
     current_user=Depends(require_permission("upstream:read")),
 ):
-    """通道汇总（含供应商名称）"""
     channels = db.exec(select(Channel).order_by(Channel.supplier_id)).all()
+    smap = _supplier_map(db, list({c.supplier_id for c in channels}))
     result = []
     for c in channels:
-        sup = db.get(Supplier, c.supplier_id)
+        sup = smap.get(c.supplier_id)
+        cs = compute_channel_status(
+            c.status,
+            sup.contract_start if sup else None,
+            sup.contract_end if sup else None,
+        )
         result.append(ChannelSummary(
-            channel_id=c.id,
-            supplier_id=c.supplier_id,
+            channel_id=c.id, supplier_id=c.supplier_id,
             supplier_name=sup.name if sup else "未知",
-            model_type=c.model_type,
-            name=c.name,
-            kind=c.kind,
-            status=c.status,
-            cost_price=c.cost_price,
-            price_unit=c.price_unit,
-            discount_rate=c.discount_rate,
+            name=c.name, api_protocol=c.api_protocol,
+            status=c.status, computed_status=cs,
+            cost_discount=c.cost_discount, markup=c.markup, scope_type=c.scope_type,
+            model_family=c.model_family,
             inventory_available=c.inventory_available,
-            active_projects=c.active_projects,
-            monthly_cost=c.monthly_cost,
+            active_projects=c.active_projects, monthly_cost=c.monthly_cost,
         ))
     return result
 
@@ -68,10 +92,11 @@ def get_channel(
     db: Session = Depends(get_session),
     current_user=Depends(require_permission("upstream:read")),
 ):
-    channel = db.get(Channel, channel_id)
-    if not channel:
+    c = db.get(Channel, channel_id)
+    if not c:
         raise HTTPException(404, "通道不存在")
-    return channel
+    sup = db.get(Supplier, c.supplier_id)
+    return _to_out(c, sup)
 
 
 @router.post("", response_model=ChannelOut)
@@ -80,15 +105,14 @@ def create_channel(
     db: Session = Depends(get_session),
     current_user=Depends(require_permission("upstream:edit")),
 ):
-    """新增通道"""
-    supplier = db.get(Supplier, body.supplier_id)
-    if not supplier:
+    sup = db.get(Supplier, body.supplier_id)
+    if not sup:
         raise HTTPException(400, "供应商不存在")
     obj = Channel(**body.model_dump())
     db.add(obj)
     db.commit()
     db.refresh(obj)
-    return obj
+    return _to_out(obj, sup)
 
 
 @router.put("/{channel_id}", response_model=ChannelOut)
@@ -98,45 +122,17 @@ def update_channel(
     db: Session = Depends(get_session),
     current_user=Depends(require_permission("upstream:edit")),
 ):
-    channel = db.get(Channel, channel_id)
-    if not channel:
+    c = db.get(Channel, channel_id)
+    if not c:
         raise HTTPException(404, "通道不存在")
-    data = body.model_dump(exclude_unset=True)
-    for k, v in data.items():
-        setattr(channel, k, v)
-    db.add(channel)
+    for k, v in body.model_dump(exclude_unset=True).items():
+        setattr(c, k, v)
+    db.add(c)
     db.commit()
-    db.refresh(channel)
-    return channel
+    db.refresh(c)
+    sup = db.get(Supplier, c.supplier_id)
+    return _to_out(c, sup)
 
-
-@router.post("/{channel_id}/submit-approval")
-def submit_channel_approval(
-    channel_id: int,
-    db: Session = Depends(get_session),
-    current_user=Depends(require_permission("upstream:edit")),
-):
-    """提交通道价格变更审批"""
-    from app.services import approval_engine
-    channel = db.get(Channel, channel_id)
-    if not channel:
-        raise HTTPException(404, "通道不存在")
-    if approval_engine.get_active_instance("channel", channel_id, db):
-        raise HTTPException(400, "该通道已有进行中的审批")
-    try:
-        inst = approval_engine.start_approval(
-            "channel", channel_id, channel,
-            f"通道「{channel.name}」价格变更确认", current_user, db,
-        )
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    if inst is None:
-        return {"approval_id": None, "status": "合作中", "message": "无需审批"}
-    if inst.status == "pending":
-        channel.status = "待确认"
-        db.add(channel)
-        db.commit()
-    return {"approval_id": inst.id, "status": channel.status, "message": "已提交价格变更审批"}
 
 
 @router.delete("/{channel_id}")
@@ -145,14 +141,14 @@ def delete_channel(
     db: Session = Depends(get_session),
     current_user=Depends(require_permission("upstream:edit")),
 ):
-    channel = db.get(Channel, channel_id)
-    if not channel:
+    c = db.get(Channel, channel_id)
+    if not c:
         raise HTTPException(404, "通道不存在")
-    linked_supply = db.exec(
+    linked = db.exec(
         select(func.count()).where(ReconcileSupply.channel_id == channel_id)
     ).one()
-    if linked_supply > 0:
-        raise HTTPException(400, f"该通道下有 {linked_supply} 条供应对账记录，请先处理后再删除")
-    db.delete(channel)
+    if linked > 0:
+        raise HTTPException(400, f"该通道下有 {linked} 条供应对账记录，请先处理后再删除")
+    db.delete(c)
     db.commit()
     return {"ok": True}

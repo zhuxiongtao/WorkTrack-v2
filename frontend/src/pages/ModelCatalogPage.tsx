@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { PageHeader, StatusBadge, IconBox, EmptyState } from '../components/design-system'
-import { Cpu, RefreshCw, Globe, Zap, Check, X, Edit3, ExternalLink, Calendar, Sparkles, Loader2, AlertCircle, DollarSign } from 'lucide-react'
+import { PageHeader, StatusBadge, IconBox, EmptyState, Modal, ModalFooter, SectionLabel } from '../components/design-system'
+import { Cpu, RefreshCw, Globe, Zap, Check, X, Edit3, ExternalLink, Calendar, Sparkles, Loader2, AlertCircle, DollarSign, Upload, BookOpen, Activity } from 'lucide-react'
 import SearchableSelect from '../components/SearchableSelect'
 
 interface ModelCatalogItem {
@@ -19,18 +19,32 @@ interface ModelCatalogItem {
   last_seen_at: string | null
   reviewed_at: string | null
   reviewed_by: number | null
-  // 官网公开定价（USD/1M tokens，手动维护）
+  // 官网公开定价（币种由 price_currency 决定，人工维护）
   input_price: number | null
   output_price: number | null
   cache_read_price: number | null
   cache_write_price: number | null
+  price_currency: string
+  price_unit: string
+  price_tiers: string | null
+  suppliers_list: string | null
   created_at: string
   updated_at: string
 }
 
-function fmtP(v: number | null | undefined) {
+const CURRENCY_SYMBOL: Record<string, string> = { CNY: '¥', RMB: '¥', USD: '$' }
+
+function fmtP(v: number | null | undefined, currency?: string) {
   if (v == null) return null
-  return `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`
+  const symbol = CURRENCY_SYMBOL[(currency || 'USD').toUpperCase()] ?? `${currency} `
+  return `${symbol}${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`
+}
+
+type ImportResult = {
+  dry_run: boolean
+  stats: Record<string, Record<string, number>>
+  errors: Array<{ sheet: string; model?: string; reason: string }>
+  message: string
 }
 
 interface RefreshStatus {
@@ -57,6 +71,12 @@ export default function ModelCatalogPage() {
   const [search, setSearch] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
+
+  // 批量导入
+  const [showImport, setShowImport] = useState(false)
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importResult, setImportResult] = useState<ImportResult | null>(null)
+  const [importLoading, setImportLoading] = useState(false)
 
   const showToast = (kind: 'ok' | 'err', text: string) => {
     setToast({ kind, text })
@@ -102,6 +122,29 @@ export default function ModelCatalogPage() {
       showToast('err', e?.message || '请求失败')
     } finally {
       setRefreshing(false)
+    }
+  }
+
+  const handleImportRun = async (dry: boolean) => {
+    if (!importFile) return
+    setImportLoading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', importFile)
+      const res = await fetchWithAuth(`/api/v1/models/import?dry_run=${dry}`, { method: 'POST', body: fd })
+      let data: Record<string, unknown>
+      try { data = await res.json() } catch { showToast('err', `服务器错误 (${res.status})`); return }
+      if (!res.ok) { showToast('err', (data.detail as string) || '操作失败'); return }
+      setImportResult(data as ImportResult)
+      if (!dry) {
+        showToast('ok', (data.message as string) || '导入完成')
+        await loadData()
+        setShowImport(false); setImportFile(null); setImportResult(null)
+      }
+    } catch (e: any) {
+      showToast('err', e?.message || '网络错误')
+    } finally {
+      setImportLoading(false)
     }
   }
 
@@ -215,6 +258,14 @@ export default function ModelCatalogPage() {
         icon={Cpu}
         title="模型管理"
         description="Tavily 自动联网采集国内外知名大模型，管理员审校后才对业务可见"
+        right={
+          <button
+            onClick={() => setShowImport(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-bg-card text-gray-600 dark:text-gray-400 text-xs font-medium hover:border-accent-blue/50 hover:text-accent-blue transition-all cursor-pointer"
+          >
+            <Upload size={14} />批量导入
+          </button>
+        }
       />
 
       {/* 状态条 */}
@@ -438,45 +489,59 @@ export default function ModelCatalogPage() {
                             </p>
                           )
                         )}
-                        {/* 官网定价（USD/1M tokens） */}
+                        {/* 官网定价（币种可切换） */}
                         {isEditing ? (
-                          <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-2">
-                            {[
-                              { key: 'input_price' as const, label: '输入价 $/1M' },
-                              { key: 'output_price' as const, label: '输出价 $/1M' },
-                              { key: 'cache_read_price' as const, label: '缓存读 $/1M' },
-                              { key: 'cache_write_price' as const, label: '缓存写 $/1M' },
-                            ].map(({ key, label }) => (
-                              <div key={key}>
-                                <div className="text-[11px] text-gray-500 mb-0.5">{label}</div>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
-                                  value={editDraft[key] ?? ''}
-                                  onChange={e => setEditDraft({ ...editDraft, [key]: e.target.value === '' ? null : parseFloat(e.target.value) })}
-                                  placeholder="—"
-                                  className="w-full px-1.5 py-0.5 text-xs rounded bg-bg-input border border-border outline-none"
-                                />
-                              </div>
-                            ))}
+                          <div className="mt-2 space-y-2">
+                            <div className="w-32">
+                              <div className="text-[11px] text-gray-500 mb-0.5">价格币种</div>
+                              <SearchableSelect
+                                options={[{ value: 'USD', label: 'USD ($)' }, { value: 'CNY', label: 'CNY (¥)' }]}
+                                value={editDraft.price_currency ?? 'USD'}
+                                onChange={(v) => setEditDraft({ ...editDraft, price_currency: (v as string) || 'USD' })}
+                                size="sm"
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                              {[
+                                { key: 'input_price' as const, label: `输入价 ${CURRENCY_SYMBOL[(editDraft.price_currency || 'USD').toUpperCase()] ?? '$'}/1M` },
+                                { key: 'output_price' as const, label: `输出价 ${CURRENCY_SYMBOL[(editDraft.price_currency || 'USD').toUpperCase()] ?? '$'}/1M` },
+                                { key: 'cache_read_price' as const, label: `缓存读 ${CURRENCY_SYMBOL[(editDraft.price_currency || 'USD').toUpperCase()] ?? '$'}/1M` },
+                                { key: 'cache_write_price' as const, label: `缓存写 ${CURRENCY_SYMBOL[(editDraft.price_currency || 'USD').toUpperCase()] ?? '$'}/1M` },
+                              ].map(({ key, label }) => (
+                                <div key={key}>
+                                  <div className="text-[11px] text-gray-500 mb-0.5">{label}</div>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={editDraft[key] ?? ''}
+                                    onChange={e => setEditDraft({ ...editDraft, [key]: e.target.value === '' ? null : parseFloat(e.target.value) })}
+                                    placeholder="—"
+                                    className="w-full px-1.5 py-0.5 text-xs rounded bg-bg-input border border-border outline-none"
+                                  />
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         ) : (item.input_price != null || item.output_price != null || item.cache_read_price != null || item.cache_write_price != null) ? (
                           <div className="mt-1.5 flex items-center gap-3 flex-wrap text-[11px]">
                             <span className="flex items-center gap-0.5 text-gray-500">
-                              <DollarSign size={10} />官网定价:
+                              <DollarSign size={10} />官网定价（{item.price_unit || (item.price_currency === 'CNY' ? '元/百万tokens' : '美元/百万tokens')}）:
                             </span>
                             {item.input_price != null && (
-                              <span className="text-emerald-500 font-mono font-semibold">输入 {fmtP(item.input_price)}/1M</span>
+                              <span className="text-emerald-500 font-mono font-semibold">输入 {fmtP(item.input_price, item.price_currency)}</span>
                             )}
                             {item.output_price != null && (
-                              <span className="text-orange-500 font-mono font-semibold">输出 {fmtP(item.output_price)}/1M</span>
+                              <span className="text-orange-500 font-mono font-semibold">输出 {fmtP(item.output_price, item.price_currency)}</span>
                             )}
                             {item.cache_read_price != null && (
-                              <span className="text-blue-400 font-mono">缓存读 {fmtP(item.cache_read_price)}/1M</span>
+                              <span className="text-blue-400 font-mono">缓存读 {fmtP(item.cache_read_price, item.price_currency)}</span>
                             )}
                             {item.cache_write_price != null && (
-                              <span className="text-violet-400 font-mono">缓存写 {fmtP(item.cache_write_price)}/1M</span>
+                              <span className="text-violet-400 font-mono">缓存写 {fmtP(item.cache_write_price, item.price_currency)}</span>
+                            )}
+                            {item.price_tiers && (
+                              <span className="text-gray-500">（含阶梯计价）</span>
                             )}
                           </div>
                         ) : null}
@@ -553,7 +618,94 @@ export default function ModelCatalogPage() {
           {toast.text}
         </div>
       )}
+
+      {/* 批量导入弹窗 */}
+      {showImport && (
+        <ImportModal
+          importFile={importFile} setImportFile={setImportFile}
+          importResult={importResult} setImportResult={setImportResult}
+          loading={importLoading}
+          onDryRun={() => handleImportRun(true)}
+          onConfirm={() => handleImportRun(false)}
+          onClose={() => { setShowImport(false); setImportFile(null); setImportResult(null) }}
+        />
+      )}
     </div>
+  )
+}
+
+/* ──── 批量导入弹窗 ──── */
+function ImportModal({ importFile, setImportFile, importResult, setImportResult, loading, onDryRun, onConfirm, onClose }: {
+  importFile: File | null; setImportFile: (f: File | null) => void
+  importResult: ImportResult | null; setImportResult: (r: ImportResult | null) => void
+  loading: boolean; onDryRun: () => void; onConfirm: () => void; onClose: () => void
+}) {
+  const hasResult = importResult != null
+
+  return (
+    <Modal icon={Cpu} title="批量导入模型基础列表" subtitle="含阶梯计价合并、地域自动推断，先预检再确认写入" tone="blue" size="2xl" onClose={onClose}>
+      <div className="space-y-4">
+        <div>
+          <SectionLabel>选择文件</SectionLabel>
+          <div className="flex items-center gap-2">
+            <label className="flex-1 flex items-center gap-2 px-3 py-2.5 rounded-lg bg-bg-input border border-dashed border-border hover:border-accent-blue/50 cursor-pointer text-xs transition-all">
+              <input type="file" accept=".xlsx" className="hidden" onChange={e => { setImportFile(e.target.files?.[0] || null); setImportResult(null) }} />
+              <span className="text-gray-500">{importFile ? importFile.name : '点击选择 .xlsx 文件'}</span>
+              {importFile && <X size={13} className="ml-auto text-gray-400 hover:text-red-400" onClick={e => { e.preventDefault(); setImportFile(null); setImportResult(null) }} />}
+            </label>
+            <a href="/api/v1/models/import/template" download className="shrink-0 flex items-center gap-1.5 px-3 py-2.5 rounded-lg border border-border bg-bg-card text-gray-600 dark:text-gray-400 text-xs hover:border-accent-blue/50 hover:text-accent-blue transition-all">
+              <BookOpen size={13} />模板
+            </a>
+          </div>
+          <p className="mt-1.5 text-[11px] text-gray-500">列头格式请以模板为准，Sheet 名须完整保留；多档阶梯计价同名模型多行即可自动合并。「地域」列可留空自动推断，也可手动填「国内/国际」覆盖。</p>
+        </div>
+
+        {hasResult && importResult && (
+          <div className="rounded-xl border border-border/60 bg-bg-hover/20 overflow-hidden">
+            <div className="px-3 py-2 border-b border-border/40 flex items-center gap-2">
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">预检结果</span>
+              <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${importResult.errors.length > 0 ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                {importResult.errors.length > 0 ? `${importResult.errors.length} 条错误` : '无错误'}
+              </span>
+            </div>
+            <div className="p-3 grid grid-cols-2 gap-2">
+              {Object.entries(importResult.stats).map(([sheet, counts]) => (
+                Object.entries(counts).map(([action, count]) => (
+                  <div key={`${sheet}-${action}`} className="flex items-center justify-between text-xs rounded-lg bg-bg-input/50 px-2.5 py-2">
+                    <span className="text-gray-500">模型 · {action === 'create' ? '新增' : '更新'}</span>
+                    <span className={`font-bold tabular-nums ${action === 'create' ? 'text-emerald-400' : 'text-blue-400'}`}>{count}</span>
+                  </div>
+                ))
+              ))}
+            </div>
+            {importResult.errors.length > 0 && (
+              <div className="px-3 pb-3">
+                <div className="text-[11px] font-semibold text-red-400 mb-1.5">错误明细</div>
+                <div className="space-y-1 max-h-32 overflow-y-auto">
+                  {importResult.errors.map((e, i) => (
+                    <div key={i} className="text-[11px] text-red-300 bg-red-500/5 border border-red-500/10 rounded px-2 py-1">
+                      {e.model ? `${e.model}: ` : ''}{e.reason}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      <ModalFooter onClose={onClose} saving={loading} tone="blue"
+        leftHint={hasResult && importResult?.errors.length === 0 ? '预检通过，点击确认导入写入数据库' : '请先点击「预检」确认无误后再写入'}
+        rightExtra={
+          <button onClick={onDryRun} disabled={!importFile || loading}
+            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg border border-border bg-bg-card text-gray-600 dark:text-gray-400 text-xs font-semibold hover:border-accent-blue/50 hover:text-accent-blue transition-all disabled:opacity-40">
+            {loading ? <Loader2 size={13} className="animate-spin" /> : <Activity size={13} />}预检
+          </button>
+        }
+        onSave={onConfirm}
+        saveText="确认导入"
+        saveDisabled={!importFile || loading || !hasResult || (importResult?.errors.length ?? 0) > 0}
+      />
+    </Modal>
   )
 }
 

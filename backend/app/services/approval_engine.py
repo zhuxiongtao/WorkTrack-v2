@@ -14,6 +14,7 @@
 - dept_manager→ 发起人所属部门（逐级向上）最近的部门负责人
 - user        → 指定 user_id
 """
+
 import json
 from datetime import datetime, timezone
 from app.utils.time import BEIJING_TZ, now
@@ -32,9 +33,11 @@ def _now() -> datetime:
 
 # ──────────────────────────── 审批人解析 ────────────────────────────
 
+
 def _resolve_dept_manager(submitter: User, db: Session) -> list[int]:
     """从发起人所属部门逐级向上，取最近一个有效部门负责人。"""
     from app.models.department import Department
+
     dept_id = submitter.department_id
     visited: set[int] = set()
     while dept_id and dept_id not in visited:
@@ -48,8 +51,13 @@ def _resolve_dept_manager(submitter: User, db: Session) -> list[int]:
     return []
 
 
-def resolve_approvers(approver_type: str, approver_value: str, submitter: User, db: Session,
-                      target_obj=None) -> list[int]:
+def resolve_approvers(
+    approver_type: str,
+    approver_value: str,
+    submitter: User,
+    db: Session,
+    target_obj=None,
+) -> list[int]:
     """把单个节点的审批人定义解析成 user_id 列表（去掉发起人自己，避免自审）
 
     target_obj: 业务对象（如 HireRequest），仅 target_dept_manager 类型用到，用于按业务对象所在部门解析负责人。
@@ -80,7 +88,9 @@ def resolve_approvers(approver_type: str, approver_value: str, submitter: User, 
     elif approver_type == "target_dept_manager":
         # 「业务对象所在部门负责人」：从 target_obj.department_id 解析
         # 适用场景：入职申请按候选人拟入职部门路由审批人，而非按申请人(HR)所在部门
-        target_dept_id = getattr(target_obj, "department_id", None) if target_obj else None
+        target_dept_id = (
+            getattr(target_obj, "department_id", None) if target_obj else None
+        )
         if target_dept_id:
             dept = db.get(Department, target_dept_id)
             if dept and dept.manager_id:
@@ -88,14 +98,25 @@ def resolve_approvers(approver_type: str, approver_value: str, submitter: User, 
 
     elif approver_type == "role":
         from app.models.rbac import Role, UserRole, DepartmentRole
+
         role = db.exec(select(Role).where(Role.code == approver_value)).first()
         if role:
-            uids = set(db.exec(select(UserRole.user_id).where(UserRole.role_id == role.id)).all())
-            dept_ids = list(db.exec(
-                select(DepartmentRole.department_id).where(DepartmentRole.role_id == role.id)
-            ).all())
+            uids = set(
+                db.exec(
+                    select(UserRole.user_id).where(UserRole.role_id == role.id)
+                ).all()
+            )
+            dept_ids = list(
+                db.exec(
+                    select(DepartmentRole.department_id).where(
+                        DepartmentRole.role_id == role.id
+                    )
+                ).all()
+            )
             if dept_ids:
-                members = db.exec(select(User.id).where(User.department_id.in_(dept_ids))).all()
+                members = db.exec(
+                    select(User.id).where(User.department_id.in_(dept_ids))
+                ).all()
                 uids.update(members)
             ids = list(uids)
 
@@ -103,7 +124,9 @@ def resolve_approvers(approver_type: str, approver_value: str, submitter: User, 
     ids = list(set(ids))
     if ids:
         active = db.exec(
-            select(User.id).where(User.id.in_(ids), User.status == "active", User.is_active == True)  # noqa: E712
+            select(User.id).where(
+                User.id.in_(ids), User.status == "active", User.is_active == True
+            )  # noqa: E712
         ).all()
         ids = list(active)
     return ids
@@ -194,7 +217,10 @@ def match_flow(business_type: str, target_obj, db: Session) -> Optional[Approval
 
 # ──────────────────────────── 发起审批 ────────────────────────────
 
-def get_active_instance(target_type: str, target_id: int, db: Session) -> Optional[ApprovalInstance]:
+
+def get_active_instance(
+    target_type: str, target_id: int, db: Session
+) -> Optional[ApprovalInstance]:
     """获取某业务数据进行中的审批实例"""
     return db.exec(
         select(ApprovalInstance).where(
@@ -205,8 +231,14 @@ def get_active_instance(target_type: str, target_id: int, db: Session) -> Option
     ).first()
 
 
-def start_approval(target_type: str, target_id: int, target_obj, title: str,
-                   submitter: User, db: Session) -> Optional[ApprovalInstance]:
+def start_approval(
+    target_type: str,
+    target_id: int,
+    target_obj,
+    title: str,
+    submitter: User,
+    db: Session,
+) -> Optional[ApprovalInstance]:
     """发起审批。返回实例；若该业务类型无匹配模板（无需审批）返回 None。
 
     预检：若匹配到审批流但所有节点审批人均为空，抛 ValueError 拒绝提交，
@@ -225,23 +257,28 @@ def start_approval(target_type: str, target_id: int, target_obj, title: str,
     snapshot = []
     for n in nodes:
         approver_ids = resolve_approvers(
-            n.get("approver_type", ""), str(n.get("approver_value", "")), submitter, db,
+            n.get("approver_type", ""),
+            str(n.get("approver_value", "")),
+            submitter,
+            db,
             target_obj=target_obj,
         )
-        snapshot.append({
-            "name": n.get("name", ""),
-            "order": n.get("order", 0),
-            "approver_type": n.get("approver_type", ""),
-            "approver_value": n.get("approver_value", ""),
-            # 节点类型：approval（审批意见，同意/驳回）| execution（执行确认，如出纳付款、盖章）
-            "node_kind": n.get("node_kind", "approval"),
-            # 执行节点的动作按钮文案，如「确认付款」「确认盖章」；为空时前端用默认「通过」
-            "action_label": n.get("action_label", ""),
-            "approver_ids": approver_ids,
-            "status": "pending",
-            "decided_by": None,
-            "decided_at": None,
-        })
+        snapshot.append(
+            {
+                "name": n.get("name", ""),
+                "order": n.get("order", 0),
+                "approver_type": n.get("approver_type", ""),
+                "approver_value": n.get("approver_value", ""),
+                # 节点类型：approval（审批意见，同意/驳回）| execution（执行确认，如出纳付款、盖章）
+                "node_kind": n.get("node_kind", "approval"),
+                # 执行节点的动作按钮文案，如「确认付款」「确认盖章」；为空时前端用默认「通过」
+                "action_label": n.get("action_label", ""),
+                "approver_ids": approver_ids,
+                "status": "pending",
+                "decided_by": None,
+                "decided_at": None,
+            }
+        )
 
     # 预检：所有节点审批人均为空时拒绝提交（避免单据被自动放行）
     empty_nodes = [s["name"] for s in snapshot if not s.get("approver_ids")]
@@ -266,10 +303,16 @@ def start_approval(target_type: str, target_id: int, target_obj, title: str,
     db.commit()
     db.refresh(inst)
 
-    db.add(ApprovalRecord(
-        instance_id=inst.id, node_index=-1, node_name="发起申请",
-        approver_id=submitter.id, action="submit", comment="",
-    ))
+    db.add(
+        ApprovalRecord(
+            instance_id=inst.id,
+            node_index=-1,
+            node_name="发起申请",
+            approver_id=submitter.id,
+            action="submit",
+            comment="",
+        )
+    )
     db.commit()
 
     # 跳过开头连续的「无审批人」节点（自动通过），避免流程卡死
@@ -289,10 +332,16 @@ def _auto_skip_empty(instance: ApprovalInstance, actor_id: int, db: Session) -> 
     while idx < len(snapshot) and not snapshot[idx].get("approver_ids"):
         snapshot[idx]["status"] = "approved"
         snapshot[idx]["decided_at"] = _now().isoformat()
-        db.add(ApprovalRecord(
-            instance_id=instance.id, node_index=idx, node_name=snapshot[idx]["name"],
-            approver_id=actor_id, action="approve", comment="（无可用审批人，系统自动通过）",
-        ))
+        db.add(
+            ApprovalRecord(
+                instance_id=instance.id,
+                node_index=idx,
+                node_name=snapshot[idx]["name"],
+                approver_id=actor_id,
+                action="approve",
+                comment="（无可用审批人，系统自动通过）",
+            )
+        )
         idx += 1
         changed = True
     if changed:
@@ -307,9 +356,22 @@ def _auto_skip_empty(instance: ApprovalInstance, actor_id: int, db: Session) -> 
 
 # ──────────────────────────── 审批动作 ────────────────────────────
 
-def act(instance: ApprovalInstance, approver: User, action: str, comment: str, db: Session) -> ApprovalInstance:
-    """审批（approve）或驳回（reject）当前节点。"""
-    if instance.status != "pending":
+
+def act(
+    instance: ApprovalInstance, approver: User, action: str, comment: str, db: Session
+) -> ApprovalInstance:
+    """审批（approve）或驳回（reject）当前节点。
+
+    使用 SELECT FOR UPDATE 锁定实例行，防止并发审批同一实例导致状态不一致。
+    """
+    # 行级锁：防止并发审批同一实例（先刷新获取最新数据再锁定）
+    db.refresh(instance)
+    locked = db.exec(
+        select(ApprovalInstance)
+        .where(ApprovalInstance.id == instance.id)
+        .with_for_update()
+    ).first()
+    if not locked or locked.status != "pending":
         raise ValueError("该审批已结束，无法操作")
 
     snapshot = json.loads(instance.nodes_snapshot)
@@ -327,10 +389,16 @@ def act(instance: ApprovalInstance, approver: User, action: str, comment: str, d
         node["decided_at"] = _now().isoformat()
         instance.nodes_snapshot = json.dumps(snapshot, ensure_ascii=False)
         db.add(instance)
-        db.add(ApprovalRecord(
-            instance_id=instance.id, node_index=idx, node_name=node["name"],
-            approver_id=approver.id, action="reject", comment=comment,
-        ))
+        db.add(
+            ApprovalRecord(
+                instance_id=instance.id,
+                node_index=idx,
+                node_name=node["name"],
+                approver_id=approver.id,
+                action="reject",
+                comment=comment,
+            )
+        )
         db.commit()
         _finish(instance, "rejected", db)
         return instance
@@ -339,19 +407,31 @@ def act(instance: ApprovalInstance, approver: User, action: str, comment: str, d
         node["status"] = "approved"
         node["decided_by"] = approver.id
         node["decided_at"] = _now().isoformat()
-        db.add(ApprovalRecord(
-            instance_id=instance.id, node_index=idx, node_name=node["name"],
-            approver_id=approver.id, action="approve", comment=comment,
-        ))
+        db.add(
+            ApprovalRecord(
+                instance_id=instance.id,
+                node_index=idx,
+                node_name=node["name"],
+                approver_id=approver.id,
+                action="approve",
+                comment=comment,
+            )
+        )
         next_idx = idx + 1
         # 跳过后续无审批人的节点
         while next_idx < len(snapshot) and not snapshot[next_idx].get("approver_ids"):
             snapshot[next_idx]["status"] = "approved"
             snapshot[next_idx]["decided_at"] = _now().isoformat()
-            db.add(ApprovalRecord(
-                instance_id=instance.id, node_index=next_idx, node_name=snapshot[next_idx]["name"],
-                approver_id=approver.id, action="approve", comment="（无可用审批人，系统自动通过）",
-            ))
+            db.add(
+                ApprovalRecord(
+                    instance_id=instance.id,
+                    node_index=next_idx,
+                    node_name=snapshot[next_idx]["name"],
+                    approver_id=approver.id,
+                    action="approve",
+                    comment="（无可用审批人，系统自动通过）",
+                )
+            )
             next_idx += 1
         instance.current_node_index = next_idx
         instance.nodes_snapshot = json.dumps(snapshot, ensure_ascii=False)
@@ -369,15 +449,27 @@ def act(instance: ApprovalInstance, approver: User, action: str, comment: str, d
 
 
 def cancel(instance: ApprovalInstance, user: User, db: Session) -> ApprovalInstance:
-    """发起人或管理员撤回审批"""
-    if instance.status != "pending":
+    """发起人或管理员撤回审批（行级锁防并发）"""
+    db.refresh(instance)
+    locked = db.exec(
+        select(ApprovalInstance)
+        .where(ApprovalInstance.id == instance.id)
+        .with_for_update()
+    ).first()
+    if not locked or locked.status != "pending":
         raise ValueError("该审批已结束，无法撤回")
     if instance.submitted_by != user.id and not user.is_admin:
         raise PermissionError("只有发起人可以撤回审批")
-    db.add(ApprovalRecord(
-        instance_id=instance.id, node_index=instance.current_node_index,
-        node_name="撤回", approver_id=user.id, action="cancel", comment="",
-    ))
+    db.add(
+        ApprovalRecord(
+            instance_id=instance.id,
+            node_index=instance.current_node_index,
+            node_name="撤回",
+            approver_id=user.id,
+            action="cancel",
+            comment="",
+        )
+    )
     db.commit()
     _finish(instance, "cancelled", db)
     return instance
@@ -386,6 +478,7 @@ def cancel(instance: ApprovalInstance, user: User, db: Session) -> ApprovalInsta
 def _notify_current_node(instance: ApprovalInstance) -> None:
     """邮件通知当前节点的审批人（后台线程，不阻塞请求）"""
     import threading
+
     snap_str = instance.nodes_snapshot
     idx = instance.current_node_index
     inst_id = instance.id
@@ -394,6 +487,7 @@ def _notify_current_node(instance: ApprovalInstance) -> None:
     def _run():
         try:
             from app.services.email_service import notify_approval_pending
+
             snap = json.loads(snap_str)
             if idx < len(snap):
                 approver_ids = snap[idx].get("approver_ids", [])
@@ -401,7 +495,10 @@ def _notify_current_node(instance: ApprovalInstance) -> None:
                     notify_approval_pending(instance, approver_ids)
         except Exception as e:
             import logging
-            logging.getLogger("worktrack.approval").warning("审批通知邮件失败(#%s): %s", inst_id, e)
+
+            logging.getLogger("worktrack.approval").warning(
+                "审批通知邮件失败(#%s): %s", inst_id, e
+            )
 
     threading.Thread(target=_run, daemon=True).start()
 
@@ -417,18 +514,26 @@ def _finish(instance: ApprovalInstance, status: str, db: Session) -> None:
     _on_finished(instance, db)
     # 邮件通知发起人审批结果（后台线程，不阻塞请求）
     import threading
+
     submitted_by = instance.submitted_by
     inst_id = instance.id
 
     def _notify_finished():
         try:
-            from app.services.email_service import notify_approval_finished, _get_user_emails
+            from app.services.email_service import (
+                notify_approval_finished,
+                _get_user_emails,
+            )
+
             email_map = _get_user_emails([submitted_by])
             submitter_email = email_map.get(submitted_by)
             notify_approval_finished(instance, submitter_email)
         except Exception as e:
             import logging
-            logging.getLogger("worktrack.approval").warning("审批结果通知邮件失败(#%s): %s", inst_id, e)
+
+            logging.getLogger("worktrack.approval").warning(
+                "审批结果通知邮件失败(#%s): %s", inst_id, e
+            )
 
     threading.Thread(target=_notify_finished, daemon=True).start()
 
@@ -440,6 +545,7 @@ def _on_finished(instance: ApprovalInstance, db: Session) -> None:
     """
     if instance.target_type == "contract":
         from app.models.contract import Contract
+
         c = db.get(Contract, instance.target_id)
         if c:
             if instance.status == "approved":
@@ -454,6 +560,7 @@ def _on_finished(instance: ApprovalInstance, db: Session) -> None:
 
     elif instance.target_type == "reconcile_summary":
         from app.models.reconcile import ReconcileSummary
+
         s = db.get(ReconcileSummary, instance.target_id)
         if s:
             if instance.status == "approved":
@@ -468,6 +575,7 @@ def _on_finished(instance: ApprovalInstance, db: Session) -> None:
 
     elif instance.target_type == "project":
         from app.models.project import Project
+
         p = db.get(Project, instance.target_id)
         if p:
             if instance.status == "approved":
@@ -482,6 +590,7 @@ def _on_finished(instance: ApprovalInstance, db: Session) -> None:
 
     elif instance.target_type == "supplier":
         from app.models.supplier import Supplier
+
         s = db.get(Supplier, instance.target_id)
         if s:
             if instance.status == "approved":
@@ -496,6 +605,7 @@ def _on_finished(instance: ApprovalInstance, db: Session) -> None:
 
     elif instance.target_type == "channel":
         from app.models.channel import Channel
+
         c = db.get(Channel, instance.target_id)
         if c:
             if instance.status == "approved":
@@ -508,10 +618,11 @@ def _on_finished(instance: ApprovalInstance, db: Session) -> None:
 
     elif instance.target_type == "payment":
         from app.models.payment import PaymentRequest
+
         p = db.get(PaymentRequest, instance.target_id)
         if p:
             if instance.status == "approved":
-                p.status = "已付款"   # 审批链含「出纳付款」执行节点，全部通过即已付款
+                p.status = "已付款"  # 审批链含「出纳付款」执行节点，全部通过即已付款
             elif instance.status == "rejected":
                 p.status = "已驳回"
             elif instance.status == "cancelled":
@@ -522,10 +633,11 @@ def _on_finished(instance: ApprovalInstance, db: Session) -> None:
 
     elif instance.target_type == "seal":
         from app.models.seal import SealRequest
+
         s = db.get(SealRequest, instance.target_id)
         if s:
             if instance.status == "approved":
-                s.status = "已盖章"   # 审批链含「盖章」执行节点，全部通过即已盖章
+                s.status = "已盖章"  # 审批链含「盖章」执行节点，全部通过即已盖章
             elif instance.status == "rejected":
                 s.status = "已驳回"
             elif instance.status == "cancelled":
@@ -536,6 +648,7 @@ def _on_finished(instance: ApprovalInstance, db: Session) -> None:
 
     elif instance.target_type == "bill_reconcile":
         from app.models.bill_reconcile import BillReconcileSession
+
         s = db.get(BillReconcileSession, instance.target_id)
         if s:
             if instance.status == "approved":
@@ -549,19 +662,25 @@ def _on_finished(instance: ApprovalInstance, db: Session) -> None:
     elif instance.target_type == "leave":
         from app.models.leave_request import LeaveRequest
         from app.services import leave_balance_service
+
         lv = db.get(LeaveRequest, instance.target_id)
         if lv:
             if instance.status == "approved":
                 lv.status = "已批准"
                 # 扣减假期额度（失败时写补偿记录，不静默吞掉）
                 try:
-                    leave_balance_service.apply_leave(lv, db, operator_id=instance.submitted_by)
+                    leave_balance_service.apply_leave(
+                        lv, db, operator_id=instance.submitted_by
+                    )
                 except Exception as e:
                     import logging
+
                     logging.getLogger("worktrack").warning(
                         "请假 #%s 扣减额度失败: %s", lv.id, e
                     )
-                    _write_error_record(db, instance, f"⚠️ 假期额度扣减失败：{e}（需 HR 人工处理）")
+                    _write_error_record(
+                        db, instance, f"⚠️ 假期额度扣减失败：{e}（需 HR 人工处理）"
+                    )
             elif instance.status == "rejected":
                 lv.status = "已驳回"
             elif instance.status == "cancelled":
@@ -573,6 +692,7 @@ def _on_finished(instance: ApprovalInstance, db: Session) -> None:
     elif instance.target_type == "overtime":
         from app.models.overtime_request import OvertimeRequest
         from app.services import leave_balance_service
+
         ot = db.get(OvertimeRequest, instance.target_id)
         if ot:
             if instance.status == "approved":
@@ -585,10 +705,13 @@ def _on_finished(instance: ApprovalInstance, db: Session) -> None:
                         leave_balance_service.grant_overtime_compensate(ot, db)
                 except Exception as e:
                     import logging
+
                     logging.getLogger("worktrack").warning(
                         "加班 #%s 补偿处理失败: %s", ot.id, e
                     )
-                    _write_error_record(db, instance, f"⚠️ 加班补偿处理失败：{e}（需 HR 人工处理）")
+                    _write_error_record(
+                        db, instance, f"⚠️ 加班补偿处理失败：{e}（需 HR 人工处理）"
+                    )
             elif instance.status == "rejected":
                 ot.status = "已驳回"
             elif instance.status == "cancelled":
@@ -599,6 +722,7 @@ def _on_finished(instance: ApprovalInstance, db: Session) -> None:
 
     elif instance.target_type == "expense":
         from app.models.expense_request import ExpenseRequest
+
         e = db.get(ExpenseRequest, instance.target_id)
         if e:
             if instance.status == "approved":
@@ -607,7 +731,14 @@ def _on_finished(instance: ApprovalInstance, db: Session) -> None:
                 e.status = "已付款"
                 try:
                     snap = json.loads(instance.nodes_snapshot or "[]")
-                    exec_node = next((n for n in reversed(snap) if n.get("node_kind") == "execution"), None)
+                    exec_node = next(
+                        (
+                            n
+                            for n in reversed(snap)
+                            if n.get("node_kind") == "execution"
+                        ),
+                        None,
+                    )
                     if exec_node and exec_node.get("decided_by"):
                         e.paid_by = exec_node["decided_by"]
                         e.paid_at = _now()
@@ -623,6 +754,7 @@ def _on_finished(instance: ApprovalInstance, db: Session) -> None:
 
     elif instance.target_type == "business_trip":
         from app.models.business_trip_request import BusinessTripRequest
+
         t = db.get(BusinessTripRequest, instance.target_id)
         if t:
             if instance.status == "approved":
@@ -637,6 +769,7 @@ def _on_finished(instance: ApprovalInstance, db: Session) -> None:
 
     elif instance.target_type == "purchase":
         from app.models.purchase_request import PurchaseRequest
+
         p = db.get(PurchaseRequest, instance.target_id)
         if p:
             if instance.status == "approved":
@@ -651,6 +784,7 @@ def _on_finished(instance: ApprovalInstance, db: Session) -> None:
 
     elif instance.target_type == "hire":
         from app.models.hire_request import HireRequest
+
         hr = db.get(HireRequest, instance.target_id)
         if hr:
             if instance.status == "approved":
@@ -679,15 +813,20 @@ def _create_user_from_hire(hr, db: Session) -> None:
     from app.routers.logs import write_log
 
     # 二次校验唯一性（防并发）
-    existing = db.exec(select(User).where(User.username == hr.candidate_username)).first()
+    existing = db.exec(
+        select(User).where(User.username == hr.candidate_username)
+    ).first()
     if existing:
         # 已存在用户，直接关联并标记已入职
         hr.created_user_id = existing.id
         hr.status = "已入职"
         hr.onboarded_at = _now()
-        write_log("warning", "hire",
-                  f"入职申请 #{hr.id} 审批通过，但用户名 {hr.candidate_username} 已存在，复用现有账号 #{existing.id}",
-                  db=db)
+        write_log(
+            "warning",
+            "hire",
+            f"入职申请 #{hr.id} 审批通过，但用户名 {hr.candidate_username} 已存在，复用现有账号 #{existing.id}",
+            db=db,
+        )
         return
 
     # leader_id 兜底：若未指定，取部门负责人
@@ -720,24 +859,42 @@ def _create_user_from_hire(hr, db: Session) -> None:
 
     # 发送欢迎邮件（失败不阻断建号）
     try:
-        from app.services.email_service import is_email_configured, send_welcome_email, _get_frontend_url
+        from app.services.email_service import (
+            is_email_configured,
+            send_welcome_email,
+            _get_frontend_url,
+        )
         from app.config import settings
+
         if is_email_configured():
-            base = _get_frontend_url() or (settings.cors_origins.split(",")[0] or "").strip()
+            base = (
+                _get_frontend_url()
+                or (settings.cors_origins.split(",")[0] or "").strip()
+            )
             login_url = f"{base.rstrip('/')}/login" if base else ""
             send_welcome_email(
-                to=user.email, username=user.username, password=initial_password,
-                name=user.name, login_url=login_url,
+                to=user.email,
+                username=user.username,
+                password=initial_password,
+                name=user.name,
+                login_url=login_url,
             )
     except Exception:
         import logging
+
         logging.getLogger("worktrack").warning(
-            "入职申请 #%s 建账号欢迎邮件发送失败 user=%s", hr.id, user.username, exc_info=True
+            "入职申请 #%s 建账号欢迎邮件发送失败 user=%s",
+            hr.id,
+            user.username,
+            exc_info=True,
         )
 
-    write_log("info", "hire",
-              f"入职申请 #{hr.id} 审批通过，已自动创建账号 #{user.id}（{user.username}），角色按部门继承",
-              db=db)
+    write_log(
+        "info",
+        "hire",
+        f"入职申请 #{hr.id} 审批通过，已自动创建账号 #{user.id}（{user.username}），角色按部门继承",
+        db=db,
+    )
 
 
 def _write_error_record(db: Session, instance: ApprovalInstance, message: str) -> None:
@@ -763,6 +920,7 @@ def _write_error_record(db: Session, instance: ApprovalInstance, message: str) -
     db.add(rec)
     db.commit()
     import logging
+
     logging.getLogger("worktrack").warning(
         "审批实例 #%s 业务回调异常已留痕：%s", instance.id, message
     )
@@ -780,7 +938,11 @@ def _create_overtime_payment(overtime, db: Session) -> None:
     from app.models.user import User
 
     applicant = db.get(User, overtime.user_id)
-    applicant_name = applicant.name or applicant.username if applicant else f"用户#{overtime.user_id}"
+    applicant_name = (
+        applicant.name or applicant.username
+        if applicant
+        else f"用户#{overtime.user_id}"
+    )
 
     # 幂等：避免同一加班单重复创建付款单
     existing = db.exec(
@@ -814,13 +976,16 @@ def _create_overtime_payment(overtime, db: Session) -> None:
     db.add(p)
     db.commit()
     import logging
+
     logging.getLogger("worktrack").info(
         "加班 #%s 补偿方式=加班费，已创建付款申请 #%s（草稿，待填金额）",
-        overtime.id, p.id,
+        overtime.id,
+        p.id,
     )
 
 
 # ──────────────────────────── 待办查询 ────────────────────────────
+
 
 def get_pending_for_user(user: User, db: Session) -> list[ApprovalInstance]:
     """返回当前节点指派给该用户的进行中审批（我的待办）"""

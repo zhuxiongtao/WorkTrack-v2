@@ -3,12 +3,11 @@ import {
   Building2, Network, Plus, Edit3, Trash2, Loader2, Search,
   DollarSign, Briefcase, Globe, Phone, Mail,
   ChevronRight, BarChart3, Key, Cpu, FileText, AlertTriangle,
-  ExternalLink, GitBranch, Activity, Hash, BookOpen, Percent,
+  ExternalLink, Activity, Hash, BookOpen, Percent,
   Layers, X, Calendar,
 } from 'lucide-react'
 import { PageHeader, IconBox, EmptyState, SectionHeader, Modal, ModalFooter, SectionLabel, Field } from '../components/design-system'
 import SearchableSelect from '../components/SearchableSelect'
-import { ApprovalTimeline } from '../components/approval/ApprovalTimeline'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
@@ -16,16 +15,19 @@ import { useNavigate } from 'react-router-dom'
 /* ──── 类型 ──── */
 interface Supplier {
   id: number; name: string; code: string; category: string; status: string
-  contact_person: string | null; contact_email: string | null; contact_phone: string | null
+  contact_person: string | null; contact_email: string | null; contact_phone: string | null; im_group: string | null
   settlement_currency: string; payment_terms: string | null
+  settlement_method: string | null; settlement_cycle_days: number | null
+  prepaid_balance: number | null; credit_limit: number | null; current_month_consumed: number | null
   contract_start: string | null; contract_end: string | null
-  api_endpoint: string | null; models_provided: string | null; auth_type: string | null
+  api_endpoint: string | null; api_doc_url: string | null; models_provided: string | null; auth_type: string | null
   total_cost: number | null; project_count: number | null; remarks: string | null
   created_at: string; updated_at: string
 }
 interface SupplierSummary {
   supplier_id: number; supplier_name: string; supplier_code: string; category: string
   status: string; settlement_currency: string; total_cost: number; project_count: number; models: string[]
+  prepaid_balance: number | null; current_month_consumed: number | null
 }
 interface SupplierProject {
   project_id: number; project_name: string; customer_name: string; currency: string
@@ -33,28 +35,40 @@ interface SupplierProject {
   total_cost: number; gross_profit: number | null; gross_margin: number | null; cost_count: number
 }
 interface Channel {
-  id: number; supplier_id: number; model_type: string; name: string; code: string; kind: string
-  status: string; cost_price: number; price_unit: string; discount_rate: number; suggested_markup: number
-  contract_start: string | null; contract_end: string | null; sla_json: string | null
+  id: number; supplier_id: number; name: string; code: string
+  api_protocol: string; status: string; computed_status: string
+  cost_discount: number | null; markup: number | null; cost_source: string
+  scope_type: string; model_family: string | null; model_id: number | null
+  sla_json: string | null
   inventory_total: number; inventory_available: number; active_projects: number
   monthly_cost: number; remarks: string | null; created_at: string; updated_at: string
 }
 interface ChannelSummary {
-  channel_id: number; supplier_id: number; supplier_name: string; model_type: string
-  name: string; kind: string; status: string; cost_price: number; price_unit: string
-  discount_rate: number; inventory_available: number; active_projects: number; monthly_cost: number
+  channel_id: number; supplier_id: number; supplier_name: string
+  name: string; api_protocol: string; status: string; computed_status: string
+  cost_discount: number | null; scope_type: string; model_family: string | null
+  inventory_available: number; active_projects: number; monthly_cost: number
 }
 interface ModelCatalogItem {
   id: number; name: string; version_id: string | null; provider: string | null; region: string
   modality: string | null; input_price: number | null; output_price: number | null
   cache_read_price: number | null; cache_write_price: number | null
+  price_currency: string | null; price_unit: string | null
+  price_tiers: string | null; suppliers_list: string | null
 }
 
 /* ──── 常量 ──── */
-const CATEGORIES = ['模型厂商', '云服务商', '代理商', '其他']
+const CATEGORIES = ['模型厂商', '云服务商', '代理商', '渠道代理', '其他']
 const SUPPLIER_STATUSES = ['合作中', '暂停', '已终止']
-const KINDS = ['官网通道', '号池', '逆向', '官方聚合', '其他']
-const CHANNEL_STATUSES = ['合作中', '暂停', '已终止']
+const CHANNEL_MANUAL_STATUSES = ['合作中', '暂停', '已终止']
+const API_PROTOCOLS = ['openai_compat', 'native', 'proxy', 'other']
+const API_PROTOCOL_LABELS: Record<string, string> = {
+  openai_compat: 'OpenAI 兼容', native: '原生 API', proxy: '代理转发', other: '其他',
+}
+const SCOPE_TYPES = ['all', 'family', 'single']
+const SCOPE_TYPE_LABELS: Record<string, string> = {
+  all: '全部模型', family: '按模型系列', single: '单个模型',
+}
 const CURRENCIES = ['USD', 'CNY', 'EUR', 'JPY']
 const AUTH_TYPES = ['API Key', 'OAuth', '其他']
 
@@ -66,34 +80,47 @@ const SUPPLIER_STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   '已终止': { bg: '#EF444415', text: '#F87171' }, '待审批': { bg: '#F59E0B15', text: '#FBBF24' },
   '已拒绝': { bg: '#EF444415', text: '#F87171' }, '待确认': { bg: '#8B5CF615', text: '#A78BFA' },
 }
-const KIND_COLORS: Record<string, { bg: string; text: string }> = {
-  '官网通道': { bg: '#3B82F615', text: '#60A5FA' }, '号池': { bg: '#F59E0B15', text: '#FBBF24' },
-  '逆向': { bg: '#EF444415', text: '#F87171' }, '官方聚合': { bg: '#8B5CF615', text: '#A78BFA' },
-  '其他': { bg: '#6B728015', text: '#9CA3AF' },
+const API_PROTOCOL_COLORS: Record<string, { bg: string; text: string }> = {
+  openai_compat: { bg: '#3B82F615', text: '#60A5FA' },
+  native:        { bg: '#8B5CF615', text: '#A78BFA' },
+  proxy:         { bg: '#F59E0B15', text: '#FBBF24' },
+  other:         { bg: '#6B728015', text: '#9CA3AF' },
 }
-const CHANNEL_STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  '合作中': { bg: '#10B98115', text: '#34D399' }, '暂停': { bg: '#F59E0B15', text: '#FBBF24' },
-  '已终止': { bg: '#EF444415', text: '#F87171' }, '待确认': { bg: '#8B5CF615', text: '#A78BFA' },
+const COMPUTED_STATUS_COLORS: Record<string, { bg: string; text: string }> = {
+  '长期有效': { bg: '#10B98115', text: '#34D399' },
+  '生效中':   { bg: '#10B98115', text: '#34D399' },
+  '即将到期': { bg: '#F59E0B15', text: '#FBBF24' },
+  '已过期':   { bg: '#EF444415', text: '#F87171' },
+  '未生效':   { bg: '#6B728015', text: '#9CA3AF' },
+  '已暂停':   { bg: '#F59E0B15', text: '#FBBF24' },
+  '暂停':     { bg: '#F59E0B15', text: '#FBBF24' },
+  '已终止':   { bg: '#EF444415', text: '#F87171' },
+  '待确认':   { bg: '#8B5CF615', text: '#A78BFA' },
 }
 const CURRENCY_META: Record<string, { symbol: string; name: string }> = {
   USD: { symbol: '$', name: '美元' }, CNY: { symbol: '¥', name: '人民币' },
   EUR: { symbol: '€', name: '欧元' }, JPY: { symbol: '¥', name: '日元' },
 }
 
+const SETTLEMENT_METHODS = ['预付', '月结', '授信']
+
 const EMPTY_SUPPLIER_FORM = {
   name: '', code: '', category: '模型厂商', status: '合作中',
-  contact_person: '', contact_email: '', contact_phone: '',
+  contact_person: '', contact_email: '', contact_phone: '', im_group: '',
   settlement_currency: 'USD', payment_terms: '',
+  settlement_method: '', settlement_cycle_days: '',
+  prepaid_balance: '', credit_limit: '',
   contract_start: '', contract_end: '',
-  api_endpoint: '', models_provided: '', auth_type: '', remarks: '',
+  api_endpoint: '', api_doc_url: '', models_provided: '', auth_type: '', remarks: '',
 }
 const EMPTY_CHANNEL_FORM = {
-  supplier_id: 0, model_type: '', name: '', code: '',
-  kind: '官网通道', status: '合作中',
-  discount_rate: 1, suggested_markup: 0.2,
-  contract_start: '', contract_end: '',
+  supplier_id: 0, name: '', code: '',
+  api_protocol: 'openai_compat', status: '合作中',
+  cost_discount: '', markup: '', cost_source: 'manual',
+  scope_type: 'all', model_family: '', model_id: 0,
   cache_hit_rate: '', tpm: '', rpm: '', avg_latency_ms: '',
-  inventory_total: 0, inventory_available: 0, remarks: '',
+  access_url: '', usage_url: '',
+  remarks: '',
 }
 
 /* ──── 工具函数 ──── */
@@ -102,9 +129,10 @@ function fmtAmt(v: number | null | undefined, currency?: string) {
   const m = CURRENCY_META[currency || 'CNY'] || CURRENCY_META.CNY
   return `${m.symbol}${v.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} 万`
 }
-function fmtUSD(v: number | null | undefined) {
+function fmtUSD(v: number | null | undefined, currency?: string | null) {
   if (v == null) return '—'
-  return `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`
+  const symbol = currency ? (CURRENCY_META[currency]?.symbol ?? `${currency} `) : '$'
+  return `${symbol}${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`
 }
 function getContractStatus(_start: string | null, end: string | null) {
   if (!end) return { state: 'none' as const, label: '—', color: { bg: '#6B728015', text: '#6B7280' } }
@@ -113,13 +141,25 @@ function getContractStatus(_start: string | null, end: string | null) {
   if (days <= 30) return { state: 'expiring' as const, label: `${days} 天后到期`, color: { bg: '#F59E0B15', text: '#FBBF24' } }
   return { state: 'normal' as const, label: end, color: { bg: '#10B98115', text: '#34D399' } }
 }
-function matchProvider(modelType: string): string | null {
-  const t = modelType.toLowerCase()
+function matchProvider(text: string | null | undefined): string | null {
+  if (!text) return null
+  const t = text.toLowerCase()
   if (t.includes('claude') || t.includes('anthropic')) return 'Anthropic'
   if (t.includes('gpt') || t.includes('openai') || t.includes('o1') || t.includes('o3') || t.includes('o4')) return 'OpenAI'
   if (t.includes('gemini') || t.includes('google')) return 'Google'
   if (t.includes('deepseek')) return 'DeepSeek'
   return null
+}
+function channelProvider(c: Channel, prices: ModelCatalogItem[]): string | null {
+  if (c.scope_type === 'single' && c.model_id) {
+    const m = prices.find(p => p.id === c.model_id)
+    return m?.provider || null
+  }
+  return matchProvider(c.model_family)
+}
+function fmtDiscount(d: number | null): string {
+  if (d == null) return '—'
+  return `${parseFloat((d * 10).toFixed(1))}折`
 }
 function parseSla(json: string | null) {
   if (!json) return { cache_hit_rate: null, tpm: null, rpm: null, avg_latency_ms: null }
@@ -136,7 +176,7 @@ function parseSla(json: string | null) {
 
 /* ──── 主页面 ──── */
 export default function UpstreamPage() {
-  const { hasPermission } = useAuth()
+  const { hasPermission, fetchWithAuth, isAdmin } = useAuth()
   const { toast: showToast } = useToast()
   const navigate = useNavigate()
 
@@ -183,36 +223,43 @@ export default function UpstreamPage() {
   const [savingChannel, setSavingChannel] = useState(false)
   const [deletingChannelId, setDeletingChannelId] = useState<number | null>(null)
 
-  const [submittingSupplierApproval, setSubmittingSupplierApproval] = useState(false)
-  const [submittingChannelApproval, setSubmittingChannelApproval] = useState(false)
+  // 批量导入
+  const [showImport, setShowImport] = useState(false)
+  const [importType, setImportType] = useState<'suppliers' | 'models'>('suppliers')
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importResult, setImportResult] = useState<{ dry_run: boolean; stats: Record<string, Record<string, number>>; errors: Array<{ sheet: string; row?: number; supplier?: string; model?: string; reason: string }>; message: string } | null>(null)
+  const [importLoading, setImportLoading] = useState(false)
+
+  // 页内确认对话框（替代 confirm()）
+  const [confirmDialog, setConfirmDialog] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
 
   /* ── 数据加载 ── */
   const loadSuppliers = useCallback(async () => {
     try {
-      const [supRes, sumRes] = await Promise.all([fetch('/api/v1/suppliers'), fetch('/api/v1/suppliers/summary/all')])
+      const [supRes, sumRes] = await Promise.all([fetchWithAuth('/api/v1/suppliers'), fetchWithAuth('/api/v1/suppliers/summary/all')])
       if (supRes.ok) setSuppliers(await supRes.json())
       if (sumRes.ok) setSupplierSummaries(await sumRes.json())
     } catch { /* ignore */ }
-  }, [])
+  }, [fetchWithAuth])
 
   const loadChannels = useCallback(async () => {
     try {
       const [chRes, sumRes, priceRes] = await Promise.all([
-        fetch('/api/v1/channels'), fetch('/api/v1/channels/summary/all'), fetch('/api/v1/models'),
+        fetchWithAuth('/api/v1/channels'), fetchWithAuth('/api/v1/channels/summary/all'), fetchWithAuth('/api/v1/models'),
       ])
       if (chRes.ok) setChannels(await chRes.json())
       if (sumRes.ok) setChannelSummaries(await sumRes.json())
       if (priceRes.ok) setPrices(await priceRes.json())
     } catch { /* ignore */ }
-  }, [])
+  }, [fetchWithAuth])
 
   const loadSupplierDetail = useCallback(async (id: number) => {
     setDetailLoading(true)
     try {
       const [detailRes, projectsRes, channelsRes] = await Promise.all([
-        fetch(`/api/v1/suppliers/${id}`),
-        fetch(`/api/v1/suppliers/${id}/projects`),
-        fetch(`/api/v1/channels?supplier_id=${id}`).catch(() => null),
+        fetchWithAuth(`/api/v1/suppliers/${id}`),
+        fetchWithAuth(`/api/v1/suppliers/${id}/projects`),
+        fetchWithAuth(`/api/v1/channels?supplier_id=${id}`).catch(() => null),
       ])
       if (detailRes.ok) setSelectedSupplierDetail(await detailRes.json())
       else setSelectedSupplierDetail(null)
@@ -222,7 +269,7 @@ export default function UpstreamPage() {
       else setSupplierChannels([])
     } catch { setSelectedSupplierDetail(null); setSupplierProjects(null); setSupplierChannels([]) }
     finally { setDetailLoading(false) }
-  }, [])
+  }, [fetchWithAuth])
 
   useEffect(() => {
     setLoading(true)
@@ -243,10 +290,16 @@ export default function UpstreamPage() {
     setEditingSupplier(s)
     setSupplierForm({
       name: s.name, code: s.code, category: s.category, status: s.status,
-      contact_person: s.contact_person || '', contact_email: s.contact_email || '', contact_phone: s.contact_phone || '',
+      contact_person: s.contact_person || '', contact_email: s.contact_email || '',
+      contact_phone: s.contact_phone || '', im_group: s.im_group || '',
       settlement_currency: s.settlement_currency, payment_terms: s.payment_terms || '',
+      settlement_method: s.settlement_method || '',
+      settlement_cycle_days: s.settlement_cycle_days != null ? String(s.settlement_cycle_days) : '',
+      prepaid_balance: s.prepaid_balance != null ? String(s.prepaid_balance) : '',
+      credit_limit: s.credit_limit != null ? String(s.credit_limit) : '',
       contract_start: s.contract_start || '', contract_end: s.contract_end || '',
-      api_endpoint: s.api_endpoint || '', models_provided: s.models_provided || '', auth_type: s.auth_type || '',
+      api_endpoint: s.api_endpoint || '', api_doc_url: s.api_doc_url || '',
+      models_provided: s.models_provided || '', auth_type: s.auth_type || '',
       remarks: s.remarks || '',
     })
     setShowSupplierForm(true)
@@ -257,13 +310,19 @@ export default function UpstreamPage() {
       const payload = {
         ...supplierForm,
         contact_person: supplierForm.contact_person || null, contact_email: supplierForm.contact_email || null,
-        contact_phone: supplierForm.contact_phone || null, payment_terms: supplierForm.payment_terms || null,
+        contact_phone: supplierForm.contact_phone || null, im_group: supplierForm.im_group || null,
+        payment_terms: supplierForm.payment_terms || null,
+        settlement_method: supplierForm.settlement_method || null,
+        settlement_cycle_days: supplierForm.settlement_cycle_days ? Number(supplierForm.settlement_cycle_days) : null,
+        prepaid_balance: supplierForm.prepaid_balance !== '' ? Number(supplierForm.prepaid_balance) : null,
+        credit_limit: supplierForm.credit_limit !== '' ? Number(supplierForm.credit_limit) : null,
         contract_start: supplierForm.contract_start || null, contract_end: supplierForm.contract_end || null,
-        api_endpoint: supplierForm.api_endpoint || null, models_provided: supplierForm.models_provided || null,
+        api_endpoint: supplierForm.api_endpoint || null, api_doc_url: supplierForm.api_doc_url || null,
+        models_provided: supplierForm.models_provided || null,
         auth_type: supplierForm.auth_type || null, remarks: supplierForm.remarks || null,
       }
       const url = editingSupplier ? `/api/v1/suppliers/${editingSupplier.id}` : '/api/v1/suppliers'
-      const res = await fetch(url, { method: editingSupplier ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      const res = await fetchWithAuth(url, { method: editingSupplier ? 'PUT' : 'POST', body: JSON.stringify(payload) })
       if (res.ok) {
         setShowSupplierForm(false); await loadSuppliers()
         if (selectedSupplierId) await loadSupplierDetail(selectedSupplierId)
@@ -271,22 +330,18 @@ export default function UpstreamPage() {
       } else { const err = await res.json().catch(() => ({})); showToast(err.detail || '操作失败', 'error') }
     } finally { setSavingSupplier(false) }
   }
-  const handleDeleteSupplier = async (s: Supplier) => {
-    if (!confirm(`确认删除供应商「${s.name}」？已关联成本将无法删除。`)) return
-    const res = await fetch(`/api/v1/suppliers/${s.id}`, { method: 'DELETE' })
-    if (res.ok) { if (selectedSupplierId === s.id) setSelectedSupplierId(null); await loadSuppliers(); showToast('已删除', 'success') }
-    else { const err = await res.json().catch(() => ({})); showToast(err.detail || '删除失败', 'error') }
+  const handleDeleteSupplier = (s: Supplier) => {
+    setConfirmDialog({
+      title: `删除供应商「${s.name}」`,
+      message: '已关联成本将无法删除，此操作不可恢复。',
+      onConfirm: async () => {
+        setConfirmDialog(null)
+        const res = await fetchWithAuth(`/api/v1/suppliers/${s.id}`, { method: 'DELETE' })
+        if (res.ok) { if (selectedSupplierId === s.id) setSelectedSupplierId(null); await loadSuppliers(); showToast('已删除', 'success') }
+        else { const err = await res.json().catch(() => ({})); showToast(err.detail || '删除失败', 'error') }
+      },
+    })
   }
-  const handleSubmitSupplierApproval = async (supplier: Supplier) => {
-    setSubmittingSupplierApproval(true)
-    try {
-      const res = await fetch(`/api/v1/suppliers/${supplier.id}/submit-approval`, { method: 'POST' })
-      if (!res.ok) { const e = await res.json(); showToast(e.detail || '提交失败', 'error'); return }
-      showToast('已提交审批', 'success'); await loadSuppliers()
-      if (selectedSupplierId) await loadSupplierDetail(selectedSupplierId)
-    } catch { showToast('提交失败', 'error') } finally { setSubmittingSupplierApproval(false) }
-  }
-
   /* ── 通道操作 ── */
   const openCreateChannel = (supplierId?: number) => {
     setEditingChannel(null)
@@ -297,12 +352,16 @@ export default function UpstreamPage() {
     setEditingChannel(c)
     const sla = parseSla(c.sla_json)
     setChannelForm({
-      supplier_id: c.supplier_id, model_type: c.model_type, name: c.name, code: c.code,
-      kind: c.kind, status: c.status, discount_rate: c.discount_rate, suggested_markup: c.suggested_markup,
-      contract_start: c.contract_start || '', contract_end: c.contract_end || '',
+      supplier_id: c.supplier_id, name: c.name, code: c.code,
+      api_protocol: c.api_protocol, status: c.status,
+      cost_discount: c.cost_discount != null ? parseFloat((c.cost_discount * 10).toFixed(1)).toString() : '',
+      markup: c.markup != null ? parseFloat((c.markup * 10).toFixed(1)).toString() : '',
+      cost_source: c.cost_source,
+      scope_type: c.scope_type, model_family: c.model_family || '', model_id: c.model_id || 0,
       cache_hit_rate: sla.cache_hit_rate?.toString() || '', tpm: sla.tpm?.toString() || '',
       rpm: sla.rpm?.toString() || '', avg_latency_ms: sla.avg_latency_ms?.toString() || '',
-      inventory_total: c.inventory_total, inventory_available: c.inventory_available, remarks: c.remarks || '',
+      access_url: c.access_url || '', usage_url: c.usage_url || '',
+      remarks: c.remarks || '',
     })
     setShowChannelForm(true)
   }
@@ -317,16 +376,25 @@ export default function UpstreamPage() {
       if (cv(channelForm.tpm) != null) slaObj.tpm = cv(channelForm.tpm)!
       if (cv(channelForm.rpm) != null) slaObj.rpm = cv(channelForm.rpm)!
       if (cv(channelForm.avg_latency_ms) != null) slaObj.avg_latency_ms = cv(channelForm.avg_latency_ms)!
+      const discountFold = cv(channelForm.cost_discount as string)
+      const markupFold = cv(channelForm.markup as string)
       const payload = {
-        supplier_id: channelForm.supplier_id, model_type: channelForm.model_type,
-        name: channelForm.name, code: channelForm.code, kind: channelForm.kind, status: channelForm.status,
-        discount_rate: channelForm.discount_rate, suggested_markup: channelForm.suggested_markup,
-        contract_start: channelForm.contract_start || null, contract_end: channelForm.contract_end || null,
+        supplier_id: channelForm.supplier_id,
+        name: channelForm.name, code: channelForm.code,
+        api_protocol: channelForm.api_protocol, status: channelForm.status,
+        cost_discount: discountFold != null ? discountFold / 10 : null,
+        markup: markupFold != null ? markupFold / 10 : null,
+        cost_source: 'manual',
+        scope_type: channelForm.scope_type,
+        model_family: channelForm.scope_type === 'family' ? (channelForm.model_family || null) : null,
+        model_id: channelForm.scope_type === 'single' ? (channelForm.model_id || null) : null,
         sla_json: Object.keys(slaObj).length > 0 ? JSON.stringify(slaObj) : null,
+        access_url: channelForm.access_url || null,
+        usage_url: channelForm.usage_url || null,
         remarks: channelForm.remarks || null,
       }
       const url = editingChannel ? `/api/v1/channels/${editingChannel.id}` : '/api/v1/channels'
-      const res = await fetch(url, { method: editingChannel ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      const res = await fetchWithAuth(url, { method: editingChannel ? 'PUT' : 'POST', body: JSON.stringify(payload) })
       if (res.ok) {
         setShowChannelForm(false)
         await Promise.all([loadChannels(), selectedSupplierId ? loadSupplierDetail(selectedSupplierId) : Promise.resolve()])
@@ -334,25 +402,43 @@ export default function UpstreamPage() {
       } else { const err = await res.json().catch(() => ({})); showToast(err.detail || '操作失败', 'error') }
     } finally { setSavingChannel(false) }
   }
-  const handleDeleteChannel = async (id: number) => {
-    if (!confirm('确认删除该通道？删除后无法恢复。')) return
-    setDeletingChannelId(id)
-    try {
-      const res = await fetch(`/api/v1/channels/${id}`, { method: 'DELETE' })
-      if (res.ok) {
-        showToast('已删除', 'success')
-        if (selectedChannelId === id) setSelectedChannelId(null)
-        await Promise.all([loadChannels(), selectedSupplierId ? loadSupplierDetail(selectedSupplierId) : Promise.resolve()])
-      } else { const err = await res.json().catch(() => ({})); showToast(err.detail || '删除失败', 'error') }
-    } finally { setDeletingChannelId(null) }
+  const handleDeleteChannel = (id: number) => {
+    setConfirmDialog({
+      title: '删除通道',
+      message: '确认删除该通道？删除后无法恢复。',
+      onConfirm: async () => {
+        setConfirmDialog(null)
+        setDeletingChannelId(id)
+        try {
+          const res = await fetchWithAuth(`/api/v1/channels/${id}`, { method: 'DELETE' })
+          if (res.ok) {
+            showToast('已删除', 'success')
+            if (selectedChannelId === id) setSelectedChannelId(null)
+            await Promise.all([loadChannels(), selectedSupplierId ? loadSupplierDetail(selectedSupplierId) : Promise.resolve()])
+          } else { const err = await res.json().catch(() => ({})); showToast(err.detail || '删除失败', 'error') }
+        } finally { setDeletingChannelId(null) }
+      },
+    })
   }
-  const handleSubmitChannelApproval = async (channel: Channel) => {
-    setSubmittingChannelApproval(true)
+  /* ── 导入处理 ── */
+  const handleImportRun = async (dry: boolean) => {
+    if (!importFile) return
+    setImportLoading(true)
     try {
-      const res = await fetch(`/api/v1/channels/${channel.id}/submit-approval`, { method: 'POST' })
-      if (!res.ok) { const e = await res.json(); showToast(e.detail || '提交失败', 'error'); return }
-      showToast('已提交价格变更审批', 'success'); await loadChannels()
-    } catch { showToast('提交失败', 'error') } finally { setSubmittingChannelApproval(false) }
+      const fd = new FormData()
+      fd.append('file', importFile)
+      const endpoint = importType === 'suppliers' ? '/api/v1/suppliers/import' : '/api/v1/models/import'
+      const res = await fetchWithAuth(`${endpoint}?dry_run=${dry}`, { method: 'POST', body: fd })
+      let data: Record<string, unknown>
+      try { data = await res.json() } catch { showToast(`服务器错误 (${res.status})`, 'error'); return }
+      if (!res.ok) { showToast((data.detail as string) || '操作失败', 'error'); return }
+      setImportResult(data as ImportResult)
+      if (!dry) {
+        showToast((data.message as string) || '导入完成', 'success')
+        await Promise.all([loadSuppliers(), loadChannels()])
+        setShowImport(false); setImportFile(null); setImportResult(null)
+      }
+    } catch (e) { showToast(e instanceof Error ? e.message : '网络错误', 'error') } finally { setImportLoading(false) }
   }
 
   /* ── 计算值 ── */
@@ -368,23 +454,27 @@ export default function UpstreamPage() {
 
   const supplierMap = useMemo(() => { const m: Record<number, Supplier> = {}; suppliers.forEach(s => { m[s.id] = s }); return m }, [suppliers])
 
-  const modelTypes = useMemo(() => { const set = new Set<string>(); channels.forEach(c => { if (c.model_type) set.add(c.model_type) }); return Array.from(set).sort() }, [channels])
-
   const filteredChannels = useMemo(() => {
     const q = channelSearch.trim().toLowerCase()
     return channels.filter(c => {
-      if (channelFilterKind && c.kind !== channelFilterKind) return false
-      if (channelFilterStatus && c.status !== channelFilterStatus) return false
-      if (channelFilterModel && c.model_type !== channelFilterModel) return false
+      if (channelFilterKind && c.api_protocol !== channelFilterKind) return false
+      if (channelFilterStatus && c.computed_status !== channelFilterStatus) return false
+      if (channelFilterModel && c.model_family !== channelFilterModel) return false
       if (channelFilterSupplier && String(c.supplier_id) !== channelFilterSupplier) return false
-      if (q) { const sup = supplierMap[c.supplier_id]; return `${c.name} ${c.code} ${c.model_type} ${sup?.name || ''}`.toLowerCase().includes(q) }
+      if (q) { const sup = supplierMap[c.supplier_id]; return `${c.name} ${c.code} ${c.model_family || ''} ${sup?.name || ''}`.toLowerCase().includes(q) }
       return true
     })
   }, [channels, channelFilterKind, channelFilterStatus, channelFilterModel, channelFilterSupplier, channelSearch, supplierMap])
 
   const channelStats = useMemo(() => {
-    let totalActive = 0, totalMonthly = 0; const byKind: Record<string, number> = {}; const byStatus: Record<string, number> = {}
-    channels.forEach(c => { totalActive += c.active_projects; totalMonthly += c.monthly_cost; byKind[c.kind] = (byKind[c.kind] || 0) + 1; byStatus[c.status] = (byStatus[c.status] || 0) + 1 })
+    let totalActive = 0, totalMonthly = 0
+    const byKind: Record<string, number> = {}
+    const byStatus: Record<string, number> = {}
+    channels.forEach(c => {
+      totalActive += c.active_projects; totalMonthly += c.monthly_cost
+      byKind[c.api_protocol] = (byKind[c.api_protocol] || 0) + 1
+      byStatus[c.computed_status] = (byStatus[c.computed_status] || 0) + 1
+    })
     return { totalActive, totalMonthly, byKind, byStatus }
   }, [channels])
 
@@ -423,10 +513,16 @@ export default function UpstreamPage() {
         ]}
         right={
           hasPermission('upstream:edit') && (
-            <button onClick={openCreateSupplier}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#3B82F6] text-white text-xs font-bold hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 transition-all cursor-pointer">
-              <Plus size={14} strokeWidth={2.5} />新增供应商
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setShowImport(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-bg-card text-gray-600 dark:text-gray-400 text-xs font-medium hover:border-accent-blue/50 hover:text-accent-blue transition-all cursor-pointer">
+                批量导入
+              </button>
+              <button onClick={openCreateSupplier}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-accent-blue text-white text-xs font-medium hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 transition-all cursor-pointer">
+                <Plus size={14} strokeWidth={2.5} />新增供应商
+              </button>
+            </div>
           )
         }
       />
@@ -462,9 +558,9 @@ export default function UpstreamPage() {
           { key: 'stats' as const, label: '统计分析', icon: BarChart3 },
         ]).map(t => (
           <button key={t.key} onClick={() => setMainTab(t.key)}
-            className={`relative px-4 py-2.5 text-xs font-semibold flex items-center gap-1.5 transition-colors ${mainTab === t.key ? 'text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white'}`}>
+            className={`relative px-4 py-2.5 text-xs font-semibold flex items-center gap-1.5 transition-colors ${mainTab === t.key ? 'text-accent-blue' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white'}`}>
             <t.icon size={13} />{t.label}
-            {mainTab === t.key && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-t" />}
+            {mainTab === t.key && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent-blue rounded-t" />}
           </button>
         ))}
       </div>
@@ -473,8 +569,8 @@ export default function UpstreamPage() {
       {mainTab === 'suppliers' && (
         <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4">
           {/* 左：供应商列表 */}
-          <div className="rounded-2xl bg-bg-card border border-border/50 overflow-hidden flex flex-col">
-            <div className="px-4 py-3 border-b border-border/50 bg-bg-card/50 space-y-2">
+          <div className="rounded-2xl bg-bg-card border border-border/50 flex flex-col">
+            <div className="px-4 py-3 border-b border-border/50 bg-bg-card/50 space-y-2 rounded-t-2xl">
               <div className="flex items-center gap-2">
                 <IconBox icon={Building2} size="sm" tone="blue" variant="soft" />
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">供应商</span>
@@ -569,18 +665,12 @@ export default function UpstreamPage() {
                   </div>
                   {hasPermission('upstream:edit') && (
                     <div className="flex items-center gap-2 shrink-0">
-                      {selectedSupplierDetail.status === '待审批' && (
-                        <button onClick={() => handleSubmitSupplierApproval(selectedSupplierDetail)} disabled={submittingSupplierApproval}
-                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-amber-400 border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 disabled:opacity-50 transition-colors">
-                          {submittingSupplierApproval ? <Loader2 size={11} className="animate-spin" /> : <GitBranch size={11} />}提交审批
-                        </button>
-                      )}
                       <button onClick={() => openCreateChannel(selectedSupplierId!)}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-cyan-400 border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 transition-colors">
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-bg-card text-gray-600 dark:text-gray-400 hover:border-accent-blue/50 hover:text-accent-blue transition-colors">
                         <Plus size={11} />新增通道
                       </button>
-                      <button onClick={() => openEditSupplier(selectedSupplierDetail)} className="p-1.5 rounded-lg text-gray-500 hover:text-blue-400 hover:bg-bg-hover transition-colors"><Edit3 size={14} /></button>
-                      <button onClick={() => handleDeleteSupplier(selectedSupplierDetail)} className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-bg-hover transition-colors"><Trash2 size={14} /></button>
+                      <button onClick={() => openEditSupplier(selectedSupplierDetail)} className="p-1.5 rounded-lg text-gray-500 hover:text-accent-blue hover:bg-accent-blue/10 transition-colors"><Edit3 size={14} /></button>
+                      <button onClick={() => handleDeleteSupplier(selectedSupplierDetail)} className="p-1.5 rounded-lg text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-colors"><Trash2 size={14} /></button>
                     </div>
                   )}
                 </div>
@@ -605,12 +695,6 @@ export default function UpstreamPage() {
                   </div>
                 )})()}
 
-                {/* 审批进度 */}
-                {(selectedSupplierDetail.status === '待审批' || selectedSupplierDetail.status === '已拒绝') && (
-                  <ApprovalTimeline targetType="supplier" targetId={selectedSupplierDetail.id}
-                    onChanged={() => { loadSuppliers(); if (selectedSupplierId) loadSupplierDetail(selectedSupplierId) }} />
-                )}
-
                 {/* 详情 Tab */}
                 <div className="flex items-center gap-0 border-b border-border/40">
                   {([
@@ -619,7 +703,7 @@ export default function UpstreamPage() {
                     { key: 'projects' as const, label: '关联项目', icon: Briefcase, count: supplierProjects?.projects.length || 0 },
                   ]).map(t => (
                     <button key={t.key} onClick={() => setSupplierDetailTab(t.key)}
-                      className={`relative px-3 py-2 text-xs font-semibold flex items-center gap-1.5 transition-colors ${supplierDetailTab === t.key ? 'text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white'}`}>
+                      className={`relative px-3 py-2 text-xs font-semibold flex items-center gap-1.5 transition-colors ${supplierDetailTab === t.key ? 'text-accent-blue' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white'}`}>
                       <t.icon size={13} />{t.label}
                       {'count' in t && (t as { count?: number }).count! > 0 && (
                         <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 font-bold">{(t as { count?: number }).count}</span>
@@ -637,10 +721,10 @@ export default function UpstreamPage() {
                   ) : (
                     <div className="space-y-2">
                       {supplierChannels.map(c => {
-                        const kindC = KIND_COLORS[c.kind] || KIND_COLORS['其他']
-                        const statusC = CHANNEL_STATUS_COLORS[c.status] || CHANNEL_STATUS_COLORS['合作中']
+                        const protocolC = API_PROTOCOL_COLORS[c.api_protocol] || API_PROTOCOL_COLORS['other']
+                        const statusC = COMPUTED_STATUS_COLORS[c.computed_status] || COMPUTED_STATUS_COLORS['长期有效']
                         return (
-                          <div key={c.id} className="rounded-xl bg-bg-input/50 border border-border/40 p-3 hover:border-cyan-500/20 transition-all group">
+                          <div key={c.id} className="rounded-xl bg-bg-input/50 border border-border/40 p-3 hover:border-accent-blue/20 transition-all group">
                             <div className="flex items-start justify-between">
                               <div className="flex items-start gap-2 min-w-0 flex-1">
                                 <IconBox icon={Cpu} size="sm" tone="cyan" variant="soft" />
@@ -648,22 +732,23 @@ export default function UpstreamPage() {
                                   <div className="flex items-center gap-1.5 flex-wrap">
                                     <span className="text-xs font-semibold text-gray-900 dark:text-white">{c.name}</span>
                                     {c.code && <span className="text-[11px] text-gray-500 font-mono">#{c.code}</span>}
-                                    <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: kindC.bg, color: kindC.text }}>{c.kind}</span>
-                                    <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: statusC.bg, color: statusC.text }}>{c.status}</span>
+                                    <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: protocolC.bg, color: protocolC.text }}>{API_PROTOCOL_LABELS[c.api_protocol] || c.api_protocol}</span>
+                                    <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: statusC.bg, color: statusC.text }}>{c.computed_status}</span>
                                   </div>
                                   <div className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-3 flex-wrap">
-                                    {c.model_type && <span>{c.model_type}</span>}
-                                    <span>折扣率 {(c.discount_rate * 100).toFixed(0)}%</span>
+                                    {c.scope_type === 'family' && c.model_family && <span>{c.model_family}</span>}
+                                    {c.scope_type === 'all' && <span>全部模型</span>}
+                                    {c.cost_discount != null && <span>通道成本 {fmtDiscount(c.cost_discount)}</span>}
                                     <span>{c.active_projects} 个项目</span>
-                                    {c.monthly_cost > 0 && <span className="text-rose-300">${c.monthly_cost.toLocaleString('zh-CN', { maximumFractionDigits: 2 })}/月</span>}
+                                    {c.monthly_cost > 0 && <span className="text-rose-600 dark:text-rose-400">${c.monthly_cost.toLocaleString('zh-CN', { maximumFractionDigits: 2 })}/月</span>}
                                   </div>
                                 </div>
                               </div>
                               {hasPermission('upstream:edit') && (
                                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <button onClick={() => openEditChannel(c)} className="p-1.5 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-bg-hover transition-colors"><Edit3 size={13} /></button>
+                                  <button onClick={() => openEditChannel(c)} className="p-1.5 rounded-lg text-gray-500 hover:text-accent-blue hover:bg-accent-blue/10 transition-colors"><Edit3 size={13} /></button>
                                   <button onClick={() => handleDeleteChannel(c.id)} disabled={deletingChannelId === c.id}
-                                    className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-bg-hover transition-colors disabled:opacity-50">
+                                    className="p-1.5 rounded-lg text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-colors disabled:opacity-50">
                                     {deletingChannelId === c.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
                                   </button>
                                 </div>
@@ -683,30 +768,64 @@ export default function UpstreamPage() {
                       <div className="rounded-xl bg-bg-input/50 border border-border/40 p-4">
                         <div className="flex items-center gap-2 mb-3"><IconBox icon={Phone} size="sm" tone="green" variant="soft" /><span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">联系信息</span></div>
                         <div className="space-y-2 text-xs">
-                          {selectedSupplierDetail.contact_person && <div className="flex items-center gap-2 text-gray-700 dark:text-gray-200"><span className="text-gray-500 w-12 shrink-0">对接人</span><span>{selectedSupplierDetail.contact_person}</span></div>}
-                          {selectedSupplierDetail.contact_email && <div className="flex items-center gap-2 text-gray-700 dark:text-gray-200 min-w-0"><Mail size={11} className="text-gray-500 shrink-0" /><a href={`mailto:${selectedSupplierDetail.contact_email}`} className="hover:text-blue-400 truncate">{selectedSupplierDetail.contact_email}</a></div>}
-                          {selectedSupplierDetail.contact_phone && <div className="flex items-center gap-2 text-gray-700 dark:text-gray-200"><Phone size={11} className="text-gray-500 shrink-0" /><span>{selectedSupplierDetail.contact_phone}</span></div>}
-                          {!selectedSupplierDetail.contact_person && !selectedSupplierDetail.contact_email && !selectedSupplierDetail.contact_phone && <span className="text-gray-600">暂无联系信息</span>}
+                          {selectedSupplierDetail.contact_person && <div className="flex items-start gap-1.5 min-w-0"><span className="text-gray-400 dark:text-gray-500 shrink-0 w-[4em]">对接人</span><span className="text-gray-700 dark:text-gray-200 flex-1 min-w-0">{selectedSupplierDetail.contact_person}</span></div>}
+                          {selectedSupplierDetail.contact_email && <div className="flex items-start gap-1.5 min-w-0"><Mail size={11} className="text-gray-400 dark:text-gray-500 mt-0.5 shrink-0" /><a href={`mailto:${selectedSupplierDetail.contact_email}`} className="text-gray-700 dark:text-gray-200 hover:text-blue-400 truncate flex-1 min-w-0">{selectedSupplierDetail.contact_email}</a></div>}
+                          {selectedSupplierDetail.contact_phone && <div className="flex items-start gap-1.5 min-w-0"><Phone size={11} className="text-gray-400 dark:text-gray-500 mt-0.5 shrink-0" /><span className="text-gray-700 dark:text-gray-200">{selectedSupplierDetail.contact_phone}</span></div>}
+                          {selectedSupplierDetail.im_group && <div className="flex items-start gap-1.5 min-w-0"><Hash size={11} className="text-gray-400 dark:text-gray-500 mt-0.5 shrink-0" /><span className="text-gray-700 dark:text-gray-200">{selectedSupplierDetail.im_group}</span></div>}
+                          {!selectedSupplierDetail.contact_person && !selectedSupplierDetail.contact_email && !selectedSupplierDetail.contact_phone && !selectedSupplierDetail.im_group && <span className="text-gray-500 dark:text-gray-600">暂无联系信息</span>}
                         </div>
                       </div>
                       <div className="rounded-xl bg-bg-input/50 border border-border/40 p-4">
                         <div className="flex items-center gap-2 mb-3"><IconBox icon={Cpu} size="sm" tone="blue" variant="soft" /><span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">技术信息</span></div>
                         <div className="space-y-2 text-xs">
-                          {selectedSupplierDetail.api_endpoint && <div className="flex items-center gap-2 text-gray-700 dark:text-gray-200 min-w-0"><Globe size={11} className="text-gray-500 shrink-0" /><a href={selectedSupplierDetail.api_endpoint} target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 truncate">{selectedSupplierDetail.api_endpoint}</a></div>}
-                          {selectedSupplierDetail.auth_type && <div className="flex items-center gap-2 text-gray-700 dark:text-gray-200"><Key size={11} className="text-gray-500 shrink-0" /><span>认证: {selectedSupplierDetail.auth_type}</span></div>}
+                          {selectedSupplierDetail.api_endpoint && <div className="flex items-start gap-1.5 min-w-0"><Globe size={11} className="text-gray-400 dark:text-gray-500 mt-0.5 shrink-0" /><a href={selectedSupplierDetail.api_endpoint} target="_blank" rel="noopener noreferrer" className="text-gray-700 dark:text-gray-200 hover:text-blue-400 truncate flex-1 min-w-0">{selectedSupplierDetail.api_endpoint}</a></div>}
+                          {selectedSupplierDetail.api_doc_url && <div className="flex items-start gap-1.5 min-w-0"><BookOpen size={11} className="text-gray-400 dark:text-gray-500 mt-0.5 shrink-0" /><a href={selectedSupplierDetail.api_doc_url} target="_blank" rel="noopener noreferrer" className="text-gray-700 dark:text-gray-200 hover:text-blue-400 truncate flex-1 min-w-0">API 文档</a></div>}
+                          {selectedSupplierDetail.auth_type && <div className="flex items-start gap-1.5 min-w-0"><Key size={11} className="text-gray-400 dark:text-gray-500 mt-0.5 shrink-0" /><span className="text-gray-700 dark:text-gray-200">认证: {selectedSupplierDetail.auth_type}</span></div>}
                           {selectedSupplierDetail.models_provided && (
                             <div className="mt-2"><span className="text-gray-500 text-[11px]">提供模型</span>
                               <div className="flex flex-wrap gap-1 mt-1">{selectedSupplierDetail.models_provided.split(',').filter(Boolean).map(m => <span key={m} className="px-1.5 py-0.5 rounded text-[11px] bg-blue-500/10 text-blue-400 font-medium">{m.trim()}</span>)}</div>
                             </div>
                           )}
-                          {!selectedSupplierDetail.api_endpoint && !selectedSupplierDetail.auth_type && !selectedSupplierDetail.models_provided && <span className="text-gray-600">暂无技术信息</span>}
+                          {!selectedSupplierDetail.api_endpoint && !selectedSupplierDetail.api_doc_url && !selectedSupplierDetail.auth_type && !selectedSupplierDetail.models_provided && <span className="text-gray-500 dark:text-gray-600">暂无技术信息</span>}
                         </div>
                       </div>
                     </div>
+                    {/* 财务账户 */}
+                    {(selectedSupplierDetail.settlement_method || selectedSupplierDetail.prepaid_balance != null || selectedSupplierDetail.credit_limit != null || selectedSupplierDetail.current_month_consumed != null) && (
+                      <div className="rounded-xl bg-bg-input/50 border border-border/40 p-4">
+                        <div className="flex items-center gap-2 mb-3"><IconBox icon={DollarSign} size="sm" tone="orange" variant="soft" /><span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">财务账户</span></div>
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                          {selectedSupplierDetail.settlement_method && (
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-gray-500 dark:text-gray-400 text-[11px]">结算方式</span>
+                              <span className="text-gray-700 dark:text-gray-200 font-medium">{selectedSupplierDetail.settlement_method}{selectedSupplierDetail.settlement_cycle_days ? `·${selectedSupplierDetail.settlement_cycle_days}天` : ''}</span>
+                            </div>
+                          )}
+                          {selectedSupplierDetail.prepaid_balance != null && (
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-gray-500 dark:text-gray-400 text-[11px]">预付余额</span>
+                              <span className="text-gray-700 dark:text-gray-200 font-medium tabular-nums">${selectedSupplierDetail.prepaid_balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                          )}
+                          {selectedSupplierDetail.credit_limit != null && (
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-gray-500 dark:text-gray-400 text-[11px]">授信额度</span>
+                              <span className="text-gray-700 dark:text-gray-200 font-medium tabular-nums">${selectedSupplierDetail.credit_limit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                          )}
+                          {selectedSupplierDetail.current_month_consumed != null && (
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-gray-500 dark:text-gray-400 text-[11px]">本月消费</span>
+                              <span className="text-rose-600 dark:text-rose-400 font-medium tabular-nums">${selectedSupplierDetail.current_month_consumed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<span className="text-gray-400 text-[11px] font-normal ml-1">自动核算</span></span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                     {selectedSupplierDetail.remarks && (
                       <div className="rounded-xl bg-bg-input/50 border border-border/40 p-4">
                         <div className="flex items-center gap-2 mb-2"><IconBox icon={FileText} size="sm" tone="gray" variant="soft" /><span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">备注</span></div>
-                        <p className="text-xs text-gray-400 whitespace-pre-wrap">{selectedSupplierDetail.remarks}</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{selectedSupplierDetail.remarks}</p>
                       </div>
                     )}
                   </div>
@@ -772,23 +891,18 @@ export default function UpstreamPage() {
               onChange={(v) => setChannelFilterSupplier(v === null ? '' : String(v))}
             />
             <SearchableSelect
-              options={[{ value: '', label: '全部类型' }, ...KINDS.map(k => ({ value: k, label: k }))]}
+              options={[{ value: '', label: '全部协议' }, ...API_PROTOCOLS.map(k => ({ value: k, label: API_PROTOCOL_LABELS[k] }))]}
               value={channelFilterKind}
               onChange={(v) => setChannelFilterKind(v === null ? '' : String(v))}
             />
             <SearchableSelect
-              options={[{ value: '', label: '全部模型' }, ...modelTypes.map(m => ({ value: m, label: m }))]}
-              value={channelFilterModel}
-              onChange={(v) => setChannelFilterModel(v === null ? '' : String(v))}
-            />
-            <SearchableSelect
-              options={[{ value: '', label: '全部状态' }, ...CHANNEL_STATUSES.map(s => ({ value: s, label: s }))]}
+              options={[{ value: '', label: '全部状态' }, ...Object.keys(COMPUTED_STATUS_COLORS).map(s => ({ value: s, label: s }))]}
               value={channelFilterStatus}
               onChange={(v) => setChannelFilterStatus(v === null ? '' : String(v))}
             />
             {hasPermission('upstream:edit') && (
               <button onClick={() => openCreateChannel()}
-                className="ml-auto inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-cyan-500 to-blue-500 rounded-lg hover:opacity-90">
+                className="ml-auto inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-accent-blue rounded-lg hover:bg-blue-600 transition-colors">
                 <Plus size={14} /> 新建通道
               </button>
             )}
@@ -800,29 +914,30 @@ export default function UpstreamPage() {
                 <EmptyState icon={Network} title="暂无通道" description="新建通道或调整筛选条件" tone="cyan" />
               ) : filteredChannels.map(c => {
                 const sup = supplierMap[c.supplier_id]
-                const kindC = KIND_COLORS[c.kind] || KIND_COLORS['其他']
-                const statusC = CHANNEL_STATUS_COLORS[c.status] || CHANNEL_STATUS_COLORS['合作中']
+                const protocolC = API_PROTOCOL_COLORS[c.api_protocol] || API_PROTOCOL_COLORS['other']
+                const statusC = COMPUTED_STATUS_COLORS[c.computed_status] || COMPUTED_STATUS_COLORS['长期有效']
                 const active = selectedChannelId === c.id
                 return (
                   <button key={c.id} onClick={() => setSelectedChannelId(active ? null : c.id)}
-                    className={`w-full text-left p-3 rounded-xl border transition-all ${active ? 'bg-cyan-500/10 border-cyan-500/40 shadow-lg shadow-cyan-500/5' : 'bg-bg-hover/30 border-border hover:bg-bg-hover/50 hover:border-border'}`}>
+                    className={`w-full text-left p-3 rounded-xl border transition-all ${active ? 'bg-accent-blue/10 border-accent-blue/30' : 'bg-bg-hover/30 border-border hover:bg-bg-hover/50 hover:border-border'}`}>
                     <div className="flex items-start gap-3">
                       <IconBox icon={Cpu} size="md" tone="cyan" variant="soft" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm font-semibold text-gray-900 dark:text-white">{c.name}</span>
                           {c.code && <span className="text-[11px] text-gray-500 font-mono">#{c.code}</span>}
-                          <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: kindC.bg, color: kindC.text }}>{c.kind}</span>
-                          <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: statusC.bg, color: statusC.text }}>{c.status}</span>
+                          <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: protocolC.bg, color: protocolC.text }}>{API_PROTOCOL_LABELS[c.api_protocol] || c.api_protocol}</span>
+                          <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold" style={{ background: statusC.bg, color: statusC.text }}>{c.computed_status}</span>
                         </div>
                         <div className="mt-1 text-[11px] text-gray-500 flex items-center gap-3 flex-wrap">
                           <span className="inline-flex items-center gap-1"><Building2 size={11} />{sup?.name || '—'}</span>
-                          {c.model_type && <span className="inline-flex items-center gap-1"><Hash size={11} />{c.model_type}</span>}
-                          <span className="inline-flex items-center gap-1 text-blue-300/80"><Percent size={11} />折扣率 {(c.discount_rate * 100).toFixed(0)}%</span>
+                          {c.scope_type === 'family' && c.model_family && <span className="inline-flex items-center gap-1"><Hash size={11} />{c.model_family}</span>}
+                          {c.scope_type === 'all' && <span className="inline-flex items-center gap-1"><Hash size={11} />全部模型</span>}
+                          {c.cost_discount != null && <span className="inline-flex items-center gap-1"><Percent size={11} />通道成本 {fmtDiscount(c.cost_discount)}</span>}
                           <span className="inline-flex items-center gap-1"><Activity size={11} />{c.active_projects} 个活跃项目</span>
                         </div>
                       </div>
-                      <ChevronRight size={16} className={`text-gray-600 transition-transform ${active ? 'rotate-90 text-cyan-400' : ''}`} />
+                      <ChevronRight size={16} className={`text-gray-600 transition-transform ${active ? 'rotate-90 text-accent-blue' : ''}`} />
                     </div>
                   </button>
                 )
@@ -839,9 +954,6 @@ export default function UpstreamPage() {
                   onDelete={() => handleDeleteChannel(selectedChannel.id)}
                   deleting={deletingChannelId === selectedChannel.id}
                   onClose={() => setSelectedChannelId(null)}
-                  onSubmitApproval={() => handleSubmitChannelApproval(selectedChannel)}
-                  submittingApproval={submittingChannelApproval}
-                  onApprovalChanged={loadChannels}
                 />
               </div>
             )}
@@ -865,46 +977,118 @@ export default function UpstreamPage() {
       {/* 供应商表单 */}
       {showSupplierForm && (
         <Modal icon={editingSupplier ? Edit3 : Plus} title={editingSupplier ? '编辑供应商' : '新增供应商'}
-          subtitle="基础信息 · 联系信息 · 商务条款 · 技术对接" tone="blue" size="2xl" onClose={() => setShowSupplierForm(false)}>
-          <div className="space-y-5">
-            <div>
-              <SectionLabel>基本信息</SectionLabel>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="名称" required><input value={supplierForm.name} onChange={e => setSupplierForm(f => ({ ...f, name: e.target.value }))} placeholder="如 OpenAI" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" /></Field>
-                <Field label="简码" hint="英文字母+数字"><input value={supplierForm.code} onChange={e => setSupplierForm(f => ({ ...f, code: e.target.value }))} placeholder="如 openai" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" /></Field>
-                <Field label="类型"><SearchableSelect options={CATEGORIES.map(c => ({ value: c, label: c }))} value={supplierForm.category} onChange={(v) => setSupplierForm(f => ({ ...f, category: v === null ? '' : String(v) }))} /></Field>
-                <Field label="状态"><SearchableSelect options={SUPPLIER_STATUSES.map(s => ({ value: s, label: s }))} value={supplierForm.status} onChange={(v) => setSupplierForm(f => ({ ...f, status: v === null ? '' : String(v) }))} /></Field>
-              </div>
-            </div>
-            <div>
-              <SectionLabel>联系信息</SectionLabel>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="对接人" full><input value={supplierForm.contact_person} onChange={e => setSupplierForm(f => ({ ...f, contact_person: e.target.value }))} placeholder="对接人姓名" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" /></Field>
-                <Field label="邮箱"><input type="email" value={supplierForm.contact_email} onChange={e => setSupplierForm(f => ({ ...f, contact_email: e.target.value }))} placeholder="email@example.com" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" /></Field>
-                <Field label="电话"><input value={supplierForm.contact_phone} onChange={e => setSupplierForm(f => ({ ...f, contact_phone: e.target.value }))} placeholder="联系电话" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" /></Field>
-              </div>
-            </div>
-            <div>
-              <SectionLabel>商务信息</SectionLabel>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="结算币种"><SearchableSelect options={CURRENCIES.map(c => ({ value: c, label: `${c} - ${CURRENCY_META[c]?.name || c}` }))} value={supplierForm.settlement_currency} onChange={(v) => setSupplierForm(f => ({ ...f, settlement_currency: v === null ? '' : String(v) }))} /></Field>
-                <Field label="付款条件"><input value={supplierForm.payment_terms} onChange={e => setSupplierForm(f => ({ ...f, payment_terms: e.target.value }))} placeholder="如 月结30天" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" /></Field>
-                <Field label="合同起始"><input type="month" value={supplierForm.contract_start} onChange={e => setSupplierForm(f => ({ ...f, contract_start: e.target.value }))} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" /></Field>
-                <Field label="合同终止"><input type="month" value={supplierForm.contract_end} onChange={e => setSupplierForm(f => ({ ...f, contract_end: e.target.value }))} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" /></Field>
-              </div>
-            </div>
-            <div>
-              <SectionLabel>技术对接</SectionLabel>
-              <div className="space-y-3">
-                <Field label="API 入口" full hint="完整 URL，含 https://"><input value={supplierForm.api_endpoint} onChange={e => setSupplierForm(f => ({ ...f, api_endpoint: e.target.value }))} placeholder="https://api.openai.com" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" /></Field>
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="提供模型" hint="逗号分隔"><input value={supplierForm.models_provided} onChange={e => setSupplierForm(f => ({ ...f, models_provided: e.target.value }))} placeholder="GPT-4o,Claude-3.5" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all" /></Field>
-                  <Field label="认证方式"><SearchableSelect options={[{ value: '', label: '请选择' }, ...AUTH_TYPES.map(a => ({ value: a, label: a }))]} value={supplierForm.auth_type} onChange={(v) => setSupplierForm(f => ({ ...f, auth_type: v === null ? '' : String(v) }))} /></Field>
+          subtitle="基本信息 · 联系方式 · 财务账户 · 技术对接" tone="blue" size="2xl" onClose={() => setShowSupplierForm(false)}>
+          {(() => {
+            const si = 'w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-900 dark:text-white outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all'
+            const sf = (patch: Partial<typeof supplierForm>) => setSupplierForm(f => ({ ...f, ...patch }))
+            return (
+              <div className="space-y-5">
+
+                {/* ── 基本信息 ── */}
+                <div>
+                  <SectionLabel>基本信息</SectionLabel>
+                  <div className="grid grid-cols-3 gap-3">
+                    <Field label="供应商名称" required className="col-span-2">
+                      <input value={supplierForm.name} onChange={e => sf({ name: e.target.value })} placeholder="如 Anthropic" className={si} />
+                    </Field>
+                    <Field label="简码" hint="英文+数字">
+                      <input value={supplierForm.code} onChange={e => sf({ code: e.target.value })} placeholder="如 ant" className={si} />
+                    </Field>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mt-3">
+                    <Field label="类型">
+                      <SearchableSelect options={CATEGORIES.map(c => ({ value: c, label: c }))} value={supplierForm.category} onChange={v => sf({ category: v === null ? '' : String(v) })} />
+                    </Field>
+                    <Field label="合作状态">
+                      <SearchableSelect options={SUPPLIER_STATUSES.map(s => ({ value: s, label: s }))} value={supplierForm.status} onChange={v => sf({ status: v === null ? '' : String(v) })} />
+                    </Field>
+                  </div>
                 </div>
+
+                {/* ── 联系方式 ── */}
+                <div>
+                  <SectionLabel>联系方式</SectionLabel>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="对接人">
+                      <input value={supplierForm.contact_person} onChange={e => sf({ contact_person: e.target.value })} placeholder="对接人姓名" className={si} />
+                    </Field>
+                    <Field label="邮箱">
+                      <input type="email" value={supplierForm.contact_email} onChange={e => sf({ contact_email: e.target.value })} placeholder="email@example.com" className={si} />
+                    </Field>
+                    <Field label="电话">
+                      <input value={supplierForm.contact_phone} onChange={e => sf({ contact_phone: e.target.value })} placeholder="联系电话" className={si} />
+                    </Field>
+                    <Field label="微信 / 飞书群">
+                      <input value={supplierForm.im_group} onChange={e => sf({ im_group: e.target.value })} placeholder="群名或群链接" className={si} />
+                    </Field>
+                  </div>
+                </div>
+
+                {/* ── 财务账户 ── */}
+                <div>
+                  <SectionLabel>财务账户</SectionLabel>
+                  {/* 结算三要素 */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <Field label="结算方式">
+                      <SearchableSelect options={[{ value: '', label: '不指定' }, ...SETTLEMENT_METHODS.map(m => ({ value: m, label: m }))]} value={supplierForm.settlement_method} onChange={v => sf({ settlement_method: v === null ? '' : String(v) })} />
+                    </Field>
+                    <Field label="结算周期（天）">
+                      <input type="number" min={0} value={supplierForm.settlement_cycle_days} onChange={e => sf({ settlement_cycle_days: e.target.value })} placeholder="30" className={si} />
+                    </Field>
+                    <Field label="结算币种">
+                      <SearchableSelect options={CURRENCIES.map(c => ({ value: c, label: `${c} - ${CURRENCY_META[c]?.name || c}` }))} value={supplierForm.settlement_currency} onChange={v => sf({ settlement_currency: v === null ? '' : String(v) })} />
+                    </Field>
+                  </div>
+                  {/* 余额 */}
+                  <div className="grid grid-cols-2 gap-3 mt-3">
+                    <Field label="预付余额（元）" hint="手动维护">
+                      <input type="number" min={0} value={supplierForm.prepaid_balance} onChange={e => sf({ prepaid_balance: e.target.value })} placeholder="0.00" className={si} />
+                    </Field>
+                    <Field label="信用额度（元）">
+                      <input type="number" min={0} value={supplierForm.credit_limit} onChange={e => sf({ credit_limit: e.target.value })} placeholder="0.00" className={si} />
+                    </Field>
+                  </div>
+                  {/* 合同 + 付款条款 */}
+                  <div className="grid grid-cols-3 gap-3 mt-3">
+                    <Field label="合同起始">
+                      <input type="month" value={supplierForm.contract_start} onChange={e => sf({ contract_start: e.target.value })} className={si} />
+                    </Field>
+                    <Field label="合同终止">
+                      <input type="month" value={supplierForm.contract_end} onChange={e => sf({ contract_end: e.target.value })} className={si} />
+                    </Field>
+                    <Field label="付款条款" hint="如：月结30天">
+                      <input value={supplierForm.payment_terms || ''} onChange={e => sf({ payment_terms: e.target.value })} placeholder="月结30天" className={si} />
+                    </Field>
+                  </div>
+                </div>
+
+                {/* ── 技术对接 ── */}
+                <div>
+                  <SectionLabel>技术对接</SectionLabel>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="API 入口" hint="Base URL">
+                      <input value={supplierForm.api_endpoint} onChange={e => sf({ api_endpoint: e.target.value })} placeholder="https://api.example.com" className={si} />
+                    </Field>
+                    <Field label="API 文档地址">
+                      <input value={supplierForm.api_doc_url} onChange={e => sf({ api_doc_url: e.target.value })} placeholder="https://docs.example.com" className={si} />
+                    </Field>
+                    <Field label="提供模型" hint="逗号分隔">
+                      <input value={supplierForm.models_provided} onChange={e => sf({ models_provided: e.target.value })} placeholder="GPT-4o, Claude-3.5" className={si} />
+                    </Field>
+                    <Field label="认证方式">
+                      <SearchableSelect options={[{ value: '', label: '请选择' }, ...AUTH_TYPES.map(a => ({ value: a, label: a }))]} value={supplierForm.auth_type} onChange={v => sf({ auth_type: v === null ? '' : String(v) })} />
+                    </Field>
+                  </div>
+                </div>
+
+                {/* ── 备注 ── */}
+                <Field label="备注" full>
+                  <textarea value={supplierForm.remarks} onChange={e => sf({ remarks: e.target.value })} placeholder="其他补充信息" rows={2} className={`${si} resize-none`} />
+                </Field>
+
               </div>
-            </div>
-            <Field label="备注" full><textarea value={supplierForm.remarks} onChange={e => setSupplierForm(f => ({ ...f, remarks: e.target.value }))} placeholder="其他备注信息" rows={2} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/15 transition-all resize-none" /></Field>
-          </div>
+            )
+          })()}
           <ModalFooter onClose={() => setShowSupplierForm(false)} onSave={handleSaveSupplier} saving={savingSupplier} tone="blue"
             saveText={editingSupplier ? '保存修改' : '创建供应商'} saveDisabled={!supplierForm.name}
             leftHint={editingSupplier ? `编辑供应商：${editingSupplier.name}` : '新增供应商，创建后可添加关联通道'} />
@@ -913,60 +1097,144 @@ export default function UpstreamPage() {
 
       {/* 通道表单 */}
       {showChannelForm && (
-        <ChannelFormModal form={channelForm} setForm={setChannelForm} suppliers={suppliers}
+        <ChannelFormModal form={channelForm} setForm={setChannelForm} suppliers={suppliers} prices={prices}
           editing={editingChannel} saving={savingChannel} onClose={() => setShowChannelForm(false)} onSave={handleSaveChannel} />
+      )}
+
+      {/* 页内确认对话框 */}
+      {confirmDialog && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setConfirmDialog(null)} />
+          <div className="relative z-10 w-full max-w-sm rounded-2xl bg-bg-card border border-border shadow-xl p-6">
+            <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-2">{confirmDialog.title}</h3>
+            <p className="text-xs text-gray-600 dark:text-gray-400 mb-5">{confirmDialog.message}</p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setConfirmDialog(null)}
+                className="px-4 py-1.5 text-xs font-semibold border border-border bg-bg-card text-gray-600 dark:text-gray-400 rounded-lg hover:border-accent-blue/50 hover:text-accent-blue transition-colors">
+                取消
+              </button>
+              <button onClick={confirmDialog.onConfirm}
+                className="px-4 py-1.5 text-xs font-bold text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors">
+                确认删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 批量导入弹窗 */}
+      {showImport && (
+        <ImportModal
+          isAdmin={isAdmin}
+          importType={importType} setImportType={setImportType}
+          importFile={importFile} setImportFile={setImportFile}
+          importResult={importResult} setImportResult={setImportResult}
+          loading={importLoading}
+          onDryRun={() => handleImportRun(true)}
+          onConfirm={() => handleImportRun(false)}
+          onClose={() => { setShowImport(false); setImportFile(null); setImportResult(null) }}
+        />
       )}
     </div>
   )
 }
 
 /* ──── 通道详情面板 ──── */
-function ChannelDetailPanel({ channel, supplier, prices, onEdit, onDelete, deleting, onClose, onSubmitApproval, submittingApproval, onApprovalChanged }: {
+function ChannelDetailPanel({ channel, supplier, prices, onEdit, onDelete, deleting, onClose }: {
   channel: Channel; supplier: Supplier | undefined; prices: ModelCatalogItem[]
   onEdit: () => void; onDelete: () => void; deleting: boolean; onClose: () => void
-  onSubmitApproval: () => void; submittingApproval: boolean; onApprovalChanged: () => void
 }) {
   const sla = parseSla(channel.sla_json)
-  const provider = matchProvider(channel.model_type)
-  const familyPrices = prices.filter(p => provider && p.provider === provider && (p.input_price != null || p.output_price != null)).slice(0, 4)
+  const provider = channelProvider(channel, prices)
+  const statusC = COMPUTED_STATUS_COLORS[channel.computed_status] || COMPUTED_STATUS_COLORS['长期有效']
+  const protocolC = API_PROTOCOL_COLORS[channel.api_protocol] || API_PROTOCOL_COLORS['other']
+
+  // 成本实算：找绑定模型的官方价格
+  const costPrices = (() => {
+    if (channel.scope_type === 'single' && channel.model_id) {
+      return prices.filter(p => p.id === channel.model_id && (p.input_price != null || p.output_price != null))
+    }
+    if (channel.scope_type === 'family' || channel.scope_type === 'all') {
+      return prices.filter(p => provider && p.provider === provider && (p.input_price != null || p.output_price != null)).slice(0, 5)
+    }
+    return []
+  })()
+
+  const scopeLabel = channel.scope_type === 'single'
+    ? (prices.find(p => p.id === channel.model_id)?.name || `模型 #${channel.model_id}`)
+    : channel.scope_type === 'family' ? (channel.model_family || '—') : '全部模型'
 
   return (
-    <div className="rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-cyan-500/[0.04] to-blue-500/[0.04] p-4 sticky top-4">
+    <div className="rounded-2xl border border-border bg-bg-card p-4 sticky top-4">
       <div className="flex items-start justify-between mb-3">
-        <SectionHeader icon={Cpu} title={channel.name} description={`${supplier?.name || '—'} · ${channel.kind}`} tone="cyan" />
+        <SectionHeader icon={Cpu} title={channel.name} description={`${supplier?.name || '—'} · ${API_PROTOCOL_LABELS[channel.api_protocol] || channel.api_protocol}`} tone="cyan" />
         <button onClick={onClose} className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"><X size={16} /></button>
       </div>
+
+      {/* 状态 badge 行 */}
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold" style={{ background: statusC.bg, color: statusC.text }}>{channel.computed_status}</span>
+        <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold" style={{ background: protocolC.bg, color: protocolC.text }}>{API_PROTOCOL_LABELS[channel.api_protocol] || channel.api_protocol}</span>
+        {channel.cost_discount != null && (
+          <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold bg-accent-blue/10 text-accent-blue">
+            成本 {fmtDiscount(channel.cost_discount)}
+            {channel.markup != null && channel.markup > 0 && (
+              <> → 售价 {fmtDiscount(channel.cost_discount + channel.markup)}</>
+            )}
+          </span>
+        )}
+      </div>
+
+      {/* KPI 格子 */}
       <div className="grid grid-cols-2 gap-2 mb-4">
-        <StatBox label="折扣率" value={`${(channel.discount_rate * 100).toFixed(0)}%`} sub="相较官网定价" tone="blue" />
-        <StatBox label="建议加价" value={`+${(channel.suggested_markup * 100).toFixed(0)}%`} tone="orange" />
+        <StatBox label="绑定模型" value={SCOPE_TYPE_LABELS[channel.scope_type]} tone="blue" />
         <StatBox label="库存/在库" value={`${channel.inventory_available}/${channel.inventory_total}`} tone="green" />
         <StatBox label="活跃项目" value={`${channel.active_projects}`} tone="purple" />
         <StatBox label="当月成本" value={`$${channel.monthly_cost.toLocaleString('zh-CN', { maximumFractionDigits: 2 })}`} tone="red" />
       </div>
-      <div className="space-y-2 text-xs">
-        {channel.model_type && <div className="flex items-center gap-2"><Hash size={12} className="text-gray-500" /><span className="text-gray-500">模型族</span><span className="text-gray-900 dark:text-white font-medium">{channel.model_type}</span></div>}
+
+      {/* 基本信息 */}
+      <div className="space-y-1.5 text-xs">
+        <div className="flex items-center gap-2"><Hash size={12} className="text-gray-500" /><span className="text-gray-500">覆盖范围</span><span className="text-gray-900 dark:text-white font-medium">{scopeLabel}</span></div>
         {channel.code && <div className="flex items-center gap-2"><Key size={12} className="text-gray-500" /><span className="text-gray-500">通道编码</span><span className="text-gray-900 dark:text-white font-medium">{channel.code}</span></div>}
-        {channel.contract_start && <div className="flex items-center gap-2"><Calendar size={12} className="text-gray-500" /><span className="text-gray-500">合同期</span><span className="text-gray-900 dark:text-white font-medium">{channel.contract_start} ~ {channel.contract_end || '至今'}</span></div>}
+        {channel.cost_source && channel.cost_discount != null && (
+          <div className="flex items-center gap-2"><DollarSign size={12} className="text-gray-500" /><span className="text-gray-500">成本来源</span><span className="text-gray-900 dark:text-white font-medium">{channel.cost_source === 'import' ? '表格导入' : '手动录入'}</span></div>
+        )}
       </div>
-      {familyPrices.length > 0 && (
+
+      {/* 成本 & 售价实算表 */}
+      {channel.cost_discount != null && costPrices.length > 0 && (
         <div className="mt-4 pt-3 border-t border-border">
           <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
-            <BookOpen size={12} />官方价格 × {(channel.discount_rate * 100).toFixed(0)}% 参考成本
+            <BookOpen size={12} />价格实算（基于官方原价）
           </div>
           <div className="space-y-1.5">
-            {familyPrices.map(p => (
-              <div key={p.id} className="flex items-center justify-between text-[11px] py-1 px-2 rounded-lg bg-bg-hover/50">
-                <span className="text-gray-700 dark:text-gray-200 font-medium truncate max-w-[110px]">{p.name}</span>
-                <div className="flex gap-3 text-[11px] tabular-nums shrink-0">
-                  {p.input_price != null && <span className="text-emerald-400">输入 {fmtUSD(p.input_price * channel.discount_rate)}/1M</span>}
-                  {p.output_price != null && <span className="text-orange-400">输出 {fmtUSD(p.output_price * channel.discount_rate)}/1M</span>}
+            {costPrices.map(p => {
+              const sellRate = channel.cost_discount! + (channel.markup ?? 0)
+              return (
+                <div key={p.id} className="text-[11px] py-1.5 px-2 rounded-lg bg-bg-hover/50 space-y-1">
+                  <span className="text-gray-700 dark:text-gray-200 font-medium block truncate">{p.name}</span>
+                  <div className="flex gap-4 tabular-nums flex-wrap">
+                    <span className="text-gray-500">成本{fmtDiscount(channel.cost_discount)}：
+                      {p.input_price != null && <span className="text-emerald-600 dark:text-emerald-400 ml-1">↑{fmtUSD(p.input_price * channel.cost_discount!, p.price_currency)}</span>}
+                      {p.output_price != null && <span className="text-orange-500 dark:text-orange-400 ml-1">↓{fmtUSD(p.output_price * channel.cost_discount!, p.price_currency)}</span>}
+                    </span>
+                    {channel.markup != null && channel.markup > 0 && (
+                      <span className="text-gray-500">售价{fmtDiscount(sellRate)}：
+                        {p.input_price != null && <span className="text-blue-600 dark:text-blue-400 ml-1">↑{fmtUSD(p.input_price * sellRate, p.price_currency)}</span>}
+                        {p.output_price != null && <span className="text-purple-600 dark:text-purple-400 ml-1">↓{fmtUSD(p.output_price * sellRate, p.price_currency)}</span>}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
-          <p className="mt-1.5 text-[11px] text-gray-600">官网价 × 折扣率，仅作成本估算参考</p>
+          <p className="mt-1.5 text-[11px] text-gray-500 dark:text-gray-400">单位：官网原价币种/1M tokens，仅作估算参考</p>
         </div>
       )}
+
+      {/* SLA */}
       {(sla.cache_hit_rate != null || sla.tpm != null || sla.rpm != null || sla.avg_latency_ms != null) && (
         <div className="mt-4 pt-3 border-t border-border">
           <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1"><Activity size={12} />SLA & 技术指标</div>
@@ -978,26 +1246,21 @@ function ChannelDetailPanel({ channel, supplier, prices, onEdit, onDelete, delet
           </div>
         </div>
       )}
+
+      {/* 备注 */}
       {channel.remarks && (
         <div className="mt-4 pt-3 border-t border-border">
           <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 flex items-center gap-1"><FileText size={12} />备注</div>
-          <p className="text-xs text-gray-400 leading-relaxed whitespace-pre-wrap">{channel.remarks}</p>
+          <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed whitespace-pre-wrap">{channel.remarks}</p>
         </div>
       )}
-      {channel.status === '待确认' && (
-        <div className="mt-3"><ApprovalTimeline targetType="channel" targetId={channel.id} onChanged={onApprovalChanged} /></div>
-      )}
+
+      {/* 操作按钮 */}
       <div className="mt-4 pt-3 border-t border-border flex gap-2 flex-wrap">
-        {channel.status === '合作中' && (
-          <button onClick={onSubmitApproval} disabled={submittingApproval}
-            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-purple-300 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 rounded-lg disabled:opacity-50">
-            {submittingApproval ? <Loader2 size={13} className="animate-spin" /> : <GitBranch size={13} />}提交价格变更审批
-          </button>
-        )}
-        <button onClick={onEdit} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/30 rounded-lg">
+        <button onClick={onEdit} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-border bg-bg-card text-gray-600 dark:text-gray-400 hover:border-accent-blue/50 hover:text-accent-blue rounded-lg">
           <Edit3 size={13} />编辑
         </button>
-        <button onClick={onDelete} disabled={deleting} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 rounded-lg disabled:opacity-50">
+        <button onClick={onDelete} disabled={deleting} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg disabled:opacity-50">
           {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}删除
         </button>
       </div>
@@ -1020,14 +1283,14 @@ function StatsView({ suppliers, channels, channelStats, costByCurrency, prices }
   const providerList = useMemo(() => { const s = new Set<string>(); priced.forEach(p => p.provider && s.add(p.provider)); return Array.from(s).sort() }, [priced])
   const displayed = useMemo(() => providerFilter === 'all' ? priced : priced.filter(p => p.provider === providerFilter), [priced, providerFilter])
   const grouped = useMemo(() => { const g: Record<string, ModelCatalogItem[]> = {}; displayed.forEach(p => { const k = p.provider || '其他'; if (!g[k]) g[k] = []; g[k].push(p) }); return g }, [displayed])
-  const channelsByProvider = useMemo(() => { const m: Record<string, Channel[]> = {}; channels.forEach(c => { const prov = matchProvider(c.model_type); if (prov) { if (!m[prov]) m[prov] = []; m[prov].push(c) } }); return m }, [channels])
+  const channelsByProvider = useMemo(() => { const m: Record<string, Channel[]> = {}; channels.forEach(c => { const prov = matchProvider(c.model_family); if (prov) { if (!m[prov]) m[prov] = []; m[prov].push(c) } }); return m }, [channels])
 
   return (
     <div className="space-y-4">
       {/* KPI */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard icon={Building2} label="供应商总数" value={suppliers.length} sub={`合作中 ${activeSuppliers} 家`} color="#3B82F6" gradient="radial-gradient(circle, #3B82F6 0%, transparent 70%)" />
-        <KpiCard icon={Network} label="通道总数" value={channels.length} sub={`活跃 ${channels.filter(c => c.status === '合作中').length} 条`} color="#06B6D4" gradient="radial-gradient(circle, #06B6D4 0%, transparent 70%)" />
+        <KpiCard icon={Network} label="通道总数" value={channels.length} sub={`生效 ${channels.filter(c => c.computed_status === '生效中' || c.computed_status === '长期有效').length} 条`} color="#06B6D4" gradient="radial-gradient(circle, #06B6D4 0%, transparent 70%)" />
         <KpiCard icon={Activity} label="活跃项目" value={channelStats.totalActive} sub="有通道的活跃项目" color="#10B981" gradient="radial-gradient(circle, #10B981 0%, transparent 70%)" />
         <KpiCard icon={Cpu} label="模型数" value={totalModels} sub="所有供应商提供的模型" color="#8B5CF6" gradient="radial-gradient(circle, #8B5CF6 0%, transparent 70%)" />
       </div>
@@ -1069,8 +1332,8 @@ function StatsView({ suppliers, channels, channelStats, costByCurrency, prices }
           <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1"><Network size={12} />按通道类型</div>
           <div className="space-y-2">
             {Object.entries(channelStats.byKind).map(([k, n]) => {
-              const c = KIND_COLORS[k] || KIND_COLORS['其他']; const pct = channels.length > 0 ? n / channels.length * 100 : 0
-              return (<div key={k}><div className="flex items-center justify-between text-xs mb-1"><span style={{ color: c.text }} className="font-semibold">{k}</span><span className="text-gray-500 tabular-nums">{n} ({pct.toFixed(0)}%)</span></div><div className="h-1.5 bg-bg-hover rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${pct}%`, background: c.text }} /></div></div>)
+              const c = API_PROTOCOL_COLORS[k] || API_PROTOCOL_COLORS['other']; const pct = channels.length > 0 ? n / channels.length * 100 : 0
+              return (<div key={k}><div className="flex items-center justify-between text-xs mb-1"><span style={{ color: c.text }} className="font-semibold">{API_PROTOCOL_LABELS[k] || k}</span><span className="text-gray-500 tabular-nums">{n} ({pct.toFixed(0)}%)</span></div><div className="h-1.5 bg-bg-hover rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${pct}%`, background: c.text }} /></div></div>)
             })}
           </div>
         </div>
@@ -1078,7 +1341,7 @@ function StatsView({ suppliers, channels, channelStats, costByCurrency, prices }
           <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1"><Activity size={12} />按状态</div>
           <div className="space-y-2">
             {Object.entries(channelStats.byStatus).map(([s, n]) => {
-              const c = CHANNEL_STATUS_COLORS[s] || CHANNEL_STATUS_COLORS['合作中']; const pct = channels.length > 0 ? n / channels.length * 100 : 0
+              const c = COMPUTED_STATUS_COLORS[s] || COMPUTED_STATUS_COLORS['长期有效']; const pct = channels.length > 0 ? n / channels.length * 100 : 0
               return (<div key={s}><div className="flex items-center justify-between text-xs mb-1"><span style={{ color: c.text }} className="font-semibold">{s}</span><span className="text-gray-500 tabular-nums">{n} ({pct.toFixed(0)}%)</span></div><div className="h-1.5 bg-bg-hover rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${pct}%`, background: c.text }} /></div></div>)
             })}
           </div>
@@ -1089,10 +1352,10 @@ function StatsView({ suppliers, channels, channelStats, costByCurrency, prices }
       {priced.length > 0 && (
         <div className="rounded-2xl bg-bg-card border border-border/50 p-5">
           <div className="flex items-center justify-between flex-wrap gap-3 mb-4 p-3 rounded-xl bg-blue-500/5 border border-blue-500/20">
-            <div className="text-[11px] text-blue-300/80"><span className="font-bold text-blue-300">价格来源：</span>官网公开定价（USD/1M tokens），在「管理后台 → 模型管理」中维护。</div>
+            <div className="text-[11px] text-gray-600 dark:text-gray-400"><span className="font-bold text-gray-700 dark:text-gray-300">价格来源：</span>官网公开定价（USD/1M tokens），在「管理后台 → 模型管理」中维护。</div>
             <div className="flex items-center gap-2 flex-wrap shrink-0">
-              <button onClick={() => setProviderFilter('all')} className={`px-3 py-1 text-xs rounded-lg font-semibold transition-colors border ${providerFilter === 'all' ? 'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-500/10 dark:text-cyan-400 dark:border-cyan-500/20' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white border-transparent'}`}>全部</button>
-              {providerList.map(prov => <button key={prov} onClick={() => setProviderFilter(prov)} className={`px-3 py-1 text-xs rounded-lg font-semibold transition-colors border ${providerFilter === prov ? 'bg-bg-hover text-gray-700 dark:text-gray-200 border-border' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white border-transparent'}`}>{prov}</button>)}
+              <button onClick={() => setProviderFilter('all')} className={`px-3 py-1 text-xs rounded-lg font-semibold transition-colors border ${providerFilter === 'all' ? 'bg-accent-blue/15 text-accent-blue border-accent-blue/30' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white border-transparent'}`}>全部</button>
+              {providerList.map(prov => <button key={prov} onClick={() => setProviderFilter(prov)} className={`px-3 py-1 text-xs rounded-lg font-semibold transition-colors border ${providerFilter === prov ? 'bg-accent-blue/15 text-accent-blue border-accent-blue/30' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white border-transparent'}`}>{prov}</button>)}
             </div>
           </div>
           <div className="space-y-6">
@@ -1102,35 +1365,57 @@ function StatsView({ suppliers, channels, channelStats, costByCurrency, prices }
                 <div key={prov}>
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2"><span className="text-sm font-bold text-gray-900 dark:text-white">{prov}</span><span className="text-[11px] text-gray-600 px-2 py-0.5 rounded-full bg-bg-hover">{models.length} 个模型</span></div>
-                    {linkedChannels.length > 0 && <span className="text-[11px] text-gray-500 flex items-center gap-1 flex-wrap"><Network size={10} />{linkedChannels.length} 条关联通道：{linkedChannels.map(c => <span key={c.id} className="px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-cyan-500/10 text-cyan-300">{c.name} {(c.discount_rate * 100).toFixed(0)}%折</span>)}</span>}
+                    {linkedChannels.length > 0 && <span className="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-1 flex-wrap"><Network size={10} />{linkedChannels.length} 条关联通道：{linkedChannels.map(c => <span key={c.id} className="px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-accent-blue/10 text-accent-blue">{c.name}{c.cost_discount != null ? ` ${fmtDiscount(c.cost_discount)}` : ''}</span>)}</span>}
                   </div>
                   <div className="rounded-xl border border-border overflow-hidden">
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs">
                         <thead><tr className="text-left text-[11px] text-gray-500 uppercase tracking-wider bg-bg-hover/30">
                           <th className="px-4 py-2.5 font-semibold">模型</th>
-                          <th className="px-4 py-2.5 font-semibold text-right">输入 $/1M</th>
-                          <th className="px-4 py-2.5 font-semibold text-right">输出 $/1M</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">输入价/1M</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">输出价/1M</th>
                           <th className="px-4 py-2.5 font-semibold text-right">缓存读取</th>
                           <th className="px-4 py-2.5 font-semibold text-right">缓存写入</th>
-                          {linkedChannels.map(c => <th key={c.id} className="px-4 py-2.5 font-semibold text-right text-cyan-400">{c.name}<br /><span className="text-[11px] font-normal text-gray-500">×{(c.discount_rate * 100).toFixed(0)}%</span></th>)}
+                          {linkedChannels.map(c => <th key={c.id} className="px-4 py-2.5 font-semibold text-right text-accent-blue">{c.name}<br /><span className="text-[11px] font-normal text-gray-500">{c.cost_discount != null ? fmtDiscount(c.cost_discount) : '—'}</span></th>)}
                         </tr></thead>
                         <tbody>
-                          {models.map((m, i) => (
-                            <tr key={m.id} className={`border-t border-border ${i % 2 === 0 ? 'bg-bg-hover/30' : ''}`}>
-                              <td className="px-4 py-2.5"><div className="font-semibold text-gray-900 dark:text-white">{m.name}</div>{m.version_id && <div className="text-[11px] text-gray-600 font-mono">{m.version_id}</div>}</td>
-                              <td className="px-4 py-2.5 text-right tabular-nums text-emerald-400 font-semibold">{fmtUSD(m.input_price)}</td>
-                              <td className="px-4 py-2.5 text-right tabular-nums text-orange-400 font-semibold">{fmtUSD(m.output_price)}</td>
-                              <td className="px-4 py-2.5 text-right tabular-nums text-blue-400">{m.cache_read_price != null ? fmtUSD(m.cache_read_price) : '—'}</td>
-                              <td className="px-4 py-2.5 text-right tabular-nums text-violet-400">{m.cache_write_price != null ? fmtUSD(m.cache_write_price) : '—'}</td>
-                              {linkedChannels.map(c => (
-                                <td key={c.id} className="px-4 py-2.5 text-right tabular-nums">
-                                  {m.input_price != null && <div className="text-emerald-300/80 text-[11px]">↑ {fmtUSD(m.input_price * c.discount_rate)}</div>}
-                                  {m.output_price != null && <div className="text-orange-300/80 text-[11px]">↓ {fmtUSD(m.output_price * c.discount_rate)}</div>}
+                          {models.map((m, i) => {
+                            let tiers: Array<{ threshold: string; input: number | null; output: number | null }> = []
+                            try { if (m.price_tiers) tiers = JSON.parse(m.price_tiers) } catch { /* ignore */ }
+                            return (
+                              <tr key={m.id} className={`border-t border-border ${i % 2 === 0 ? 'bg-bg-hover/30' : ''}`}>
+                                <td className="px-4 py-2.5">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="font-semibold text-gray-900 dark:text-white">{m.name}</span>
+                                    {tiers.length > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-400 font-semibold">阶梯</span>}
+                                  </div>
+                                  {m.version_id && <div className="text-[11px] text-gray-600 font-mono">{m.version_id}</div>}
+                                  {tiers.length > 0 && (
+                                    <div className="mt-1 space-y-0.5">
+                                      {tiers.map((t, ti) => (
+                                        <div key={ti} className="text-[10px] text-gray-500 flex items-center gap-1.5">
+                                          <span className="font-mono bg-bg-hover px-1 py-0.5 rounded text-violet-400">{t.threshold}</span>
+                                          <span className="text-emerald-600 dark:text-emerald-400">↑{fmtUSD(t.input, m.price_currency)}</span>
+                                          <span className="text-orange-600 dark:text-orange-400">↓{fmtUSD(t.output, m.price_currency)}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
                                 </td>
-                              ))}
-                            </tr>
-                          ))}
+                                <td className="px-4 py-2.5 text-right tabular-nums text-emerald-400 font-semibold">{fmtUSD(m.input_price, m.price_currency)}</td>
+                                <td className="px-4 py-2.5 text-right tabular-nums text-orange-400 font-semibold">{fmtUSD(m.output_price, m.price_currency)}</td>
+                                <td className="px-4 py-2.5 text-right tabular-nums text-blue-400">{m.cache_read_price != null ? fmtUSD(m.cache_read_price, m.price_currency) : '—'}</td>
+                                <td className="px-4 py-2.5 text-right tabular-nums text-violet-400">{m.cache_write_price != null ? fmtUSD(m.cache_write_price, m.price_currency) : '—'}</td>
+                                {linkedChannels.map(c => (
+                                  <td key={c.id} className="px-4 py-2.5 text-right tabular-nums">
+                                    {c.cost_discount != null && m.input_price != null && <div className="text-emerald-600 dark:text-emerald-400 text-[11px]">↑ {fmtUSD(m.input_price * c.cost_discount, m.price_currency)}</div>}
+                                    {c.cost_discount != null && m.output_price != null && <div className="text-orange-600 dark:text-orange-400 text-[11px]">↓ {fmtUSD(m.output_price * c.cost_discount, m.price_currency)}</div>}
+                                    {c.cost_discount == null && <span className="text-gray-500">—</span>}
+                                  </td>
+                                ))}
+                              </tr>
+                            )
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -1145,66 +1430,245 @@ function StatsView({ suppliers, channels, channelStats, costByCurrency, prices }
   )
 }
 
+/* ──── 批量导入弹窗 ──── */
+type ImportResult = { dry_run: boolean; stats: Record<string, Record<string, number>>; errors: Array<{ sheet: string; row?: number; supplier?: string; model?: string; reason: string }>; message: string }
+
+function ImportModal({ isAdmin, importType, setImportType, importFile, setImportFile, importResult, setImportResult, loading, onDryRun, onConfirm, onClose }: {
+  isAdmin: boolean
+  importType: 'suppliers' | 'models'; setImportType: (t: 'suppliers' | 'models') => void
+  importFile: File | null; setImportFile: (f: File | null) => void
+  importResult: ImportResult | null; setImportResult: (r: ImportResult | null) => void
+  loading: boolean; onDryRun: () => void; onConfirm: () => void; onClose: () => void
+}) {
+  const templateUrl = importType === 'suppliers' ? '/api/v1/suppliers/import/template' : '/api/v1/models/import/template'
+  const hasResult = importResult != null
+  const availableTypes = (isAdmin ? ['suppliers', 'models'] : ['suppliers']) as Array<'suppliers' | 'models'>
+
+  return (
+    <Modal icon={Layers} title="批量导入" subtitle="支持供应商台账与模型基础列表，先预检再确认写入" tone="blue" size="2xl" onClose={onClose}>
+      <div className="space-y-4">
+        {/* 类型选择 */}
+        <div>
+          <SectionLabel>导入类型</SectionLabel>
+          <div className="flex gap-2">
+            {availableTypes.map(t => (
+              <button key={t} onClick={() => { setImportType(t); setImportFile(null); setImportResult(null) }}
+                className={`flex-1 px-3 py-2 rounded-lg text-xs font-semibold border transition-all ${importType === t ? 'bg-accent-blue/15 text-accent-blue border-accent-blue/30' : 'bg-bg-input border-border text-gray-500 hover:border-accent-blue/30'}`}>
+                {t === 'suppliers' ? '供应商 + 通道' : '模型基础列表'}
+              </button>
+            ))}
+          </div>
+          {!isAdmin && <p className="mt-1.5 text-[11px] text-gray-500">模型基础列表导入仅管理员可操作</p>}
+        </div>
+
+        {/* 文件上传 + 模板下载 */}
+        <div>
+          <SectionLabel>选择文件</SectionLabel>
+          <div className="flex items-center gap-2">
+            <label className="flex-1 flex items-center gap-2 px-3 py-2.5 rounded-lg bg-bg-input border border-dashed border-border hover:border-accent-blue/50 cursor-pointer text-xs transition-all">
+              <input type="file" accept=".xlsx" className="hidden" onChange={e => { setImportFile(e.target.files?.[0] || null); setImportResult(null) }} />
+              <span className="text-gray-500">{importFile ? importFile.name : '点击选择 .xlsx 文件'}</span>
+              {importFile && <X size={13} className="ml-auto text-gray-400 hover:text-red-400" onClick={e => { e.preventDefault(); setImportFile(null); setImportResult(null) }} />}
+            </label>
+            <a href={templateUrl} download className="shrink-0 flex items-center gap-1.5 px-3 py-2.5 rounded-lg border border-border bg-bg-card text-gray-600 dark:text-gray-400 text-xs hover:border-accent-blue/50 hover:text-accent-blue transition-all">
+              <BookOpen size={13} />模板
+            </a>
+          </div>
+          <p className="mt-1.5 text-[11px] text-gray-500">列头格式请以模板为准，Sheet 名须完整保留；多档阶梯计价同名模型多行即可自动合并。</p>
+        </div>
+
+        {/* 预检结果 */}
+        {hasResult && importResult && (
+          <div className="rounded-xl border border-border/60 bg-bg-hover/20 overflow-hidden">
+            <div className="px-3 py-2 border-b border-border/40 flex items-center gap-2">
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">预检结果</span>
+              <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${importResult.errors.length > 0 ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                {importResult.errors.length > 0 ? `${importResult.errors.length} 条错误` : '无错误'}
+              </span>
+            </div>
+            {/* 统计摘要 */}
+            <div className="p-3 grid grid-cols-2 gap-2">
+              {Object.entries(importResult.stats).map(([sheet, counts]) => (
+                Object.entries(counts).map(([action, count]) => (
+                  <div key={`${sheet}-${action}`} className="flex items-center justify-between text-xs rounded-lg bg-bg-input/50 px-2.5 py-2">
+                    <span className="text-gray-500">{sheet === 'suppliers' ? '供应商' : sheet === 'channels' ? '通道' : sheet === 'models' ? '模型' : sheet} · {action === 'create' ? '新增' : '更新'}</span>
+                    <span className={`font-bold tabular-nums ${action === 'create' ? 'text-emerald-400' : 'text-blue-400'}`}>{count}</span>
+                  </div>
+                ))
+              ))}
+            </div>
+            {/* 错误列表 */}
+            {importResult.errors.length > 0 && (
+              <div className="px-3 pb-3">
+                <div className="text-[11px] font-semibold text-red-400 mb-1.5">错误明细</div>
+                <div className="space-y-1 max-h-32 overflow-y-auto">
+                  {importResult.errors.map((e, i) => (
+                    <div key={i} className="text-[11px] text-red-300 bg-red-500/5 border border-red-500/10 rounded px-2 py-1">
+                      [{e.sheet}]{e.row != null ? ` 第${e.row}行` : ''}{e.supplier ? ` ${e.supplier}` : ''}{e.model ? ` ${e.model}` : ''}: {e.reason}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      <ModalFooter onClose={onClose} saving={loading} tone="blue"
+        leftHint={hasResult && importResult?.errors.length === 0 ? '预检通过，点击确认导入写入数据库' : '请先点击「预检」确认无误后再写入'}
+        rightExtra={
+          <button onClick={onDryRun} disabled={!importFile || loading}
+            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg border border-border bg-bg-card text-gray-600 dark:text-gray-400 text-xs font-semibold hover:border-accent-blue/50 hover:text-accent-blue transition-all disabled:opacity-40">
+            {loading ? <Loader2 size={13} className="animate-spin" /> : <Activity size={13} />}预检
+          </button>
+        }
+        onSave={onConfirm}
+        saveText="确认导入"
+        saveDisabled={!importFile || loading || !hasResult || (importResult?.errors.length ?? 0) > 0}
+      />
+    </Modal>
+  )
+}
+
 /* ──── 通道表单弹窗 ──── */
-function ChannelFormModal({ form, setForm, suppliers, editing, saving, onClose, onSave }: {
+function ChannelFormModal({ form, setForm, suppliers, prices, editing, saving, onClose, onSave }: {
   form: typeof EMPTY_CHANNEL_FORM; setForm: (f: typeof EMPTY_CHANNEL_FORM) => void
-  suppliers: Supplier[]; editing: Channel | null; saving: boolean; onClose: () => void; onSave: () => void
+  suppliers: Supplier[]; prices: ModelCatalogItem[]; editing: Channel | null; saving: boolean; onClose: () => void; onSave: () => void
 }) {
   const upd = (patch: Partial<typeof form>) => setForm({ ...form, ...patch })
+  const inp = 'w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/15 transition-all'
+
+  // 单模型选择列表
+  const modelOptions = prices.filter(p => p.input_price != null || p.output_price != null)
+    .map(p => ({ value: p.id, label: `${p.name}${p.provider ? ` (${p.provider})` : ''}` }))
+
+  // 模型系列（provider）下拉：从 catalog 提取去重
+  const providerOptions = [...new Set(prices.map(p => p.provider).filter(Boolean))]
+    .sort()
+    .map(p => ({ value: p as string, label: p as string }))
+
   return (
-    <Modal icon={Network} title={editing ? '编辑通道' : '新建通道'} subtitle="MaaS 模型供给通道 · 折扣率 / 合同 / SLA 一站配置" tone="cyan" size="3xl" onClose={onClose}>
+    <Modal icon={Network} title={editing ? '编辑通道' : '新建通道'} subtitle="基本信息 · 接入配置 · 成本定价 · 绑定模型 · SLA" tone="cyan" size="3xl" onClose={onClose}>
       <div className="space-y-5">
+
+        {/* ── 基本信息 ── */}
         <div>
           <SectionLabel>基本信息</SectionLabel>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="所属供应商" required><SearchableSelect options={[{ value: 0, label: '请选择…' }, ...suppliers.map(s => ({ value: s.id, label: s.name }))]} value={form.supplier_id || 0} onChange={(v) => upd({ supplier_id: (v as number) || 0 })} /></Field>
-            <Field label="通道名称" required><input value={form.name} onChange={e => upd({ name: e.target.value })} placeholder="如 AWS 通道 / CC 号池" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" /></Field>
-            <Field label="通道编码" hint="如 AWS-01"><input value={form.code} onChange={e => upd({ code: e.target.value })} placeholder="AWS-01" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" /></Field>
-            <Field label="模型族"><input value={form.model_type} onChange={e => upd({ model_type: e.target.value })} placeholder="Anthropic Claude / OpenAI GPT" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" /></Field>
-            <Field label="通道类型"><SearchableSelect options={KINDS.map(k => ({ value: k, label: k }))} value={form.kind} onChange={(v) => upd({ kind: v === null ? '' : String(v) })} /></Field>
-            <Field label="状态"><SearchableSelect options={CHANNEL_STATUSES.map(s => ({ value: s, label: s }))} value={form.status} onChange={(v) => upd({ status: v === null ? '' : String(v) })} /></Field>
+            <Field label="所属供应商" required>
+              <SearchableSelect options={[{ value: 0, label: '请选择…' }, ...suppliers.map(s => ({ value: s.id, label: s.name }))]} value={form.supplier_id || 0} onChange={v => upd({ supplier_id: (v as number) || 0 })} />
+            </Field>
+            <Field label="通道名称" required>
+              <input value={form.name} onChange={e => upd({ name: e.target.value })} placeholder="如 Claude 官方通道" className={inp} />
+            </Field>
+          </div>
+          <div className="grid grid-cols-3 gap-3 mt-3">
+            <Field label="通道编码" hint="唯一简码，如 ANT-01">
+              <input value={form.code} onChange={e => upd({ code: e.target.value })} placeholder="ANT-01" className={inp} />
+            </Field>
+            <Field label="接入协议">
+              <SearchableSelect options={API_PROTOCOLS.map(k => ({ value: k, label: API_PROTOCOL_LABELS[k] }))} value={form.api_protocol} onChange={v => upd({ api_protocol: v === null ? 'other' : String(v) })} />
+            </Field>
+            <Field label="手动状态" hint="有效期状态由供应商合同自动推算">
+              <SearchableSelect options={CHANNEL_MANUAL_STATUSES.map(s => ({ value: s, label: s }))} value={form.status} onChange={v => upd({ status: v === null ? '合作中' : String(v) })} />
+            </Field>
           </div>
         </div>
+
+        {/* ── 接入配置 ── */}
         <div>
-          <SectionLabel>价格与商务</SectionLabel>
-          <div className="mb-2 px-3 py-2 rounded-lg bg-blue-500/5 border border-blue-500/20 text-[11px] text-blue-300/80">通道成本 = 官方模型定价 × 折扣率（见「统计分析 → 官方参考价格」），无需手动填写单价。</div>
+          <SectionLabel>接入配置</SectionLabel>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="折扣率" hint="0~1，如 0.85 表示 85 折"><input type="number" step="0.01" min="0" max="1" value={form.discount_rate} onChange={e => upd({ discount_rate: parseFloat(e.target.value) || 1 })} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" /></Field>
-            <Field label="建议加价率" hint="如 0.2 = 在成本上加 20%"><input type="number" step="0.01" value={form.suggested_markup} onChange={e => upd({ suggested_markup: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" /></Field>
+            <Field label="接入地址" hint="API Base URL">
+              <input value={form.access_url} onChange={e => upd({ access_url: e.target.value })} placeholder="https://api.example.com/v1" className={inp} />
+            </Field>
+            <Field label="用量记录" hint="账单/用量查看页面">
+              <input value={form.usage_url} onChange={e => upd({ usage_url: e.target.value })} placeholder="https://console.example.com/usage" className={inp} />
+            </Field>
           </div>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <div>
-            <SectionLabel>合同期</SectionLabel>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="开始" hint="YYYY-MM"><input value={form.contract_start} onChange={e => upd({ contract_start: e.target.value })} placeholder="2026-01" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" /></Field>
-              <Field label="结束" hint="YYYY-MM"><input value={form.contract_end} onChange={e => upd({ contract_end: e.target.value })} placeholder="2026-12" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" /></Field>
-            </div>
+
+        {/* ── 通道成本与售价 ── */}
+        <div>
+          <SectionLabel>通道成本与售价</SectionLabel>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="上游成本（折）" hint="基于官方原价，如 5 = 5折">
+              <input type="number" step="0.1" min="0.1" max="10" value={form.cost_discount} onChange={e => upd({ cost_discount: e.target.value })} placeholder="5" className={inp} />
+            </Field>
+            <Field label="加价（折）" hint="叠加在成本上，如 1 = 加1折">
+              <input type="number" step="0.1" min="0" max="10" value={form.markup} onChange={e => upd({ markup: e.target.value })} placeholder="0" className={inp} />
+            </Field>
           </div>
-          <div>
-            <SectionLabel>SLA & 技术指标</SectionLabel>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="缓存命中率" hint="0~1"><input value={form.cache_hit_rate} onChange={e => upd({ cache_hit_rate: e.target.value })} placeholder="0.7" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" /></Field>
-              <Field label="TPM"><input value={form.tpm} onChange={e => upd({ tpm: e.target.value })} placeholder="10000" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" /></Field>
-              <Field label="RPM"><input value={form.rpm} onChange={e => upd({ rpm: e.target.value })} placeholder="60" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" /></Field>
-              <Field label="平均延迟" hint="ms"><input value={form.avg_latency_ms} onChange={e => upd({ avg_latency_ms: e.target.value })} placeholder="800" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all" /></Field>
-            </div>
+          {(() => {
+            const cost = parseFloat(form.cost_discount as string)
+            const mkup = parseFloat(form.markup as string)
+            if (!isNaN(cost) && cost > 0) {
+              const sell = cost + (isNaN(mkup) ? 0 : mkup)
+              return (
+                <div className="mt-2 px-3 py-2 rounded-lg bg-accent-blue/5 border border-accent-blue/20 text-[11px] text-gray-600 dark:text-gray-400 flex items-center gap-2">
+                  <span>成本 <span className="font-semibold text-gray-800 dark:text-gray-200">{cost}折</span></span>
+                  {!isNaN(mkup) && mkup > 0 && <><span className="text-gray-400">+</span><span>加价 <span className="font-semibold text-gray-800 dark:text-gray-200">{mkup}折</span></span></>}
+                  <span className="text-gray-400">=</span>
+                  <span>对外售价 <span className="font-semibold text-accent-blue">{parseFloat(sell.toFixed(1))}折</span></span>
+                </div>
+              )
+            }
+            return null
+          })()}
+        </div>
+
+        {/* ── 绑定模型 ── */}
+        <div>
+          <SectionLabel>绑定模型</SectionLabel>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="覆盖范围">
+              <SearchableSelect options={SCOPE_TYPES.map(t => ({ value: t, label: SCOPE_TYPE_LABELS[t] }))} value={form.scope_type} onChange={v => upd({ scope_type: v === null ? 'all' : String(v), model_family: '', model_id: 0 })} />
+            </Field>
+            {form.scope_type === 'family' && (
+              <Field label="模型系列">
+                <SearchableSelect
+                  options={[{ value: '', label: '请选择模型系列…' }, ...providerOptions]}
+                  value={form.model_family || null}
+                  onChange={v => upd({ model_family: v === null ? '' : String(v) })}
+                  placeholder="选择供应商/模型系列…"
+                />
+              </Field>
+            )}
+            {form.scope_type === 'single' && (
+              <Field label="绑定模型">
+                <SearchableSelect options={[{ value: 0, label: '请选择模型…' }, ...modelOptions]} value={form.model_id || 0} onChange={v => upd({ model_id: (v as number) || 0 })} />
+              </Field>
+            )}
           </div>
         </div>
-        {editing && (
-          <div>
-            <SectionLabel><AlertTriangle size={11} className="text-orange-400" />库存（聚合字段，由交付/归还自动更新）</SectionLabel>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="库存总数"><input type="number" value={editing.inventory_total} disabled className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-500 cursor-not-allowed" /></Field>
-              <Field label="在库可用数"><input type="number" value={editing.inventory_available} disabled className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm text-gray-500 cursor-not-allowed" /></Field>
-            </div>
+
+        {/* ── SLA & 技术指标 ── */}
+        <div>
+          <SectionLabel>SLA & 技术指标</SectionLabel>
+          <div className="grid grid-cols-4 gap-3">
+            <Field label="缓存命中率" hint="0~1">
+              <input value={form.cache_hit_rate} onChange={e => upd({ cache_hit_rate: e.target.value })} placeholder="0.7" className={inp} />
+            </Field>
+            <Field label="TPM">
+              <input value={form.tpm} onChange={e => upd({ tpm: e.target.value })} placeholder="10000" className={inp} />
+            </Field>
+            <Field label="RPM">
+              <input value={form.rpm} onChange={e => upd({ rpm: e.target.value })} placeholder="60" className={inp} />
+            </Field>
+            <Field label="平均延迟 (ms)">
+              <input value={form.avg_latency_ms} onChange={e => upd({ avg_latency_ms: e.target.value })} placeholder="800" className={inp} />
+            </Field>
           </div>
-        )}
-        <Field label="备注" full hint="稳定性、SLA 等级、风控要点等"><textarea value={form.remarks} onChange={e => upd({ remarks: e.target.value })} rows={2} placeholder="补充说明" className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border text-sm outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/15 transition-all resize-none" /></Field>
+        </div>
+
+        {/* ── 备注 ── */}
+        <Field label="备注" full hint="稳定性、风控要点等补充">
+          <textarea value={form.remarks} onChange={e => upd({ remarks: e.target.value })} rows={2} placeholder="补充说明" className={`${inp} resize-none`} />
+        </Field>
+
       </div>
       <ModalFooter onClose={onClose} onSave={onSave} saving={saving} tone="cyan"
         saveText={editing ? '保存修改' : '创建通道'} saveDisabled={!form.name.trim() || !form.supplier_id}
-        leftHint={editing ? `编辑通道：${editing.name}` : '成本 = 官方定价 × 折扣率，无需手动填写单价'} />
+        leftHint={editing ? `编辑通道：${editing.name}` : '填写折扣后，详情面板自动实算通道成本'} />
     </Modal>
   )
 }

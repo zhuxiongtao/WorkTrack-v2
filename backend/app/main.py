@@ -4,7 +4,43 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.config import settings as app_settings
 from app.database import init_db
-from app.routers import daily_reports, customers, projects, meetings, scheduled_tasks, ai_agent, search, settings, logs, auth, users, dashboard, setup, files, contracts, wiki, rbac, monitor, data_export, shares, console, news, project_costs, suppliers, channels, reconcile, models, approval, model_change, contract_templates, bill_reconcile, model_usage, feedback, payments, seals
+from app.routers import (
+    daily_reports,
+    customers,
+    projects,
+    meetings,
+    scheduled_tasks,
+    ai_agent,
+    search,
+    settings,
+    logs,
+    auth,
+    users,
+    dashboard,
+    setup,
+    files,
+    contracts,
+    wiki,
+    rbac,
+    monitor,
+    data_export,
+    shares,
+    console,
+    news,
+    project_costs,
+    suppliers,
+    channels,
+    reconcile,
+    models,
+    approval,
+    model_change,
+    contract_templates,
+    bill_reconcile,
+    model_usage,
+    feedback,
+    payments,
+    seals,
+)
 from app.routers import project_follow_ups
 from app.routers import purchase_suppliers
 from app.routers import leaves, overtimes, leave_balances
@@ -12,6 +48,7 @@ from app.routers import expenses, business_trips, purchases, assets
 from app.routers import legal_entities, employee_loans
 from app.routers import hires
 from app.routers import job_titles
+from app.routers import quotes
 from app.rate_limit import limiter
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -20,6 +57,7 @@ from app.utils.time import utc_now
 
 def _seed_contract_templates(db):
     from app.models.contract_template import ContractTemplate
+
     templates = [
         ContractTemplate(
             name="商务服务合同",
@@ -224,33 +262,45 @@ async def lifespan(app: FastAPI):
     from sqlmodel import Session, select, desc
     from app.models.log_entry import LogEntry
     from datetime import datetime, timedelta
+
     with Session(engine) as db:
-        stmt = select(LogEntry).where(
-            LogEntry.category == "system",
-            LogEntry.message == "WorkTrack 服务已启动"
-        ).order_by(desc(LogEntry.created_at)).limit(1)
+        stmt = (
+            select(LogEntry)
+            .where(
+                LogEntry.category == "system",
+                LogEntry.message == "WorkTrack 服务已启动",
+            )
+            .order_by(desc(LogEntry.created_at))
+            .limit(1)
+        )
         last_log = db.exec(stmt).first()
 
         now = utc_now()
         if not last_log or (now - last_log.created_at) > timedelta(minutes=15):
-            write_log("info", "system", "WorkTrack 服务已启动", details=f"版本: 1.0.0", db=db)
+            write_log(
+                "info", "system", "WorkTrack 服务已启动", details=f"版本: 1.0.0", db=db
+            )
     # 种子：初始化默认合同模板（幂等，已有则跳过）
     from app.models.contract_template import ContractTemplate
+
     with Session(engine) as db:
         if db.exec(select(ContractTemplate)).first() is None:
             _seed_contract_templates(db)
 
     from app.services.scheduler import start_scheduler
+
     start_scheduler()
 
     # 启动时尝试首次抓取 AI 资讯（失败不影响服务启动）
     try:
         from app.services.news_fetcher import fetch_ai_news
         import logging as _logging
+
         _logging.getLogger("worktrack.news").info("启动时首次抓取 AI 资讯...")
         fetch_ai_news()
     except Exception as _e:
         import logging as _logging
+
         _logging.getLogger("worktrack.news").warning("启动时抓取 AI 资讯失败: %s", _e)
 
     # 清理遗留的 fetch_ai_news ScheduledTask 数据库记录（已迁移为内置系统任务）
@@ -258,6 +308,7 @@ async def lifespan(app: FastAPI):
         from sqlmodel import Session as _Session
         from app.database import engine as _engine
         from app.models.scheduled_task import ScheduledTask as _ST
+
         with _Session(_engine) as _db:
             old_tasks = _db.exec(
                 select(_ST).where(_ST.action_type == "fetch_ai_news")
@@ -266,7 +317,10 @@ async def lifespan(app: FastAPI):
                 _db.delete(t)
             if old_tasks:
                 _db.commit()
-                print(f"[scheduler] 已清理 {len(old_tasks)} 条遗留 fetch_ai_news 定时任务记录", flush=True)
+                print(
+                    f"[scheduler] 已清理 {len(old_tasks)} 条遗留 fetch_ai_news 定时任务记录",
+                    flush=True,
+                )
     except Exception as _e:
         print(f"[scheduler] 清理遗留任务失败: {_e}", flush=True)
 
@@ -274,6 +328,7 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     from app.services.scheduler import shutdown_scheduler
+
     shutdown_scheduler()
 
 
@@ -281,7 +336,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="WorkTrack",
         description="个人工作管理平台 - 日报、客户项目、会议纪要，集成 AI 与 MCP 服务",
-        version="2.9.0",
+        version="2.9.1",
         docs_url="/docs" if app_settings.cors_origins != "*" else None,
         redoc_url=None,
         openapi_url="/openapi.json" if app_settings.cors_origins != "*" else None,
@@ -291,12 +346,18 @@ def create_app() -> FastAPI:
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
     from app.exceptions import WorkTrackError
-    app.add_exception_handler(WorkTrackError, lambda req, exc: JSONResponse(
-        status_code=500, content={"detail": exc.message}
-    ))
+
+    app.add_exception_handler(
+        WorkTrackError,
+        lambda req, exc: JSONResponse(status_code=500, content={"detail": exc.message}),
+    )
 
     # CORS 中间件
-    cors_origins = [origin.strip() for origin in app_settings.cors_origins.split(",") if origin.strip()]
+    cors_origins = [
+        origin.strip()
+        for origin in app_settings.cors_origins.split(",")
+        if origin.strip()
+    ]
     is_wildcard = cors_origins == ["*"]
     app.add_middleware(
         CORSMiddleware,
@@ -307,30 +368,56 @@ def create_app() -> FastAPI:
     )
 
     # ===== 认证中间件 =====
+    # 公开路径白名单（仅精确匹配，不使用 startswith 模糊匹配，避免子路径越权）
+    _PUBLIC_EXACT = {"/", "/health", "/mcp", "/docs", "/openapi.json"}
+    # 公开前缀：仅前缀本身和 / 后跟一个明确子路径时放行
+    _PUBLIC_PREFIXES = {
+        "/api/v1/auth": None,  # 登录/注册/改密等全部放行
+        "/api/v1/setup": None,  # 初始化向导
+        "/api/v1/settings/branding": {
+            "",
+            "/logo-file",
+        },  # 仅 /branding 和 /branding/logo-file
+        "/api/v1/wiki/public": None,  # 公开分享的 AI 文档外链
+        "/api/v1/customers/logo": None,  # 公司 logo 代理
+        "/api/v1/quotes/public": None,  # 公开报价单（无需登录）
+    }
+
     @app.middleware("http")
     async def auth_middleware(request: Request, call_next):
-        # 公开路径（无需认证）
-        public_paths = [
-            "/", "/health", "/mcp", "/docs", "/openapi.json",
-            "/api/v1/setup",           # 首次运行初始化向导
-            "/api/v1/settings/branding",  # 品牌配置（Logo 文件、标题等公开读取）
-            "/api/v1/wiki/public",      # 公开分享的 AI 文档外链访问端点
-            "/api/v1/customers/logo",   # 公司 logo 代理(给 <img> 用,不会带 Authorization)
-        ]
         path = request.url.path
-        if any(path == p or path.startswith(p + "/") for p in public_paths) or path.startswith("/api/v1/auth/"):
+        # 精确匹配
+        if path in _PUBLIC_EXACT:
             return await call_next(request)
+        # 前缀匹配
+        for prefix, subpaths in _PUBLIC_PREFIXES.items():
+            if path == prefix:
+                return await call_next(request)
+            if path.startswith(prefix + "/"):
+                if subpaths is None:
+                    # 无子路径限制，整棵子树放行
+                    return await call_next(request)
+                # 有子路径限制：仅放行白名单中的子路径
+                rel = path[len(prefix) :]  # 如 "/logo-file/xxx"
+                # 提取第一段子路径（如 "logo-file"）
+                first_seg = rel.lstrip("/").split("/")[0] if rel else ""
+                if f"/{first_seg}" in subpaths:
+                    return await call_next(request)
+                # 不在白名单中，继续走认证
 
         # API 路由需要认证
         if path.startswith("/api/"):
             from app.auth import decode_token
+
             auth_header = request.headers.get("Authorization", "")
             if not auth_header.startswith("Bearer "):
                 return JSONResponse(status_code=401, content={"detail": "请先登录"})
             token = auth_header[7:]
             payload = decode_token(token)
             if payload is None:
-                return JSONResponse(status_code=401, content={"detail": "令牌无效或已过期"})
+                return JSONResponse(
+                    status_code=401, content={"detail": "令牌无效或已过期"}
+                )
 
         return await call_next(request)
 
@@ -383,14 +470,16 @@ def create_app() -> FastAPI:
     app.include_router(employee_loans.router)
     app.include_router(hires.router)
     app.include_router(job_titles.router)
+    app.include_router(quotes.router)
 
     # 挂载 MCP 服务（带 API Key 认证）
     from app.mcp_server import mcp, MCPAuthMiddleware
+
     app.mount("/mcp", mcp.http_app(middleware=[MCPAuthMiddleware]))
 
     @app.get("/")
     def root():
-        return {"message": "WorkTrack API is running", "version": "2.8.3"}
+        return {"message": "WorkTrack API is running", "version": "2.9.1"}
 
     @app.get("/health")
     def health_check():

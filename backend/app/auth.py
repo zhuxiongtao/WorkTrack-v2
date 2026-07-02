@@ -3,6 +3,7 @@
 import re
 import time
 import secrets
+import threading
 from datetime import datetime, timedelta, timezone
 from app.utils.time import BEIJING_TZ, now
 from typing import Optional
@@ -17,9 +18,10 @@ from app.config import settings
 from app.database import get_session
 from app.models.user import User
 
-# ===== RBAC 权限缓存 =====
+# ===== RBAC 权限缓存（线程安全） =====
 _RBAC_CACHE_MAX = 10000
 _rbac_cache: dict[tuple[int, str], tuple[bool, float]] = {}
+_rbac_cache_lock = threading.Lock()
 _rbac_cache_ttl = 60
 
 
@@ -27,12 +29,14 @@ def invalidate_rbac_cache(user_id: int | None = None) -> None:
     """清理 RBAC 缓存。
     user_id=None 时清空全部（角色/权限/部门角色变更时调用）。
     user_id=int 时仅清该用户（该用户角色/部门调整时调用）。"""
-    if user_id is None:
-        _rbac_cache.clear()
-    else:
-        keys_to_delete = [k for k in _rbac_cache if k[0] == user_id]
-        for k in keys_to_delete:
-            del _rbac_cache[k]
+    with _rbac_cache_lock:
+        if user_id is None:
+            _rbac_cache.clear()
+        else:
+            keys_to_delete = [k for k in _rbac_cache if k[0] == user_id]
+            for k in keys_to_delete:
+                del _rbac_cache[k]
+
 
 # ===== 密码哈希 =====
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -52,9 +56,9 @@ def validate_password_strength(password: str) -> Optional[str]:
     min_len = settings.password_min_length
     if len(password) < min_len:
         return f"密码长度至少为 {min_len} 位"
-    if not re.search(r'[A-Za-z]', password):
+    if not re.search(r"[A-Za-z]", password):
         return "密码必须包含至少一个字母"
-    if not re.search(r'\d', password):
+    if not re.search(r"\d", password):
         return "密码必须包含至少一个数字"
     return None
 
@@ -154,17 +158,23 @@ def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="请先登录")
     payload = decode_token(credentials.credentials)
     if payload is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="令牌无效或已过期")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="令牌无效或已过期"
+        )
     user_id = payload.get("sub")
     if not user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="令牌无效")
     user = db.get(User, int(user_id))
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户不存在")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="用户不存在"
+        )
     # 校验 token_version：如果 Token 中的版本与用户当前的版本不一致，则 Token 已失效
     token_tv = payload.get("tv", 0)
     if token_tv != user.token_version:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="令牌已失效，请重新登录")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="令牌已失效，请重新登录"
+        )
     # 校验账号状态
     lock_msg = check_account_locked(user)
     if lock_msg:
@@ -202,7 +212,9 @@ def get_current_admin_user(
 ) -> User:
     """管理员权限守卫，非管理员返回 403"""
     if not has_permission(current_user, "user:manage_roles", db):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="需要管理员权限")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="需要管理员权限"
+        )
     return current_user
 
 
@@ -224,15 +236,14 @@ def _get_all_role_ids(user_id: int, db: Session) -> list[int]:
         db.exec(select(UserRole.role_id).where(UserRole.user_id == user_id)).all()
     )
 
-    user_dept_id = db.exec(
-        select(User.department_id).where(User.id == user_id)
-    ).first()
+    user_dept_id = db.exec(select(User.department_id).where(User.id == user_id)).first()
     dept_role_ids = []
     if user_dept_id:
         dept_role_ids = list(
             db.exec(
-                select(DepartmentRole.role_id)
-                .where(DepartmentRole.department_id == user_dept_id)
+                select(DepartmentRole.role_id).where(
+                    DepartmentRole.department_id == user_dept_id
+                )
             ).all()
         )
 
@@ -264,17 +275,21 @@ def has_permission(user: User, permission_code: str, db: Session) -> bool:
             return True
 
     cache_key = (user.id, permission_code)
-    now = time.time()
-    cached = _rbac_cache.get(cache_key)
-    if cached and now < cached[1]:
+    now_ts = time.time()
+    with _rbac_cache_lock:
+        cached = _rbac_cache.get(cache_key)
+    if cached and now_ts < cached[1]:
         return cached[0]
 
     result = _check_rbac(user.id, permission_code, db)
-    if len(_rbac_cache) >= _RBAC_CACHE_MAX:
-        oldest_keys = sorted(_rbac_cache, key=lambda k: _rbac_cache[k][1])[:len(_rbac_cache) - _RBAC_CACHE_MAX + 1]
-        for k in oldest_keys:
-            del _rbac_cache[k]
-    _rbac_cache[cache_key] = (result, now + _rbac_cache_ttl)
+    with _rbac_cache_lock:
+        if len(_rbac_cache) >= _RBAC_CACHE_MAX:
+            oldest_keys = sorted(_rbac_cache, key=lambda k: _rbac_cache[k][1])[
+                : len(_rbac_cache) - _RBAC_CACHE_MAX + 1
+            ]
+            for k in oldest_keys:
+                _rbac_cache.pop(k, None)
+        _rbac_cache[cache_key] = (result, now_ts + _rbac_cache_ttl)
     return result
 
 
@@ -316,8 +331,9 @@ def get_user_permissions(user: User, db: Session) -> list[str]:
 
     perm_ids = list(
         db.exec(
-            select(RolePermission.permission_id)
-            .where(RolePermission.role_id.in_(all_role_ids))
+            select(RolePermission.permission_id).where(
+                RolePermission.role_id.in_(all_role_ids)
+            )
         ).all()
     )
     if not perm_ids:
@@ -333,6 +349,7 @@ def get_user_permissions(user: User, db: Session) -> list[str]:
 
 def require_permission(permission_code: str):
     """权限校验依赖注入工厂"""
+
     def checker(
         current_user: User = Depends(get_current_user),
         db: Session = Depends(get_session),
@@ -343,7 +360,42 @@ def require_permission(permission_code: str):
                 detail=f"权限不足：需要 {permission_code}",
             )
         return current_user
+
     return checker
+
+
+def _get_user_role_codes(
+    user_id: int, department_id: int | None, db: Session
+) -> set[str]:
+    """一次性查询用户的全部角色 code（合并直接角色 + 部门角色 + 用户组角色）。
+    替代原来分散的 3 次查询 + 1 次 Role 查询，减少到 2 次。
+    """
+    from app.models.rbac import UserRole, DepartmentRole, GroupRole, Role
+
+    # 1) 合并三端角色 ID
+    role_ids: set[int] = set()
+    role_ids.update(
+        db.exec(select(UserRole.role_id).where(UserRole.user_id == user_id)).all()
+    )
+    if department_id:
+        role_ids.update(
+            db.exec(
+                select(DepartmentRole.role_id).where(
+                    DepartmentRole.department_id == department_id
+                )
+            ).all()
+        )
+    role_ids.update(
+        db.exec(
+            select(GroupRole.role_id)
+            .join(UserGroupMember, UserGroupMember.group_id == GroupRole.group_id)
+            .where(UserGroupMember.user_id == user_id)
+        ).all()
+    )
+    if not role_ids:
+        return set()
+    # 2) 一次查出所有 role code
+    return set(db.exec(select(Role.code).where(Role.id.in_(role_ids))).all())
 
 
 def check_data_access(owner_id: int, current_user: User, db: Session) -> bool:
@@ -363,16 +415,7 @@ def check_data_access(owner_id: int, current_user: User, db: Session) -> bool:
     if current_user.is_admin:
         return True
 
-    from app.models.rbac import UserRole, DepartmentRole, Role
-    user_roles_ids = list(db.exec(select(UserRole.role_id).where(UserRole.user_id == current_user.id)).all())
-    if current_user.department_id:
-        dept_role_ids = list(db.exec(
-            select(DepartmentRole.role_id).where(DepartmentRole.department_id == current_user.department_id)
-        ).all())
-    else:
-        dept_role_ids = []
-    all_role_ids = list(set(user_roles_ids + dept_role_ids))
-    role_codes = set(db.exec(select(Role.code).where(Role.id.in_(all_role_ids))).all()) if all_role_ids else set()
+    role_codes = _get_user_role_codes(current_user.id, current_user.department_id, db)
 
     if "boss" in role_codes:
         return True
@@ -391,32 +434,25 @@ def check_data_access(owner_id: int, current_user: User, db: Session) -> bool:
     return False
 
 
-def get_visible_user_ids(current_user: User, db: Session, module: str = "") -> Optional[list[int]]:
+def get_visible_user_ids(
+    current_user: User, db: Session, module: str = ""
+) -> Optional[list[int]]:
     """
     统一数据可见范围控制。返回 None 表示不限制（全公司可见），否则返回可见用户 ID 列表。
-    
+
     判定优先级：
     1. is_admin / boss 角色 → None（全公司）
     2. 有 {module}:view_all 权限 → None（跨部门可见，如 admin 级管理者）
     3. 部门负责人（Department.manager_id）→ 管辖部门+子部门全部成员
     4. 普通员工 → 仅自己 + 直属下级(leader_id指向自己的)
     5. 无部门用户 → 仅自己
-    
+
     module 参数: 业务模块名（如 "report", "customer", "project"），用于判断 view_all 权限
     """
     if current_user.is_admin:
         return None
 
-    from app.models.rbac import UserRole, DepartmentRole, Role
-    user_roles_ids = list(db.exec(select(UserRole.role_id).where(UserRole.user_id == current_user.id)).all())
-    if current_user.department_id:
-        dept_role_ids = list(db.exec(
-            select(DepartmentRole.role_id).where(DepartmentRole.department_id == current_user.department_id)
-        ).all())
-    else:
-        dept_role_ids = []
-    all_role_ids = list(set(user_roles_ids + dept_role_ids))
-    role_codes = set(db.exec(select(Role.code).where(Role.id.in_(all_role_ids))).all()) if all_role_ids else set()
+    role_codes = _get_user_role_codes(current_user.id, current_user.department_id, db)
 
     if "boss" in role_codes:
         return None
@@ -434,20 +470,26 @@ def get_visible_user_ids(current_user: User, db: Session, module: str = "") -> O
     if not visible_dept_ids:
         member_ids = [current_user.id]
     else:
-        members = db.exec(select(User).where(User.department_id.in_(visible_dept_ids))).all()
-        member_ids = [m.id for m in members]
+        # 只查 User.id，不加载完整 User 对象
+        member_ids = list(
+            db.exec(
+                select(User.id).where(User.department_id.in_(visible_dept_ids))
+            ).all()
+        )
         if current_user.id not in member_ids:
             member_ids.append(current_user.id)
 
-    leader_subordinate_ids = list(db.exec(
-        select(User.id).where(User.leader_id == current_user.id)
-    ).all())
+    leader_subordinate_ids = list(
+        db.exec(select(User.id).where(User.leader_id == current_user.id)).all()
+    )
     member_ids = list(set(member_ids + leader_subordinate_ids))
 
     return member_ids
 
 
-def check_share_access(target_type: str, target_id: int, current_user: User, db: Session) -> bool:
+def check_share_access(
+    target_type: str, target_id: int, current_user: User, db: Session
+) -> bool:
     """
     检查当前用户是否被分享了对应的数据（DataShare fallback）。
     在 check_data_access() 返回 False 后调用，作为额外放行条件。
@@ -477,31 +519,50 @@ def check_share_access(target_type: str, target_id: int, current_user: User, db:
     return True
 
 
-def _get_department_descendants(dept_id: int, db: Session) -> list[int]:
-    """递归获取指定部门的所有子部门 ID 列表（不含自身）"""
+def _get_department_descendants(
+    dept_id: int, db: Session, _visited: set[int] | None = None, _depth: int = 0
+) -> list[int]:
+    """递归获取指定部门的所有子部门 ID 列表（不含自身）。
+    使用 _visited 防止循环引用导致无限递归，_depth 限制最大深度。
+    """
     from app.models.department import Department
+
+    # 安全限制：最大递归深度 20 层，防止循环引用
+    if _depth > 20:
+        return []
+    if _visited is None:
+        _visited = set()
+    if dept_id in _visited:
+        return []
+    _visited.add(dept_id)
+
     result = []
-    children = db.exec(select(Department.id).where(Department.parent_id == dept_id)).all()
+    children = db.exec(
+        select(Department.id).where(Department.parent_id == dept_id)
+    ).all()
     for child_id in children:
+        if child_id in _visited:
+            continue
         result.append(child_id)
-        result.extend(_get_department_descendants(child_id, db))
+        result.extend(_get_department_descendants(child_id, db, _visited, _depth + 1))
     return result
 
 
 def _get_managed_dept_tree(manager_id: int, db: Session) -> set:
     """递归获取用户作为负责人所管理的所有部门 ID（含子部门）"""
     from app.models.department import Department
+
     managed = set()
-    stack = list(db.exec(
-        select(Department.id).where(Department.manager_id == manager_id)
-    ).all())
+    stack = list(
+        db.exec(select(Department.id).where(Department.manager_id == manager_id)).all()
+    )
     while stack:
         dept_id = stack.pop()
         if dept_id in managed:
             continue
         managed.add(dept_id)
-        children = list(db.exec(
-            select(Department.id).where(Department.parent_id == dept_id)
-        ).all())
+        children = list(
+            db.exec(select(Department.id).where(Department.parent_id == dept_id)).all()
+        )
         stack.extend(children)
     return managed

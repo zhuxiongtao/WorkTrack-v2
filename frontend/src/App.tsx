@@ -8,6 +8,7 @@ import ForcePasswordChange from './pages/ForcePasswordChange'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 import PublicWikiPage from './pages/PublicWikiPage'
+import PublicQuotePage from './pages/PublicQuotePage'
 import SetupPage from './pages/SetupPage'
 import AppSidebar from './components/layout/AppSidebar'
 import AppHeader from './components/layout/AppHeader'
@@ -149,6 +150,7 @@ function AppContent() {
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/wiki/public/:spaceId/:pageId" element={<PublicWikiPage />} />
+            <Route path="/quote/:token" element={<PublicQuotePage />} />
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
         </div>

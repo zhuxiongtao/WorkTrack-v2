@@ -241,6 +241,34 @@ def _normalize_region(raw: Optional[str]) -> str:
     return "international"
 
 
+# ── 国内模型关键词表（厂商标签 / 模型名称任一命中即判定国内）──────────────
+_DOMESTIC_KEYWORDS: list[str] = [
+    "阿里", "dashscope", "通义", "qwen",
+    "字节", "volcengine", "豆包", "doubao", "火山",
+    "深度求索", "deepseek",
+    "腾讯", "hunyuan", "混元",
+    "百度", "ernie", "文心", "qianfan",
+    "月之暗面", "moonshot", "kimi",
+    "智谱", "zhipu", "bigmodel", "glm",
+    "minimax",
+    "可灵", "kling", "快手",
+    "零一万物", "01-ai", "01.ai",
+    "百川", "baichuan",
+]
+
+
+def infer_region_from_text(*texts: Optional[str]) -> str:
+    """据厂商标签 / 模型名称等文本关键词推断 domestic/international
+
+    用于人工导入场景（无 base_url 可用），命中任一关键词即判定国内，否则国际。
+    """
+    blob = " ".join((t or "") for t in texts).lower()
+    for kw in _DOMESTIC_KEYWORDS:
+        if kw.lower() in blob:
+            return "domestic"
+    return "international"
+
+
 def _normalize_modality(raw: Optional[str]) -> Optional[str]:
     if not raw:
         return None

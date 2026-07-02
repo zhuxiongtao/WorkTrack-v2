@@ -24,14 +24,21 @@ class Supplier(SQLModel, table=True):
 
     # ── 商务信息 ──
     settlement_currency: str = "USD"  # 结算币种
-    payment_terms: Optional[str] = None  # 付款条件，如 "月结30天"
+    payment_terms: Optional[str] = None  # 付款条件（兼容旧数据）
+    settlement_method: Optional[str] = None  # 预付 / 月结 / 授信
+    settlement_cycle_days: Optional[int] = None  # 结算周期（天）
+    prepaid_balance: Optional[float] = None  # 预付余额（元，手填）
+    credit_limit: Optional[float] = None  # 信用额度（元）
+    current_month_consumed: Optional[float] = None  # 本月已消费（元，自动核算只读）
     contract_start: Optional[str] = None  # 合同起始（格式 "2026-01"）
     contract_end: Optional[str] = None  # 合同终止
 
     # ── 技术信息 ──
-    api_endpoint: Optional[str] = None  # API 入口
-    models_provided: Optional[str] = None  # 提供的模型列表（逗号分隔，如 GPT-4o,Claude-3.5）
+    api_endpoint: Optional[str] = None  # API 调用入口
+    api_doc_url: Optional[str] = None  # API 文档地址
+    models_provided: Optional[str] = None  # 提供的模型列表（逗号分隔）
     auth_type: Optional[str] = None  # 认证方式：API Key / OAuth / 其他
+    im_group: Optional[str] = None  # 微信/飞书群
 
     # ── 业务统计（由系统自动计算/更新） ──
     total_cost: Optional[float] = None  # 累计通道费成本

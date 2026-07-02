@@ -14,11 +14,17 @@ class SupplierCreate(BaseModel):
     contact_phone: Optional[str] = None
     settlement_currency: str = "USD"
     payment_terms: Optional[str] = None
+    settlement_method: Optional[str] = None
+    settlement_cycle_days: Optional[int] = None
+    prepaid_balance: Optional[float] = None
+    credit_limit: Optional[float] = None
     contract_start: Optional[str] = None
     contract_end: Optional[str] = None
     api_endpoint: Optional[str] = None
+    api_doc_url: Optional[str] = None
     models_provided: Optional[str] = None
     auth_type: Optional[str] = None
+    im_group: Optional[str] = None
     remarks: Optional[str] = None
 
 
@@ -32,11 +38,17 @@ class SupplierUpdate(BaseModel):
     contact_phone: Optional[str] = None
     settlement_currency: Optional[str] = None
     payment_terms: Optional[str] = None
+    settlement_method: Optional[str] = None
+    settlement_cycle_days: Optional[int] = None
+    prepaid_balance: Optional[float] = None
+    credit_limit: Optional[float] = None
     contract_start: Optional[str] = None
     contract_end: Optional[str] = None
     api_endpoint: Optional[str] = None
+    api_doc_url: Optional[str] = None
     models_provided: Optional[str] = None
     auth_type: Optional[str] = None
+    im_group: Optional[str] = None
     remarks: Optional[str] = None
 
 
@@ -53,11 +65,18 @@ class SupplierOut(BaseModel):
     contact_phone: Optional[str] = None
     settlement_currency: str = "USD"
     payment_terms: Optional[str] = None
+    settlement_method: Optional[str] = None
+    settlement_cycle_days: Optional[int] = None
+    prepaid_balance: Optional[float] = None
+    credit_limit: Optional[float] = None
+    current_month_consumed: Optional[float] = None
     contract_start: Optional[str] = None
     contract_end: Optional[str] = None
     api_endpoint: Optional[str] = None
+    api_doc_url: Optional[str] = None
     models_provided: Optional[str] = None
     auth_type: Optional[str] = None
+    im_group: Optional[str] = None
     total_cost: Optional[float] = None
     project_count: Optional[int] = None
     remarks: Optional[str] = None
@@ -76,3 +95,5 @@ class SupplierSummary(BaseModel):
     total_cost: float = 0.0
     project_count: int = 0
     models: list[str] = []
+    prepaid_balance: Optional[float] = None
+    current_month_consumed: Optional[float] = None

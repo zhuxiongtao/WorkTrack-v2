@@ -248,7 +248,7 @@ _ALL_TOOLS = [
         "type": "function",
         "function": {
             "name": "list_channels",
-            "description": "查看模型通道列表，包括通道名称、模型类型、价格、库存状态",
+            "description": "查看模型通道列表，包括通道名称、绑定模型、成本折扣/加价、状态",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -925,10 +925,9 @@ def execute_tool(tool_name: str, arguments: dict, db: Session, user: User) -> st
             result.append({
                 "id": c.id, "name": c.name,
                 "supplier_name": sup.name if sup else "",
-                "model_type": c.model_type, "kind": c.kind,
+                "model_family": c.model_family or "", "scope_type": c.scope_type,
                 "status": c.status,
-                "cost_price": str(c.cost_price) if c.cost_price else "",
-                "price_unit": c.price_unit or "",
+                "cost_discount": c.cost_discount, "markup": c.markup,
             })
         return json.dumps({"count": len(result), "channels": result}, ensure_ascii=False)
 
