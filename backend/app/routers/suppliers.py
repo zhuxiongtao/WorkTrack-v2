@@ -5,6 +5,7 @@ from io import BytesIO
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlmodel import Session, select, func, col
 from app.database import get_session
 from app.models.supplier import Supplier
@@ -154,6 +155,44 @@ def delete_supplier(
     db.delete(supplier)
     db.commit()
     return {"ok": True}
+
+
+class BatchDeleteRequest(BaseModel):
+    ids: list[int]
+
+
+@router.post("/batch-delete")
+def batch_delete_suppliers(
+    body: BatchDeleteRequest,
+    db: Session = Depends(get_session),
+    current_user=Depends(require_permission("upstream:edit")),
+):
+    """批量删除供应商，逐个校验关联成本/通道，部分失败不影响其余项"""
+    if not body.ids:
+        raise HTTPException(400, "未选择任何供应商")
+    if len(body.ids) > 200:
+        raise HTTPException(400, "单次最多删除 200 个供应商")
+
+    smap = {s.id: s for s in db.exec(select(Supplier).where(col(Supplier.id).in_(body.ids))).all()}
+    deleted: list[int] = []
+    failed: list[dict] = []
+    for sid in body.ids:
+        s = smap.get(sid)
+        if not s:
+            failed.append({"id": sid, "name": None, "reason": "供应商不存在"})
+            continue
+        linked_cost = db.exec(select(func.count()).where(ProjectCost.supplier_id == sid)).one()
+        if linked_cost > 0:
+            failed.append({"id": sid, "name": s.name, "reason": f"有 {linked_cost} 条成本记录关联"})
+            continue
+        linked_channel = db.exec(select(func.count()).where(Channel.supplier_id == sid)).one()
+        if linked_channel > 0:
+            failed.append({"id": sid, "name": s.name, "reason": f"有 {linked_channel} 个通道关联"})
+            continue
+        db.delete(s)
+        deleted.append(sid)
+    db.commit()
+    return {"deleted": deleted, "failed": failed}
 
 
 # ──── 关联查询 ────
@@ -312,6 +351,13 @@ def _parse_supplier_sheet(df) -> tuple[list[dict], list[dict]]:
     supplier_rows: list[dict] = []
     channel_rows: list[dict] = []
     seen_suppliers: set[str] = set()
+
+    # 线下表格常将「供应商名称」列合并单元格以表示同一供应商多个通道；
+    # pandas 读取合并区域时，除首行外其余行该列为空，需向下填充，
+    # 否则这些行会因识别不到供应商名称被整行跳过，导致通道被静默丢失。
+    if "供应商名称" in df.columns:
+        df = df.copy()
+        df["供应商名称"] = df["供应商名称"].ffill()
 
     for _, row in df.iterrows():
         raw = {k: (None if (isinstance(v, float) and __import__('math').isnan(v)) else v)

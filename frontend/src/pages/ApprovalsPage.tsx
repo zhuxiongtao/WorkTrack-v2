@@ -347,8 +347,11 @@ interface ApprovalNode {
   status: string
   node_kind?: string        // approval | execution
   action_label?: string     // 执行节点动作文案，如「确认付款」
+  sign_mode?: string        // or（或签）| and（会签，需全部人通过）
   approver_ids: number[]
   approver_names: string[]
+  voted_ids?: number[]
+  voted_names?: string[]
   decided_by: number | null
   decided_by_name: string
   decided_at: string | null
@@ -650,13 +653,20 @@ export default function ApprovalsPage() {
                         <div className={`pb-4 flex-1 ${n.is_current ? '' : 'opacity-90'}`}>
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium text-white">{n.name}</span>
+                            {n.sign_mode === 'and' && (
+                              <span className="text-[11px] px-1.5 py-0.5 rounded bg-accent-blue/15 text-accent-blue font-bold">
+                                会签{n.is_current ? `${n.voted_names?.length ?? 0}/${n.approver_names.length}` : ''}
+                              </span>
+                            )}
                             {n.is_current && <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-400 font-bold">当前</span>}
                             {n.status === 'approved' && <span className="text-[11px] text-emerald-700 dark:text-green-400">已通过</span>}
                             {n.status === 'rejected' && <span className="text-[11px] text-red-600 dark:text-red-400">已驳回</span>}
                           </div>
                           <div className="text-[11px] text-gray-500 mt-0.5">
                             审批人：{n.approver_names.length ? n.approver_names.join('、') : '（无可用审批人，自动通过）'}
-                            {n.decided_by_name && <span className="ml-1.5">· {n.decided_by_name} 于 {fmtTime(n.decided_at)}</span>}
+                            {n.sign_mode === 'and' && n.voted_names && n.voted_names.length > 0 ? (
+                              <span className="ml-1.5">· 已同意：{n.voted_names.join('、')}</span>
+                            ) : n.decided_by_name && <span className="ml-1.5">· {n.decided_by_name} 于 {fmtTime(n.decided_at)}</span>}
                           </div>
                         </div>
                       </div>
@@ -686,6 +696,7 @@ export default function ApprovalsPage() {
               {detail.can_act && (() => {
                 const curNode = detail.nodes.find(n => n.is_current)
                 const isExec = curNode?.node_kind === 'execution'
+                const isAndSign = curNode?.sign_mode === 'and'
                 const approveLabel = isExec ? (curNode?.action_label || '确认完成') : '通过'
                 const rejectLabel = isExec ? '退回' : '驳回'
                 return (
@@ -693,6 +704,11 @@ export default function ApprovalsPage() {
                     {isExec && (
                       <p className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold">
                         这是执行节点：前序审批已通过，请在线下完成「{curNode?.name}」后点击下方确认。
+                      </p>
+                    )}
+                    {!isExec && isAndSign && (
+                      <p className="text-[11px] text-amber-700 dark:text-amber-400 font-semibold">
+                        会签节点：还需 {curNode!.approver_names.length - (curNode!.voted_names?.length ?? 0)} 人同意才推进，任一人驳回则整单驳回。
                       </p>
                     )}
                     <textarea

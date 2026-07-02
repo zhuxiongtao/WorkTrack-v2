@@ -29,11 +29,19 @@ class ModelCatalog(SQLModel, table=True):
     reviewed_at: Optional[datetime] = None
     reviewed_by: Optional[int] = None
 
-    # 官网公开定价（USD / 1M tokens），手动维护
+    # 官网公开定价（默认 USD / 1M tokens），手动维护
     input_price: Optional[float] = None
     output_price: Optional[float] = None
     cache_read_price: Optional[float] = None
     cache_write_price: Optional[float] = None
+    price_currency: str = Field(default="USD", max_length=10)
+    price_unit: str = Field(default="美元/百万tokens", max_length=40)
+    # 阶梯计价 JSON，如 [{"threshold":"<=200000","input":2,"output":12}]
+    price_tiers: Optional[str] = None
+    # 可供货的供应商列表（逗号分隔）
+    suppliers_list: Optional[str] = None
+    # 数据来源：tavily / manual_import
+    source: str = Field(default="tavily", max_length=20)
 
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)

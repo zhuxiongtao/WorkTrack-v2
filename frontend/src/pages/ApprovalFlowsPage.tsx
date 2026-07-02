@@ -20,6 +20,7 @@ interface ApprovalNode {
   order: number
   node_kind?: string
   action_label?: string
+  sign_mode?: 'or' | 'and'
 }
 interface ApprovalFlow {
   id: number
@@ -101,12 +102,15 @@ const CATEGORIES = [
 ]
 
 const APPROVER_TYPES = [
-  { value: 'role',          label: '按角色',     icon: Shield,      desc: '持有该角色的全部用户（任一审批通过即可）' },
+  { value: 'role',          label: '按角色',     icon: Shield,      desc: '持有该角色的全部用户，签核方式可选或签/会签' },
   { value: 'user',          label: '指定用户',   icon: User,        desc: '指定一个固定的审批人' },
   { value: 'leader',        label: '直属上级',   icon: Users,       desc: '发起人的直属上级（动态解析）' },
   { value: 'dept_manager',  label: '部门负责人', icon: Building2,   desc: '发起人所属部门的负责人（动态解析）' },
-  { value: 'dept_or_leader',label: '部门负责人或上级', icon: Users, desc: '优先部门负责人，无则取直属上级（动态解析）' },
+  { value: 'dept_or_leader',label: '部门负责人或上级', icon: Users, desc: '部门负责人与直属上级并集，签核方式可选或签/会签' },
 ] as const
+
+/** 该 approver_type 是否可能解析出多个人，需要区分或签/会签 */
+const MULTI_PERSON_TYPES = new Set(['role', 'dept_or_leader'])
 
 /* ──── 主页面 ──── */
 export default function ApprovalFlowsPage() {
@@ -434,9 +438,12 @@ function FlowCard({
                 return (
                   <div key={i} className="flex items-center">
                     <div className="rounded-lg px-3 py-2 text-[11px] border border-border bg-bg-hover">
-                      <div className="font-semibold text-gray-900 dark:text-white">
-                        <span className="text-[10px] text-gray-400 mr-1">{i + 1}.</span>
+                      <div className="font-semibold text-gray-900 dark:text-white flex items-center gap-1">
+                        <span className="text-[10px] text-gray-400">{i + 1}.</span>
                         {node.name}
+                        {node.sign_mode === 'and' && (
+                          <span className="text-[10px] px-1 py-0.5 rounded bg-accent-blue/15 text-accent-blue border border-accent-blue/30 font-medium">会签</span>
+                        )}
                       </div>
                       <div className="mt-0.5 flex items-center gap-1 text-gray-500 dark:text-gray-400">
                         {(() => {
@@ -475,6 +482,9 @@ interface NodeForm {
   approver_type: 'role' | 'leader' | 'dept_manager' | 'dept_or_leader' | 'user'
   approver_value: string
   order: number
+  node_kind?: string
+  action_label?: string
+  sign_mode?: 'or' | 'and'
 }
 
 function FlowFormModal({
@@ -504,7 +514,7 @@ function FlowFormModal({
   )
 
   const addNode = () => {
-    setNodes(prev => [...prev, { name: '', approver_type: 'role', approver_value: '', order: prev.length }])
+    setNodes(prev => [...prev, { name: '', approver_type: 'role', approver_value: '', order: prev.length, sign_mode: 'or' }])
   }
 
   const removeNode = (i: number) => {
@@ -543,7 +553,11 @@ function FlowFormModal({
       trigger_condition: hasCond && condField.trim()
         ? { field: condField.trim(), op: condOp, value: isNaN(Number(condValue)) ? condValue : Number(condValue) }
         : null,
-      nodes: nodes.map((n, i) => ({ name: n.name, approver_type: n.approver_type, approver_value: n.approver_value, order: i })),
+      nodes: nodes.map((n, i) => ({
+        name: n.name, approver_type: n.approver_type, approver_value: n.approver_value, order: i,
+        node_kind: n.node_kind || 'approval', action_label: n.action_label || '',
+        sign_mode: MULTI_PERSON_TYPES.has(n.approver_type) ? (n.sign_mode || 'or') : 'or',
+      })),
     }
 
     setSaving(true)
@@ -761,10 +775,41 @@ function NodeEditor({
             placeholder="请选择审批人"
           />
         )}
-        {(node.approver_type === 'leader' || node.approver_type === 'dept_manager' || node.approver_type === 'dept_or_leader') && (
+        {(node.approver_type === 'leader' || node.approver_type === 'dept_manager') && (
           <div className="text-[11px] text-gray-500 dark:text-gray-400 px-1 flex items-center gap-1.5">
             {approverType && <approverType.icon size={11} />}
             {approverType?.desc}
+          </div>
+        )}
+
+        {/* 签核方式：仅可能解析出多人的类型（按角色 / 部门负责人或上级）需要区分 */}
+        {MULTI_PERSON_TYPES.has(node.approver_type) && (
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0">签核方式</span>
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => onChange({ sign_mode: 'or' })}
+                className={`px-2 py-1 rounded-md text-[11px] font-medium border transition-all ${
+                  (node.sign_mode ?? 'or') === 'or'
+                    ? 'bg-accent-blue/10 text-accent-blue border-accent-blue/30'
+                    : 'text-gray-500 dark:text-gray-400 bg-bg-input border-transparent hover:bg-bg-hover'
+                }`}
+                title="或签：任一人通过即可推进"
+              >
+                或签
+              </button>
+              <button
+                onClick={() => onChange({ sign_mode: 'and' })}
+                className={`px-2 py-1 rounded-md text-[11px] font-medium border transition-all ${
+                  node.sign_mode === 'and'
+                    ? 'bg-accent-blue/10 text-accent-blue border-accent-blue/30'
+                    : 'text-gray-500 dark:text-gray-400 bg-bg-input border-transparent hover:bg-bg-hover'
+                }`}
+                title="会签：需全部人通过才推进，任一人驳回即整单驳回"
+              >
+                会签
+              </button>
+            </div>
           </div>
         )}
       </div>

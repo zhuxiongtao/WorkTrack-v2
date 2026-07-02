@@ -9,10 +9,14 @@
 - get_pending_for_user：「我的待办」
 
 审批人定义（节点的 approver_type / approver_value）：
-- role        → 持有该 RBAC 角色 code 的全部用户（节点内或签：任一通过即可）
+- role        → 持有该 RBAC 角色 code 的全部用户
 - leader      → 发起人的直属上级（User.leader_id）
 - dept_manager→ 发起人所属部门（逐级向上）最近的部门负责人
 - user        → 指定 user_id
+
+节点内多人时的签核方式（节点的 sign_mode，默认 "or"）：
+- or（或签）→ approver_ids 中任一人通过即推进下一节点
+- and（会签）→ approver_ids 需全部通过才推进；任一人驳回仍立即整单驳回（一票否决）
 """
 
 import json
@@ -273,7 +277,11 @@ def start_approval(
                 "node_kind": n.get("node_kind", "approval"),
                 # 执行节点的动作按钮文案，如「确认付款」「确认盖章」；为空时前端用默认「通过」
                 "action_label": n.get("action_label", ""),
+                # 或签（任一人通过即推进）| 会签（approver_ids 全部通过才推进；任一人驳回仍立即整单驳回）
+                "sign_mode": n.get("sign_mode", "or"),
                 "approver_ids": approver_ids,
+                # 会签模式下已投同意票的 user_id 列表；或签模式下始终为空（节点一票即结束，无需累计）
+                "voted_ids": [],
                 "status": "pending",
                 "decided_by": None,
                 "decided_at": None,
@@ -404,7 +412,14 @@ def act(
         return instance
 
     if action == "approve":
-        node["status"] = "approved"
+        sign_mode = node.get("sign_mode", "or")
+
+        # 会签：去重记录本人投票，未投过才计入
+        if sign_mode == "and":
+            if approver.id in node.get("voted_ids", []):
+                raise ValueError("您已提交过审批意见，无需重复操作")
+            node["voted_ids"] = list(node.get("voted_ids", [])) + [approver.id]
+
         node["decided_by"] = approver.id
         node["decided_at"] = _now().isoformat()
         db.add(
@@ -417,6 +432,18 @@ def act(
                 comment=comment,
             )
         )
+
+        # 会签未凑齐 approver_ids 全部人时，仅落本人意见，节点保持待审、不推进
+        if sign_mode == "and" and set(node["voted_ids"]) < set(node.get("approver_ids", [])):
+            instance.nodes_snapshot = json.dumps(snapshot, ensure_ascii=False)
+            instance.updated_at = _now()
+            db.add(instance)
+            db.commit()
+            db.refresh(instance)
+            return instance
+
+        # 或签任一人通过 / 会签全部通过：节点结束，推进到下一节点
+        node["status"] = "approved"
         next_idx = idx + 1
         # 跳过后续无审批人的节点
         while next_idx < len(snapshot) and not snapshot[next_idx].get("approver_ids"):
@@ -626,7 +653,7 @@ def _on_finished(instance: ApprovalInstance, db: Session) -> None:
             elif instance.status == "rejected":
                 p.status = "已驳回"
             elif instance.status == "cancelled":
-                p.status = "草稿"
+                p.status = "已撤回"  # 无草稿概念：撤回后仍是可编辑重提的终态，而非回退到草稿
             p.updated_at = _now()
             db.add(p)
             db.commit()
@@ -927,12 +954,14 @@ def _write_error_record(db: Session, instance: ApprovalInstance, message: str) -
 
 
 def _create_overtime_payment(overtime, db: Session) -> None:
-    """加班费补偿落地：创建一条草稿态 PaymentRequest，由 HR/出纳填金额后提交付款审批。
+    """加班费补偿落地：创建一条「待完善」的 PaymentRequest 存根，由 HR/出纳填金额后提交付款审批。
 
     设计取舍：
     - OvertimeRequest 模型无「时薪」字段，金额无法自动计算
-    - 因此创建 amount=0 的草稿付款单，reason 写明加班时长和加班单 ID
+    - 因此创建 amount=0 的存根付款单，reason 写明加班时长和加班单 ID
     - HR/出纳根据公司薪资标准填金额后，走标准付款审批流程（payment_approval）
+    - 付款申请本身无草稿概念，这里的「待完善」是系统自动生成的专属状态，
+      与用户手动创建的付款申请（必须一次性填完才能提交）语义不同
     """
     from app.models.payment import PaymentRequest
     from app.models.user import User
@@ -971,14 +1000,14 @@ def _create_overtime_payment(overtime, db: Session) -> None:
             f"{overtime.end_at.strftime('%Y-%m-%d %H:%M')}\n"
             f"请 HR/出纳按公司薪资标准填写金额后提交付款审批。"
         ),
-        status="草稿",
+        status="待完善",
     )
     db.add(p)
     db.commit()
     import logging
 
     logging.getLogger("worktrack").info(
-        "加班 #%s 补偿方式=加班费，已创建付款申请 #%s（草稿，待填金额）",
+        "加班 #%s 补偿方式=加班费，已创建付款申请 #%s（待完善，待填金额）",
         overtime.id,
         p.id,
     )
@@ -988,7 +1017,10 @@ def _create_overtime_payment(overtime, db: Session) -> None:
 
 
 def get_pending_for_user(user: User, db: Session) -> list[ApprovalInstance]:
-    """返回当前节点指派给该用户的进行中审批（我的待办）"""
+    """返回当前节点指派给该用户的进行中审批（我的待办）
+
+    会签节点中已投过票的人不再出现在待办里（等其他人表决，无需重复操作）。
+    """
     insts = db.exec(
         select(ApprovalInstance).where(ApprovalInstance.status == "pending")
     ).all()
@@ -999,13 +1031,22 @@ def get_pending_for_user(user: User, db: Session) -> list[ApprovalInstance]:
         except (TypeError, ValueError):
             continue
         idx = inst.current_node_index
-        if idx < len(snap) and user.id in snap[idx].get("approver_ids", []):
-            result.append(inst)
+        if idx >= len(snap):
+            continue
+        node = snap[idx]
+        if user.id not in node.get("approver_ids", []):
+            continue
+        if node.get("sign_mode") == "and" and user.id in node.get("voted_ids", []):
+            continue
+        result.append(inst)
     return result
 
 
 def can_act(instance: ApprovalInstance, user: User) -> bool:
-    """该用户能否对当前节点执行审批动作"""
+    """该用户能否对当前节点执行审批动作
+
+    会签节点中已投过票的人不能再操作（等其他人表决）；管理员始终可强制推进不受此限制。
+    """
     if instance.status != "pending":
         return False
     if user.is_admin:
@@ -1015,4 +1056,11 @@ def can_act(instance: ApprovalInstance, user: User) -> bool:
     except (TypeError, ValueError):
         return False
     idx = instance.current_node_index
-    return idx < len(snap) and user.id in snap[idx].get("approver_ids", [])
+    if idx >= len(snap):
+        return False
+    node = snap[idx]
+    if user.id not in node.get("approver_ids", []):
+        return False
+    if node.get("sign_mode") == "and" and user.id in node.get("voted_ids", []):
+        return False
+    return True

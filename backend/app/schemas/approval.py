@@ -26,6 +26,7 @@ class ApprovalNodeIn(BaseModel):
     order: int = 0
     node_kind: Literal["approval", "execution"] = "approval"   # 审批意见 | 执行确认（出纳付款 / 盖章）
     action_label: str = ""                              # 执行节点动作文案，如「确认付款」「确认盖章」
+    sign_mode: Literal["or", "and"] = "or"               # 或签（任一人通过即可）| 会签（全部人通过才算通过，任一人驳回即整单驳回）
 
 
 class ApprovalFlowCreate(BaseModel):

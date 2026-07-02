@@ -336,7 +336,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="WorkTrack",
         description="个人工作管理平台 - 日报、客户项目、会议纪要，集成 AI 与 MCP 服务",
-        version="2.9.1",
+        version="2.10.0",
         docs_url="/docs" if app_settings.cors_origins != "*" else None,
         redoc_url=None,
         openapi_url="/openapi.json" if app_settings.cors_origins != "*" else None,
@@ -479,7 +479,7 @@ def create_app() -> FastAPI:
 
     @app.get("/")
     def root():
-        return {"message": "WorkTrack API is running", "version": "2.9.1"}
+        return {"message": "WorkTrack API is running", "version": "2.10.0"}
 
     @app.get("/health")
     def health_check():

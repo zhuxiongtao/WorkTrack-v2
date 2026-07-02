@@ -32,12 +32,14 @@ interface PaymentItem {
 const PAYMENT_TYPES = ['供应商付款', '员工报销', '工资', '其他']
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
-  草稿:   { label: '草稿',   cls: 'text-gray-400 bg-gray-500/10 border-gray-500/30' },
+  待完善: { label: '待完善', cls: 'text-gray-400 bg-gray-500/10 border-gray-500/30' },
   审批中: { label: '审批中', cls: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20' },
   已付款: { label: '已付款', cls: 'text-green-400 bg-green-500/10 border-green-500/30' },
   已驳回: { label: '已驳回', cls: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20' },
   已撤回: { label: '已撤回', cls: 'text-gray-400 bg-gray-500/10 border-gray-500/30' },
 }
+// 可编辑并重新提交审批的状态：已驳回/已撤回（用户重提）、待完善（系统生成存根，如加班费待填金额）
+const EDITABLE_STATUSES = new Set(['已驳回', '已撤回', '待完善'])
 
 function fmtAmount(n: number, c: string, unit = '元'): string {
   try { return `${c} ${n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${unit}` }
@@ -54,8 +56,11 @@ function statusBadge(status: string) {
 
 const emptyForm = {
   payment_type: '供应商付款', title: '', amount: '', amount_unit: '元', currency: 'CNY',
-  payee: '', payee_account: '', reason: '', attachments: null as string | null,
+  payee: '', payee_account: '', reason: '', contract_id: null as number | null,
+  attachments: null as string | null,
 }
+
+interface ContractBrief { id: number; title: string; contract_no: string }
 
 export default function PaymentsPage() {
   const { hasPermission } = useAuth()
@@ -65,6 +70,7 @@ export default function PaymentsPage() {
   const [scope, setScope] = useState<'mine' | 'all'>('mine')
   const [list, setList] = useState<PaymentItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [contracts, setContracts] = useState<ContractBrief[]>([])
 
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -85,6 +91,13 @@ export default function PaymentsPage() {
 
   useEffect(() => { load() }, [load])
 
+  useEffect(() => {
+    fetch('/api/v1/contracts')
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setContracts(Array.isArray(data) ? data : []))
+      .catch(() => setContracts([]))
+  }, [])
+
   const openCreate = () => {
     setEditingId(null); setForm({ ...emptyForm }); setShowForm(true)
   }
@@ -93,13 +106,20 @@ export default function PaymentsPage() {
     setForm({
       payment_type: p.payment_type, title: p.title, amount: String(p.amount || ''),
       amount_unit: p.amount_unit || '元', currency: p.currency, payee: p.payee, payee_account: p.payee_account || '',
-      reason: p.reason, attachments: p.attachments,
+      reason: p.reason, contract_id: p.contract_id, attachments: p.attachments,
     })
     setDetail(null); setShowForm(true)
   }
 
   const save = async () => {
     if (!form.title.trim()) { showToast('请填写付款摘要', 'warning'); return }
+    if (form.payment_type === '供应商付款') {
+      if (!form.contract_id) { showToast('供应商付款必须关联相关合同', 'warning'); return }
+      const attCount = (() => { try { return form.attachments ? JSON.parse(form.attachments).length : 0 } catch { return 0 } })()
+      if (attCount === 0) { showToast('供应商付款必须上传账单明细', 'warning'); return }
+    }
+    const ok = await showConfirm('提交后将立即进入审批流程，期间不可编辑。确认提交？')
+    if (!ok) return
     setSaving(true)
     try {
       const body = {
@@ -111,6 +131,7 @@ export default function PaymentsPage() {
         payee: form.payee.trim(),
         payee_account: form.payee_account.trim() || null,
         reason: form.reason.trim(),
+        contract_id: form.contract_id,
         attachments: form.attachments,
       }
       const url = editingId ? `/api/v1/payments/${editingId}` : '/api/v1/payments'
@@ -119,28 +140,15 @@ export default function PaymentsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || '保存失败') }
-      showToast(editingId ? '已保存' : '付款申请已创建', 'success')
-      setShowForm(false); load()
-    } catch (e: any) { showToast(e.message || '保存失败', 'error') }
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || '提交失败') }
+      showToast('已提交审批', 'success')
+      setShowForm(false); setDetail(null); load()
+    } catch (e: any) { showToast(e.message || '提交失败', 'error') }
     finally { setSaving(false) }
   }
 
-  const submitApproval = async (p: PaymentItem) => {
-    const ok = await showConfirm('提交后将进入审批流程，期间不可编辑。确认提交？')
-    if (!ok) return
-    setActing(true)
-    try {
-      const res = await fetch(`/api/v1/payments/${p.id}/submit-approval`, { method: 'POST' })
-      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || '提交失败') }
-      showToast('已提交审批', 'success')
-      setDetail(null); load()
-    } catch (e: any) { showToast(e.message || '提交失败', 'error') }
-    finally { setActing(false) }
-  }
-
   const revoke = async (p: PaymentItem) => {
-    const ok = await showConfirm('撤回后付款申请回到草稿，可重新编辑。确认撤回？')
+    const ok = await showConfirm('撤回后可编辑修改，重新提交审批。确认撤回？')
     if (!ok) return
     setActing(true)
     try {
@@ -259,6 +267,9 @@ export default function PaymentsPage() {
               <Info label="收款账号" value={detail.payee_account || '—'} />
               <Info label="金额" value={fmtAmount(detail.amount, detail.currency)} />
               <Info label="申请人" value={detail.user_name || '—'} />
+              {detail.payment_type === '供应商付款' && (
+                <Info label="关联合同" value={detail.contract_title || '未关联'} />
+              )}
             </div>
 
             {detail.reason && (
@@ -275,27 +286,18 @@ export default function PaymentsPage() {
               </div>
             )}
 
-            {/* 审批进度（提交后展示） */}
-            {detail.status !== '草稿' && (
-              <ApprovalTimeline targetType="payment" targetId={detail.id} onChanged={load} />
-            )}
+            {/* 审批进度（待完善的系统存根尚未提交，无审批实例，组件自身会静默不渲染） */}
+            <ApprovalTimeline targetType="payment" targetId={detail.id} onChanged={load} />
 
             {/* 操作区 */}
             <div className="flex items-center gap-2 pt-1 flex-wrap">
-              {detail.status === '草稿' && (
+              {EDITABLE_STATUSES.has(detail.status) && (
                 <>
                   <button
-                    onClick={() => submitApproval(detail)}
-                    disabled={acting}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-blue text-white text-xs font-bold hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 disabled:opacity-50 transition-colors"
-                  >
-                    {acting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} 提交审批
-                  </button>
-                  <button
                     onClick={() => openEdit(detail)}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-bg-hover border border-border text-gray-300 text-xs font-medium hover:text-white transition-colors"
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-blue text-white text-xs font-bold hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 transition-colors"
                   >
-                    <Pencil size={14} /> 编辑
+                    <Send size={14} /> {detail.status === '待完善' ? '填写并提交审批' : '修改后重新提交'}
                   </button>
                   <button
                     onClick={() => remove(detail)}
@@ -314,14 +316,6 @@ export default function PaymentsPage() {
                   <RotateCcw size={14} /> 撤回申请
                 </button>
               )}
-              {detail.status === '已驳回' && (
-                <button
-                  onClick={() => openEdit(detail)}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-bg-hover border border-border text-gray-300 text-xs font-medium hover:text-white transition-colors"
-                >
-                  <Pencil size={14} /> 修改后重提
-                </button>
-              )}
             </div>
           </div>
         </Modal>
@@ -332,7 +326,7 @@ export default function PaymentsPage() {
         <Modal
           icon={editingId ? Pencil : Plus}
           title={editingId ? '编辑付款申请' : '新建付款申请'}
-          subtitle="填写付款信息，保存为草稿后可提交审批"
+          subtitle="填写完整付款信息后提交审批，无草稿保存"
           tone="green"
           size="xl"
           onClose={() => setShowForm(false)}
@@ -414,6 +408,18 @@ export default function PaymentsPage() {
               </Field>
             </div>
 
+            {form.payment_type === '供应商付款' && (
+              <Field label="关联合同" required>
+                <SearchableSelect
+                  options={contracts.map(c => ({ value: c.id, label: c.contract_no ? `${c.title}（${c.contract_no}）` : c.title }))}
+                  value={form.contract_id}
+                  onChange={(v) => setForm({ ...form, contract_id: v === null ? null : Number(v) })}
+                  placeholder="选择关联合同"
+                  emptyText="无匹配合同"
+                />
+              </Field>
+            )}
+
             <Field label="付款事由">
               <textarea
                 value={form.reason}
@@ -425,7 +431,10 @@ export default function PaymentsPage() {
             </Field>
 
             <div>
-              <label className="block text-xs text-gray-400 mb-1.5">票据 / 发票（可选，可粘贴截图）</label>
+              <label className="block text-xs text-gray-400 mb-1.5">
+                票据 / 发票{form.payment_type === '供应商付款' ? '（账单明细，提交审批前必传，可粘贴截图）' : '（可选，可粘贴截图）'}
+                {form.payment_type === '供应商付款' && <span className="text-red-400 ml-0.5">*</span>}
+              </label>
               <FileUpload filesJson={form.attachments} onChange={v => setForm({ ...form, attachments: v })} />
             </div>
 
@@ -441,8 +450,8 @@ export default function PaymentsPage() {
                 disabled={saving}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-blue text-white text-xs font-bold hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 disabled:opacity-50 transition-opacity"
               >
-                {saving ? <Loader2 size={14} className="animate-spin" /> : null}
-                {editingId ? '保存' : '创建草稿'}
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                提交审批
               </button>
             </div>
           </div>

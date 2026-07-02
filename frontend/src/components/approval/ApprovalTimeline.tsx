@@ -9,7 +9,9 @@ interface ApprovalNode {
   status: string          // pending | approved | rejected | skipped
   node_kind?: string      // approval | execution
   action_label?: string   // 执行节点动作文案
+  sign_mode?: string      // or（或签，任一人通过即可）| and（会签，需全部人通过）
   approver_names: string[]
+  voted_names?: string[]  // 会签模式下已投同意票的人
   decided_by_name: string
   decided_at: string | null
   is_current: boolean
@@ -182,6 +184,11 @@ export function ApprovalTimeline({ targetType, targetId, onChanged }: ApprovalTi
                         }`}>
                           {node.name}
                         </span>
+                        {node.sign_mode === 'and' && (
+                          <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-accent-blue/15 text-accent-blue border border-accent-blue/30 font-bold">
+                            会签{node.is_current ? `${(node.voted_names?.length ?? 0)}/${node.approver_names.length}` : ''}
+                          </span>
+                        )}
                         {node.is_current && (
                           <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 font-bold">
                             待审
@@ -195,7 +202,11 @@ export function ApprovalTimeline({ targetType, targetId, onChanged }: ApprovalTi
                         <span className="text-[11px] text-gray-500">
                           审批人：{node.approver_names.join('、') || '—'}
                         </span>
-                        {node.decided_by_name && (
+                        {node.sign_mode === 'and' && node.voted_names && node.voted_names.length > 0 ? (
+                          <span className="text-[11px] text-gray-500">
+                            · 已同意：<span className="text-gray-700 dark:text-gray-300">{node.voted_names.join('、')}</span>
+                          </span>
+                        ) : node.decided_by_name && (
                           <span className="text-[11px] text-gray-500">
                             · 由 <span className="text-gray-700 dark:text-gray-300">{node.decided_by_name}</span> 操作
                           </span>
@@ -218,12 +229,15 @@ export function ApprovalTimeline({ targetType, targetId, onChanged }: ApprovalTi
           {detail.can_act && isPending && (() => {
             const curNode = detail.nodes.find(n => n.is_current)
             const isExec = curNode?.node_kind === 'execution'
+            const isAndSign = curNode?.sign_mode === 'and'
             const approveLabel = isExec ? (curNode?.action_label || '确认完成') : '通过'
             const rejectLabel = isExec ? '退回' : '驳回'
             return (
               <div className="border-t border-border/50 px-3.5 py-3 bg-amber-500/3">
                 <p className={`text-[11px] mb-2 font-semibold ${isExec ? 'text-blue-600 dark:text-blue-400' : 'text-amber-700 dark:text-amber-400'}`}>
-                  {isExec ? `执行节点：请线下完成「${curNode?.name}」后确认` : '轮到你审批了'}
+                  {isExec ? `执行节点：请线下完成「${curNode?.name}」后确认`
+                    : isAndSign ? `轮到你审批了（会签，还需 ${curNode!.approver_names.length - (curNode!.voted_names?.length ?? 0)} 人同意才推进，任一人驳回则整单驳回）`
+                    : '轮到你审批了'}
                 </p>
                 <textarea
                   value={comment}

@@ -198,6 +198,8 @@ export default function UpstreamPage() {
   const [supplierSearch, setSupplierSearch] = useState('')
   const [supplierFilterStatus, setSupplierFilterStatus] = useState('')
   const [supplierFilterCategory, setSupplierFilterCategory] = useState('')
+  const [selectedSupplierIds, setSelectedSupplierIds] = useState<Set<number>>(new Set())
+  const [batchDeletingSuppliers, setBatchDeletingSuppliers] = useState(false)
 
   // 通道数据
   const [channels, setChannels] = useState<Channel[]>([])
@@ -209,6 +211,8 @@ export default function UpstreamPage() {
   const [channelFilterStatus, setChannelFilterStatus] = useState('')
   const [channelFilterModel, setChannelFilterModel] = useState('')
   const [channelFilterSupplier, setChannelFilterSupplier] = useState('')
+  const [selectedChannelIds, setSelectedChannelIds] = useState<Set<number>>(new Set())
+  const [batchDeletingChannels, setBatchDeletingChannels] = useState(false)
 
   // 供应商表单
   const [showSupplierForm, setShowSupplierForm] = useState(false)
@@ -342,6 +346,41 @@ export default function UpstreamPage() {
       },
     })
   }
+  const toggleSupplierSelected = (id: number) => {
+    setSelectedSupplierIds(prev => {
+      const n = new Set(prev)
+      n.has(id) ? n.delete(id) : n.add(id)
+      return n
+    })
+  }
+  const handleBatchDeleteSuppliers = () => {
+    const ids = Array.from(selectedSupplierIds)
+    if (ids.length === 0) return
+    setConfirmDialog({
+      title: `批量删除 ${ids.length} 个供应商`,
+      message: '有关联成本或通道的供应商将跳过，其余将被永久删除，此操作不可恢复。',
+      onConfirm: async () => {
+        setConfirmDialog(null)
+        setBatchDeletingSuppliers(true)
+        try {
+          const res = await fetchWithAuth('/api/v1/suppliers/batch-delete', {
+            method: 'POST', body: JSON.stringify({ ids }),
+          })
+          if (res.ok) {
+            const data: { deleted: number[]; failed: Array<{ id: number; name: string | null; reason: string }> } = await res.json()
+            if (data.failed.length === 0) {
+              showToast(`已删除 ${data.deleted.length} 个供应商`, 'success')
+            } else {
+              showToast(`删除 ${data.deleted.length} 个，${data.failed.length} 个失败：${data.failed.map(f => `${f.name || f.id}(${f.reason})`).join('、')}`, 'error')
+            }
+            setSelectedSupplierIds(new Set())
+            if (selectedSupplierId && data.deleted.includes(selectedSupplierId)) setSelectedSupplierId(null)
+            await loadSuppliers()
+          } else { const err = await res.json().catch(() => ({})); showToast(err.detail || '批量删除失败', 'error') }
+        } finally { setBatchDeletingSuppliers(false) }
+      },
+    })
+  }
   /* ── 通道操作 ── */
   const openCreateChannel = (supplierId?: number) => {
     setEditingChannel(null)
@@ -417,6 +456,41 @@ export default function UpstreamPage() {
             await Promise.all([loadChannels(), selectedSupplierId ? loadSupplierDetail(selectedSupplierId) : Promise.resolve()])
           } else { const err = await res.json().catch(() => ({})); showToast(err.detail || '删除失败', 'error') }
         } finally { setDeletingChannelId(null) }
+      },
+    })
+  }
+  const toggleChannelSelected = (id: number) => {
+    setSelectedChannelIds(prev => {
+      const n = new Set(prev)
+      n.has(id) ? n.delete(id) : n.add(id)
+      return n
+    })
+  }
+  const handleBatchDeleteChannels = () => {
+    const ids = Array.from(selectedChannelIds)
+    if (ids.length === 0) return
+    setConfirmDialog({
+      title: `批量删除 ${ids.length} 个通道`,
+      message: '有关联对账记录的通道将跳过，其余将被永久删除，此操作不可恢复。',
+      onConfirm: async () => {
+        setConfirmDialog(null)
+        setBatchDeletingChannels(true)
+        try {
+          const res = await fetchWithAuth('/api/v1/channels/batch-delete', {
+            method: 'POST', body: JSON.stringify({ ids }),
+          })
+          if (res.ok) {
+            const data: { deleted: number[]; failed: Array<{ id: number; name: string | null; reason: string }> } = await res.json()
+            if (data.failed.length === 0) {
+              showToast(`已删除 ${data.deleted.length} 个通道`, 'success')
+            } else {
+              showToast(`删除 ${data.deleted.length} 个，${data.failed.length} 个失败：${data.failed.map(f => `${f.name || f.id}(${f.reason})`).join('、')}`, 'error')
+            }
+            setSelectedChannelIds(new Set())
+            if (selectedChannelId && data.deleted.includes(selectedChannelId)) setSelectedChannelId(null)
+            await Promise.all([loadChannels(), selectedSupplierId ? loadSupplierDetail(selectedSupplierId) : Promise.resolve()])
+          } else { const err = await res.json().catch(() => ({})); showToast(err.detail || '批量删除失败', 'error') }
+        } finally { setBatchDeletingChannels(false) }
       },
     })
   }
@@ -572,10 +646,32 @@ export default function UpstreamPage() {
           <div className="rounded-2xl bg-bg-card border border-border/50 flex flex-col">
             <div className="px-4 py-3 border-b border-border/50 bg-bg-card/50 space-y-2 rounded-t-2xl">
               <div className="flex items-center gap-2">
+                {hasPermission('upstream:edit') && filteredSuppliers.length > 0 && (
+                  <input type="checkbox"
+                    checked={filteredSuppliers.every(s => selectedSupplierIds.has(s.id))}
+                    ref={el => { if (el) el.indeterminate = filteredSuppliers.some(s => selectedSupplierIds.has(s.id)) && !filteredSuppliers.every(s => selectedSupplierIds.has(s.id)) }}
+                    onChange={() => {
+                      const allSelected = filteredSuppliers.every(s => selectedSupplierIds.has(s.id))
+                      setSelectedSupplierIds(allSelected ? new Set() : new Set(filteredSuppliers.map(s => s.id)))
+                    }}
+                    className="w-3.5 h-3.5 accent-blue-500 shrink-0" />
+                )}
                 <IconBox icon={Building2} size="sm" tone="blue" variant="soft" />
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">供应商</span>
                 <span className="text-[11px] text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded-full ml-auto">{filteredSuppliers.length}</span>
               </div>
+              {selectedSupplierIds.size > 0 && (
+                <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-accent-blue/10 border border-accent-blue/20">
+                  <span className="text-[11px] text-accent-blue font-medium">已选 {selectedSupplierIds.size} 项</span>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setSelectedSupplierIds(new Set())} className="text-[11px] text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">取消</button>
+                    <button onClick={handleBatchDeleteSuppliers} disabled={batchDeletingSuppliers}
+                      className="flex items-center gap-1 px-2 py-1 rounded-md bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500/20 disabled:opacity-50 text-[11px] font-medium transition-colors">
+                      {batchDeletingSuppliers ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}批量删除
+                    </button>
+                  </div>
+                </div>
+              )}
               <div className="relative">
                 <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-600" />
                 <input type="text" placeholder="搜索名称/简码/模型..." value={supplierSearch} onChange={e => setSupplierSearch(e.target.value)}
@@ -603,10 +699,17 @@ export default function UpstreamPage() {
                 const stColor = SUPPLIER_STATUS_COLORS[s.status] || { bg: '#6B728015', text: '#6B7280' }
                 const cs = getContractStatus(s.contract_start, s.contract_end)
                 const chCount = channels.filter(c => c.supplier_id === s.id).length
+                const checked = selectedSupplierIds.has(s.id)
                 return (
-                  <button key={s.id} onClick={() => setSelectedSupplierId(s.id)}
-                    className={`w-full text-left px-4 py-3 border-b border-border/20 hover:bg-bg-hover/40 transition-colors ${selectedSupplierId === s.id ? 'bg-blue-500/[0.07] border-l-2 border-l-blue-500' : ''}`}>
-                    <div className="flex items-center justify-between">
+                  <div key={s.id} onClick={() => setSelectedSupplierId(s.id)}
+                    className={`w-full text-left px-4 py-3 border-b border-border/20 hover:bg-bg-hover/40 transition-colors cursor-pointer flex items-center gap-2 ${selectedSupplierId === s.id ? 'bg-blue-500/[0.07] border-l-2 border-l-blue-500' : ''}`}>
+                    {hasPermission('upstream:edit') && (
+                      <input type="checkbox" checked={checked}
+                        onClick={e => e.stopPropagation()}
+                        onChange={() => toggleSupplierSelected(s.id)}
+                        className="w-3.5 h-3.5 accent-blue-500 shrink-0" />
+                    )}
+                    <div className="flex items-center justify-between flex-1 min-w-0">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm font-medium text-gray-900 dark:text-white truncate">{s.name}</span>
@@ -622,7 +725,7 @@ export default function UpstreamPage() {
                       </div>
                       <ChevronRight size={14} className={`text-gray-600 shrink-0 ml-2 ${selectedSupplierId === s.id ? 'text-blue-400' : ''}`} />
                     </div>
-                  </button>
+                  </div>
                 )
               })}
               {filteredSuppliers.length === 0 && <EmptyState icon={Building2} title="暂无供应商" description="点击右上角新增供应商" tone="blue" size="sm" />}
@@ -908,6 +1011,32 @@ export default function UpstreamPage() {
             )}
           </div>
 
+          {hasPermission('upstream:edit') && filteredChannels.length > 0 && (
+            <div className="flex items-center justify-between gap-2 mb-2 px-1">
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox"
+                  checked={filteredChannels.every(c => selectedChannelIds.has(c.id))}
+                  ref={el => { if (el) el.indeterminate = filteredChannels.some(c => selectedChannelIds.has(c.id)) && !filteredChannels.every(c => selectedChannelIds.has(c.id)) }}
+                  onChange={() => {
+                    const allSelected = filteredChannels.every(c => selectedChannelIds.has(c.id))
+                    setSelectedChannelIds(allSelected ? new Set() : new Set(filteredChannels.map(c => c.id)))
+                  }}
+                  className="w-3.5 h-3.5 accent-blue-500 shrink-0" />
+                <span className="text-[11px] text-gray-500">全选</span>
+              </label>
+              {selectedChannelIds.size > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-accent-blue font-medium">已选 {selectedChannelIds.size} 项</span>
+                  <button onClick={() => setSelectedChannelIds(new Set())} className="text-[11px] text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">取消</button>
+                  <button onClick={handleBatchDeleteChannels} disabled={batchDeletingChannels}
+                    className="flex items-center gap-1 px-2 py-1 rounded-md bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500/20 disabled:opacity-50 text-[11px] font-medium transition-colors">
+                    {batchDeletingChannels ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}批量删除
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className={`grid gap-4 ${selectedChannelId ? 'grid-cols-12' : ''}`}>
             <div className={selectedChannelId ? 'col-span-12 lg:col-span-7 space-y-2' : 'space-y-2'}>
               {filteredChannels.length === 0 ? (
@@ -917,10 +1046,17 @@ export default function UpstreamPage() {
                 const protocolC = API_PROTOCOL_COLORS[c.api_protocol] || API_PROTOCOL_COLORS['other']
                 const statusC = COMPUTED_STATUS_COLORS[c.computed_status] || COMPUTED_STATUS_COLORS['长期有效']
                 const active = selectedChannelId === c.id
+                const checked = selectedChannelIds.has(c.id)
                 return (
-                  <button key={c.id} onClick={() => setSelectedChannelId(active ? null : c.id)}
-                    className={`w-full text-left p-3 rounded-xl border transition-all ${active ? 'bg-accent-blue/10 border-accent-blue/30' : 'bg-bg-hover/30 border-border hover:bg-bg-hover/50 hover:border-border'}`}>
-                    <div className="flex items-start gap-3">
+                  <div key={c.id} onClick={() => setSelectedChannelId(active ? null : c.id)}
+                    className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer flex items-start gap-2 ${active ? 'bg-accent-blue/10 border-accent-blue/30' : 'bg-bg-hover/30 border-border hover:bg-bg-hover/50 hover:border-border'}`}>
+                    {hasPermission('upstream:edit') && (
+                      <input type="checkbox" checked={checked}
+                        onClick={e => e.stopPropagation()}
+                        onChange={() => toggleChannelSelected(c.id)}
+                        className="w-3.5 h-3.5 accent-blue-500 shrink-0 mt-1" />
+                    )}
+                    <div className="flex items-start gap-3 flex-1 min-w-0">
                       <IconBox icon={Cpu} size="md" tone="cyan" variant="soft" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -939,7 +1075,7 @@ export default function UpstreamPage() {
                       </div>
                       <ChevronRight size={16} className={`text-gray-600 transition-transform ${active ? 'rotate-90 text-accent-blue' : ''}`} />
                     </div>
-                  </button>
+                  </div>
                 )
               })}
             </div>

@@ -26,6 +26,7 @@ class ModelCatalogOut(BaseModel):
     price_unit: str = "美元/百万tokens"
     price_tiers: Optional[str] = None
     suppliers_list: Optional[str] = None
+    source: str = "tavily"
     created_at: datetime
     updated_at: datetime
 
@@ -47,6 +48,7 @@ class ModelCatalogUpdate(BaseModel):
     cache_write_price: Optional[float] = None
     price_currency: Optional[str] = None
     price_unit: Optional[str] = None
+    price_tiers: Optional[str] = None
     suppliers_list: Optional[str] = None
 
 

@@ -30,8 +30,9 @@ class PaymentRequest(SQLModel, table=True):
     # 票据 / 发票附件，JSON 数组（与前端 FileUpload filesJson 一致）
     attachments: Optional[str] = Field(default=None)
 
-    # 草稿 | 审批中 | 已付款 | 已驳回 | 已撤回
-    status: str = Field(default="草稿", index=True, max_length=20)
+    # 待完善（仅系统自动生成的存根，如加班费待填金额）| 审批中 | 已付款 | 已驳回 | 已撤回
+    # 无「草稿」概念：用户创建的付款申请必须一次性填完必填项并立即提交审批
+    status: str = Field(default="待完善", index=True, max_length=20)
 
     created_at: datetime = Field(default_factory=lambda: now())
     updated_at: datetime = Field(default_factory=lambda: now())

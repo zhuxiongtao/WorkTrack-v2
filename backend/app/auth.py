@@ -371,6 +371,7 @@ def _get_user_role_codes(
     替代原来分散的 3 次查询 + 1 次 Role 查询，减少到 2 次。
     """
     from app.models.rbac import UserRole, DepartmentRole, GroupRole, Role
+    from app.models.wiki import UserGroupMember
 
     # 1) 合并三端角色 ID
     role_ids: set[int] = set()

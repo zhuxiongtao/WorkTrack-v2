@@ -266,8 +266,11 @@ def _instance_detail(inst: ApprovalInstance, db: Session, current_user: User) ->
             "status": n.get("status", "pending"),
             "node_kind": n.get("node_kind", "approval"),
             "action_label": n.get("action_label", ""),
+            "sign_mode": n.get("sign_mode", "or"),
             "approver_ids": n.get("approver_ids", []),
             "approver_names": [name_map.get(a, f"用户{a}") for a in n.get("approver_ids", [])],
+            "voted_ids": n.get("voted_ids", []),
+            "voted_names": [name_map.get(v, f"用户{v}") for v in n.get("voted_ids", [])],
             "decided_by": n.get("decided_by"),
             "decided_by_name": name_map.get(n.get("decided_by"), "") if n.get("decided_by") else "",
             "decided_at": n.get("decided_at"),
@@ -456,5 +459,6 @@ def preview_approval(
             "approver_names": names,
             "node_kind": n.get("node_kind", "approval"),
             "action_label": n.get("action_label", ""),
+            "sign_mode": n.get("sign_mode", "or"),
         })
     return {"nodes": result, "no_flow": False}

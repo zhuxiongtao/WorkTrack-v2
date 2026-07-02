@@ -1,6 +1,7 @@
 """通道（Channel）API：供应商下挂载的具体模型通道"""
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlmodel import Session, select, col, func
 from app.database import get_session
 from app.models.channel import Channel, compute_channel_status
@@ -152,3 +153,37 @@ def delete_channel(
     db.delete(c)
     db.commit()
     return {"ok": True}
+
+
+class BatchDeleteRequest(BaseModel):
+    ids: list[int]
+
+
+@router.post("/batch-delete")
+def batch_delete_channels(
+    body: BatchDeleteRequest,
+    db: Session = Depends(get_session),
+    current_user=Depends(require_permission("upstream:edit")),
+):
+    """批量删除通道，逐个校验关联对账记录，部分失败不影响其余项"""
+    if not body.ids:
+        raise HTTPException(400, "未选择任何通道")
+    if len(body.ids) > 200:
+        raise HTTPException(400, "单次最多删除 200 个通道")
+
+    cmap = {c.id: c for c in db.exec(select(Channel).where(col(Channel.id).in_(body.ids))).all()}
+    deleted: list[int] = []
+    failed: list[dict] = []
+    for cid in body.ids:
+        c = cmap.get(cid)
+        if not c:
+            failed.append({"id": cid, "name": None, "reason": "通道不存在"})
+            continue
+        linked = db.exec(select(func.count()).where(ReconcileSupply.channel_id == cid)).one()
+        if linked > 0:
+            failed.append({"id": cid, "name": c.name, "reason": f"有 {linked} 条供应对账记录关联"})
+            continue
+        db.delete(c)
+        deleted.append(cid)
+    db.commit()
+    return {"deleted": deleted, "failed": failed}

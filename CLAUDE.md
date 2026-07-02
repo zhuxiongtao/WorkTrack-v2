@@ -314,7 +314,8 @@ now_dt = now()
 | `v2.8.2` | 安全加固 17 项（请假余额 SELECT FOR UPDATE 防并发、比例退款、忘记密码限流+邮件配置前置、注册权限动态判断、Wiki 密码限流、数据导入错误计数修复）；管理员解锁被锁定账号（POST /users/{id}/unlock + 用户管理页解锁按钮）；后台页面全面响应式（运维监控/数据管理/日志/定时任务/控制台移动端抽屉侧边栏）；OACenterPage 全部原生 select 替换为 SearchableSelect；ProjectFormModal 样式合规 |
 | `v2.8.3` | 协作分享功能修复：ShareDialog/MeetingsPage 所有裸 fetch() 改为 fetchWithAuth（之前因缺 Auth header 导致分享请求 401 静默失败）；新增 /api/v1/shares/sent 后端接口；DataShareOut 增加 shared_by_name 字段；SharedWithMePage 重构为双向切换（我发出的/收到的），支持撤销发出的分享、展示结构化内容摘要；MeetingsPage 分享成功后同步写入 data_share 使"我发出的"可见 |
 | `v2.9.0` | 职位管理模块上线：新增 job_title 表 + Alembic 迁移 + CRUD 路由；用户管理新增「职位管理」Tab；UserFormModal 与 HiresPage 职位字段改为 SearchableSelect 下拉；审批流管理加分类导航（5 大类、13 业务类型）；HiresPage 清理（去掉 is_admin/use_shared_models 开关、电话/部门/参加工作时间改必填）；修复 localStorage auth_token key 错误导致职位列表无法加载；GET /api/v1/job-titles 权限从 user:read 改为登录即可访问 |
-| `v2.9.1` (latest) | 上游管理/报价单/模型管理排查修复：QuotePage 通道下拉与 UpstreamPage 供应商筛选下拉 `overflow-hidden` 裁剪修复；报价单结算方式改为可配置项并联动付款条款；报价单/新建通道/新建供应商表单重排；菜单「报价单」更名「报价工具」；修复供应商批量导入通道分支引用 Channel 已废弃字段（model_type/kind/nominal_discount/actual_discount）导致的崩溃；模型基础列表导入接口补齐管理员权限校验（此前任意登录用户可写入/激活模型目录）；修复 AI 助手 list_channels 工具引用废弃通道字段报错；修复数据管理「通道」模块导出列表引用废弃字段且未启用供应商关联映射，导致导出静默丢字段 |
+| `v2.9.1` | 上游管理/报价单/模型管理排查修复：QuotePage 通道下拉与 UpstreamPage 供应商筛选下拉 `overflow-hidden` 裁剪修复；报价单结算方式改为可配置项并联动付款条款；报价单/新建通道/新建供应商表单重排；菜单「报价单」更名「报价工具」；修复供应商批量导入通道分支引用 Channel 已废弃字段（model_type/kind/nominal_discount/actual_discount）导致的崩溃；模型基础列表导入接口补齐管理员权限校验（此前任意登录用户可写入/激活模型目录）；修复 AI 助手 list_channels 工具引用废弃通道字段报错；修复数据管理「通道」模块导出列表引用废弃字段且未启用供应商关联映射，导致导出静默丢字段 |
+| `v2.10.0` (latest) | 审批引擎会签支持 + 上游管理批量删除 + 付款申请去草稿化：审批节点新增 `sign_mode`（或签/会签），会签需全部人通过才推进、任一人驳回仍一票否决，审批流配置页/待办/审批详情页均已支持配置与展示；供应商与通道列表支持批量勾选删除（部分失败不影响其余项）；供应商批量导入修复合并单元格导致通道静默丢失（表头列向下填充）；付款申请取消草稿概念，创建/编辑（仅已驳回/已撤回可编辑）都是「填完即提交审批」的单一动作，必填项服务端强制拦截，供应商付款必须关联合同+上传账单明细；加班费自动生成的付款单存根状态改为专属的「待完善」，不与用户草稿概念混淆；修复 `_get_user_role_codes` 缺少 `UserGroupMember` 导入导致非 admin/boss 用户访问合同等按部门可见性过滤的接口全部 500 的严重 bug；补齐模型目录字段（price_currency/price_unit/price_tiers/suppliers_list/source）修复报价单模型选择功能 |
 
 ### 版本号规范
 
@@ -335,6 +336,14 @@ vMAJOR.MINOR.PATCH
 | 前端包版本 | `frontend/package.json` | `"version": "X.X.X"` |
 | 后端 API 版本 | `backend/app/main.py` | `version="X.X.X"`（FastAPI + root 接口各一处） |
 | 开发规范历史 | `CLAUDE.md` 版本历史表 | 新增行，前一行去掉 `(latest)` 标注 |
+
+### 【硬约束】发版必须同步推送 GitHub
+
+用户说"发版"时，除了构建镜像、推送 Docker Hub、更新上述版本号四处，**还必须把最新代码 push 到 GitHub**（remote `origin` → `github.com/zhuxiongtao/WorkTrack-v2`），缺一不可。流程顺序：
+1. 完成版本号四处同步修改
+2. `git add` + `git commit`（提交信息含版本号）
+3. `git push origin <当前分支>`
+4. 构建并推送 Docker 镜像（`./build-and-push.sh vX.X.X`）
 
 ### 构建命令
 
